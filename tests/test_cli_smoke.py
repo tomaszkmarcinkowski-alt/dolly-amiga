@@ -76,6 +76,10 @@ def main(layout, iff, inventory):
         assert 'Memory address mask' in result.stdout
         assert '0x00FFFFFE' in result.stdout
         assert 'Initial DOS buffers' in result.stdout
+        assert 'MBR partition type' in result.stdout
+        assert 'RDB block size' in result.stdout
+        assert 'MAXTRANSFER_ABOVE_REFERENCE' in result.stdout
+
 
         anno = b'abc'
         archive.write_bytes(b'FORM' + struct.pack('>I', 16) + b'DOLY' +
