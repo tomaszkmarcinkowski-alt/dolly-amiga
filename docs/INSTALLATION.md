@@ -92,4 +92,4 @@ The details must be paged or wrapped to fit the mandatory 640×256 Topaz/8 GadTo
 
 ## Main executable self-check (no bootstrap executable)
 
-Dolly performs the CRC32/version check of its **own actual executable file** after startup, before enabling disk operations. Expected values are stored in the release manifest. The Installer only packages these files and creates the `DOLLY:` assign; **it does not install an extra verifier program**. This detects accidental file damage but cannot protect code before it starts executing. See [Integrity](INTEGRITY.md).
+Dolly performs the CRC32/version check of its **own actual executable file** after startup, before enabling disk operations. The expected CRC32 and release ID are **embedded in that executable itself** during post-link stamping. The standard `$VER:` string remains available for AmigaDOS `C:Version`. The Installer packages the program and creates the `DOLLY:` assign; it installs **no manifest or extra verifier program for the main executable**. This detects accidental file damage but cannot protect code before it starts executing. See [Integrity](INTEGRITY.md).
