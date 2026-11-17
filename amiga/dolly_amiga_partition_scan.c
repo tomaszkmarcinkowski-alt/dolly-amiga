@@ -102,7 +102,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         ULONG next,envwords,blockwords,heads,spt,low,high,dos;
         uint64_t cyl_bytes,begin,length;
         DollyNativePartition *p;
-        char type[5];
+        char type[5],label_copy[40];
         if(used>=DOLLY_PART_MAX) {
             strcpy(out->status,"Too many RDB partitions");
             return -1;
@@ -157,12 +157,13 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         p->sectors_per_block=be32(r->buffer+144);
         p->dos_type=dos;
         dos_name(type,dos);
+        strcpy(label_copy,p->label);
         /* DosType is RDB filesystem metadata, not a filesystem
          * signature verified from partition contents.
          */
         sprintf(p->summary,
                 "%s %luMiB %s%s Cyl%lu-%lu Blk%lu SPB%lu",
-                p->label,(unsigned long)(length/1048576u),type,
+                label_copy,(unsigned long)(length/1048576u),type,
                 dos==0x444f5301ul?"(FFS)":
                 dos==0x444f5300ul?"(OFS)":"",
                 (unsigned long)low,(unsigned long)high,
@@ -217,6 +218,7 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
         uint64_t begin=(uint64_t)first*BLK;
         uint64_t length=(uint64_t)count*BLK;
         DollyNativePartition *part;
+        char label_copy[40];
         if(!p[4] && !first && !count)continue;
         if(!first || !count || (p[0]!=0 && p[0]!=0x80) ||
            p[4]==0xeeu || p[4]==0x05u || p[4]==0x0fu ||
@@ -229,11 +231,12 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
         part=&out->parts[out->count++];
         memset(part,0,sizeof(*part));
         sprintf(part->label,"MBR %u",i+1u);
+        strcpy(label_copy,part->label);
         part->mbr_type=p[4];
         part->start_bytes=begin;part->length_bytes=length;
         part->fs_block_bytes=BLK;
         sprintf(part->summary,"%s | %lu MiB | Type %02lx | LBA %lu+%lu | %lu B",
-               part->label,(unsigned long)(length/1048576u),
+               label_copy,(unsigned long)(length/1048576u),
                (unsigned long)p[4],(unsigned long)first,
                (unsigned long)count,(unsigned long)BLK);
     }
