@@ -187,3 +187,19 @@ AmigaDOS DLT_DEVICE includes ordinary file/stream handlers.
 The second inset is deliberately provisional: the Physical/Partition
 inventory still uses synthetic driver/unit candidates and must not
 issue HD_SCSICMD or TD_GETGEOMETRY to an invented endpoint.
+
+## G. M1.22 vertical margins for non-square-pixel screens
+
+| ID | Screen | Expected |
+|---|---|---|
+| GUI-33 | 640x256 classic Workbench | 5 px tighter top content, bottom action buttons 8 px nearer window edge; no overlap |
+| GUI-34 | 640x256 Physical/Partition | Both inset panels remain 3 px apart and below list; extra space enlarges LISTVIEW |
+| GUI-35 | 640x256 File Source/Destination | Browse/path/details/format captions follow new top offsets; Use/Cancel stay reachable |
+| GUI-36 | Proportional 4:3 display, later | Original baseline vertical offsets retained; RTG test remains deferred |
+| GUI-37 | 640x256 resizing and mode changes | No stale pixels, clipping, inaccessible controls or lost selections |
+
+The compact-mode criterion is screen width > twice screen height,
+rather than a hardware/RTG detection or fixed display-name check.
+It targets non-square-pixel classic Workbench geometries while leaving
+4:3-like screen ratios unchanged. A screen with conventional square
+pixels and very wide proportions may also trigger compact mode.
