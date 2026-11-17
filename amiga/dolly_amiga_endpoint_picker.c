@@ -827,6 +827,8 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
                       DollyEndpointMode preferred_mode) {
     LONG top;
+    ULONG chooser_height=(ULONG)screen->Width>
+                          2ul*(ULONG)screen->Height?195ul:214ul;
     if(!p || !screen || role>1u ||
        (unsigned)preferred_mode>3u)return 0;
     if(p->window)return 1;
@@ -893,8 +895,8 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
           WA_PubScreen,(ULONG)screen,
           WA_Title,(ULONG)(role?"Dolly - Destination":"Dolly - Source"),
           WA_Left,12,WA_Top,(ULONG)top,
-          WA_Width,606,WA_Height,195,
-          WA_MinWidth,606,WA_MinHeight,195,
+          WA_Width,606,WA_Height,chooser_height,
+          WA_MinWidth,606,WA_MinHeight,chooser_height,
           WA_MaxWidth,(ULONG)screen->Width-12ul,
           WA_MaxHeight,(ULONG)screen->Height-(ULONG)top,
           WA_SizeGadget,TRUE,
