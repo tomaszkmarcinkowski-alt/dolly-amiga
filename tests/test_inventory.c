@@ -10,6 +10,7 @@ typedef struct InventoryCheck {
     unsigned derived_count;
     unsigned name_seen;
     unsigned overflow_seen;
+    unsigned dos_unavailable;
 } InventoryCheck;
 static int collect(const DollyInventoryField *f,void *user){
     InventoryCheck *c=(InventoryCheck *)user;
@@ -19,6 +20,8 @@ static int collect(const DollyInventoryField *f,void *user){
         assert(f->kind==DOLLY_INV_TEXT);
         assert(!strcmp(f->text,"DH0"));c->name_seen++;
     }
+    if(!strcmp(f->key,"dos_type") &&
+       f->availability==DOLLY_INV_UNAVAILABLE)c->dos_unavailable++;
     if(!strcmp(f->key,"max_transfer")){
         c->max_seen++;
         if(f->availability==DOLLY_INV_UNAVAILABLE)c->max_unavailable++;
@@ -43,9 +46,10 @@ int main(void){
     assert(c.received==9&&c.max_seen==1&&c.name_seen==1&&c.derived_count==3);
     assert(c.max_unavailable==0&&c.overflow_seen==0);
     memset(&c,0,sizeof(c));p.max_transfer_present=0;
+    p.dos_type_present=0;
     p.start_bytes=UINT64_MAX;p.length_bytes=512;
     assert(dolly_inventory_partition(&p,collect,&c)==0);
-    assert(c.max_unavailable==1&&c.overflow_seen==1);
+    assert(c.max_unavailable==1&&c.overflow_seen==1&&c.dos_unavailable==1);
     assert(dolly_inventory_partition(&p,stop_early,&n)==7&&n==1);
     assert(dolly_inventory_partition(0,collect,&c)==-1);
     assert(dolly_inventory_partition(&p,0,&c)==-1);
