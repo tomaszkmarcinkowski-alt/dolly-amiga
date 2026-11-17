@@ -61,3 +61,5 @@ The native-only source path also exercises `dolly_dma_check_buffer()`: a valid a
 On this **64-bit host**, the heap-allocated `DollyRdb` result reports **14376 bytes**. Do not project this number onto m68k without actually compiling the target; sizes may differ with alignment/ABI.
 
 The reconstructed host source subset is not a complete checkout of current `main`. GitHub Actions, the real m68k cross build and WinUAE are not yet independently validated.
+
+The native-only memory smoke now includes a third DMA policy check rejecting an interval that crosses a forbidden **interior hole** in an irregular address mask. The reconstructed local native-only source path (GCC, Clang and GCC ASan/UBSan) completed `--selftest` successfully after the DMA policy fix. This remains host verification, not a native AmigaOS result.
