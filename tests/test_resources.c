@@ -62,6 +62,7 @@ int main(void){
       {"Plugins/Devices/Good.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3,0xcbf43926u,9},
       {"Plugins/Devices/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3,0xcbf43926u,9},
       {"Plugins/Devices/WrongABI.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3,0xcbf43926u,9},
+      {"Plugins/Devices/BadCRC.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3,0xcbf43926u,9},
       {"Plugins/Devices/NoMetadata.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3,0xcbf43926u,9},
       {"Plugins/Devices/Unreadable.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3,0xcbf43926u,9},
       {"Catalogs/polish/dolly.catalog",DOLLY_RESOURCE_CATALOG,3,0xcbf43926u,9}
