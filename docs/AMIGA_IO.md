@@ -22,11 +22,11 @@ The device adapter is **read-only**. It contains no `CMD_WRITE`, `TD_FORMAT` or 
 
 ## Test coverage
 
-`tests/test_io_plan.c` checks the command choice around 4 GiB, alignment, transfer size and overflow. `tests/test_amiga_device_mock.c` exercises open/read/close and 64-bit capability selection with a **mocked Exec**, not a real OS. Host CTest currently reports **7/7** suites locally including this mock and IFF tests.
+`tests/test_io_plan.c` checks the command choice around 4 GiB, alignment, transfer size and overflow. `tests/test_amiga_device_mock.c` exercises open/read/close and 64-bit capability selection with a **mocked Exec**, not a real OS. Earlier host suites passed in isolated runs, but a full current-branch CTest and CI result has not yet been independently confirmed.
 
 ## Important limitations
 
-- No native 68000 binary has been built.
+- A POSIX-free native smoke **source** and CMake target now exist, but no verified native 68000 binary has been built. See [NATIVE_SMOKE.md](NATIVE_SMOKE.md).
 - `CreateMsgPort`, `CreateIORequest`, `OpenDevice` and the NSD struct ABI must be checked against an installed Amiga NDK.
 - Only the NSD 64-bit path is prototyped; **TD64 is not yet implemented**.
 - Actual drive capacity, `TD_GETGEOMETRY`, change counters, `MaxTransfer`, address masks, DMA-suitable memory, retries, media-change handling and mounted-volume coordination remain unverified.
