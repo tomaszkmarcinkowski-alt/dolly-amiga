@@ -366,3 +366,30 @@ same A1200/OS3.1/WinUAE configuration. Record one or two complete
 entries of OS:/WB_1.3:/DL0: with the new bracketed diagnostics.
 Never run \`--probe INDEX\` until a correctly identified candidate
 appears; current normal enumeration performs no physical I/O.
+
+## N. M1.24 A1200 driver BSTR: trailing zero identified
+
+WinUAE OS 3.1 screenshot showed validated addresses and recognizable
+ASCII hex prefixes for driver names. For example: OS: length=12,
+bytes \`736373692e646576\` = "scsi.dev...", whereas "scsi.device"
+is 11 characters. DB0: length=17 versus "trackdisk.device" at 16;
+CC0: 16 versus "carddisk.device" at 15; DL0: 13 versus
+"uaehf.device" at 12.
+
+Likely cause: startup BSTR includes an optional terminal NUL counted
+in its length. The original parser rejected control bytes entirely.
+The amended parser first validates memory for the complete length,
+accepts exactly one terminal NUL, and continues rejecting any
+embedded NUL or other control byte. The DOS device-name path uses
+the same bounded function.
+
+| ID | Next WinUAE check | Expected |
+|---|---|---|
+| PHYS-26 | A1200/OS3.1 IDE, no arguments | Detect real \`scsi.device\` and other valid \`.device\` pairs |
+| PHYS-27 | \`--inspect\` | Shows accepted driver/unit candidates; no I/O |
+| PHYS-28 | Other handler names, unknown formats | Still rejected when their startup data is not a well-formed device record |
+| PHYS-29 | Physical probe | Not run until candidate driver/unit verified against actual emulator configuration |
+
+Do not automatically send read-only hardware commands merely because
+candidate enumeration now succeeds. Keep the approved GUI's
+Device name and Size in **separate fields**.
