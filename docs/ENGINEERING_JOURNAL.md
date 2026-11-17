@@ -554,12 +554,35 @@
 **Do wykonania:** natywny AmigaDOS adapter do prawidłowego odnalezienia aktualnego pliku programu, odczyt rzeczywistego manifestu, włączenie kontroli do właściwej ścieżki startowej przed aktywacją operacji dyskowych i test WinUAE. **Najnowszy pełny CTest i uruchomienie m68k nie są potwierdzone.** [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19).
 
 
+### DJ-0055 · 2026-11-17 · AmigaOS / standardowa identyfikacja wersji · OPUBLIKOWANO ZNACZNIK
+**Temat:** Własny identyfikator CRC32 nie zastępuje standardowego mechanizmu `Version` dostępnego w AmigaDOS.
+
+**Uwaga użytkownika:** AmigaOS posiada mechanizmy identyfikacji wersji programu i bibliotek; należy je wykorzystać zamiast wprowadzać wyłącznie własny format.
+
+**Weryfikacja:** klasyczny program można identyfikować po osadzonym ciągu **`$VER: nazwa major.revision (dd.mm.yyyy)`**, odczytywanym przez `C:Version FILE` od wersji systemów 2.x. Gdy dodatek stanie się prawdziwą biblioteką AmigaOS, obowiązują też pola `lib_Version`, `lib_Revision`, `lib_IdString`. Nie należy jednak zakładać dostępności osobnej `version.library` na minimalnym AmigaOS 2.04 — `$VER:` i `C:Version` nie wymagają tej biblioteki jako dodatkowej zależności.
+
+**Działanie:** dodano `dolly_version_tag` w `src/dolly_version.c` (tymczasowo `$VER: Dolly 0.1 (17.11.2026)`) i włączono źródło do natywnych oraz testowych celów kompilacji. W przyszłej paczce numer amigowej wersji i identyfikator konkretnego builda muszą być generowane ze wspólnych metadanych.
+
+**Źródła:** [AmigaOS Version Strings](https://wiki.amigaos.net/wiki/Version_Strings), [AmigaDOS VERSION](https://wiki.amigaos.net/wiki/AmigaOS_Manual%3A_AmigaDOS_Command_Reference). Faktycznego odczytu przez `Version FILE` na WinUAE jeszcze **nie przetestowano**.
+
+### DJ-0056 · 2026-11-17 · CRC32 w samym pliku Dolly · HOST GCC/CLANG/ASAN PASS, AMIGA OTWARTA
+**Temat:** Użytkownik nie chce ani osobnego programu sprawdzającego, ani pliku manifestu towarzyszącego głównej binarce.
+
+**Rozwiązanie:** 40-bajtowy rekord z unikalnym znacznikiem, 8 znakami CRC32 oraz 16 znakami identyfikatora wydania znajduje się **wewnątrz głównego pliku wykonywalnego**. Po linkowaniu skrypt `tools/stamp_selfcheck.py` wypełnia numer wydania, liczy CRC32 z ośmioma znakami sumy potraktowanymi jako ASCII `0` i zapisuje CRC. Kod `dolly_selfcheck_embedded_stream()` stosuje identyczną regułę przy odczycie własnego pliku. Nie ma cykliczności obliczania, nie trzeba oddzielnego manifestu ani launchera. Skrypt wymaga też standardowego `$VER: Dolly` w pliku.
+
+**Wykryty błąd:** pierwszy kod użył `!valid` przy sprawdzaniu wyniku funkcji parsującej rekord. `-1` oznaczające brak stempla nie było więc rozpoznawane jako niepowodzenie. Test `DOLLY_SELF_RECORD_UNSTAMPED` nie przeszedł; poprawiono warunek na `valid != 1` i powtórzono testy.
+
+**Testy wykonane lokalnie:** odtworzony aktualny zestaw C99 `dolly_checksum + dolly_version + dolly_selfcheck_embedded + test_selfcheck_embedded`: **GCC PASS, Clang PASS, GCC ASan/UBSan PASS**. Własny plik testowy z rekordem po linkowaniu został ostemplowany i poprawnie zweryfikowany przez Python; uszkodzenie danych daje błąd — **PASS**. To test hostowy, **nie** pełny `main`, binarka HUNK m68k ani WinUAE.
+
+**Do wykonania:** natywne odnalezienie rzeczywiście uruchomionego pliku AmigaDOS, odczyt i weryfikacja przy starcie przed aktywowaniem I/O, widoczny komunikat błędu GadTools, wspólne generowanie numerów wersji i test `Version FILE` na Amidze. [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19), [specyfikacja](INTEGRITY.md).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0055 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0057 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
