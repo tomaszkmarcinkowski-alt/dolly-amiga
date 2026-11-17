@@ -9,6 +9,7 @@ int main(void) {
     assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(dolly_endpoint_set_unit(&dst,1,0));
     assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
+    assert(!dolly_demo_can_start(DOLLY_DEMO_RESTORE,&src,&dst));
     assert(dolly_endpoint_set_unit(&dst,0,0));
     assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(!dolly_endpoint_set_partition(&src,0,0,9));
