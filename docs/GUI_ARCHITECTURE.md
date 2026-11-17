@@ -320,3 +320,28 @@ current count, close Sheep Counter with its close gadget and finally
 Quit demo via main window. Check `Echo $RC` and absence of
 memory pressure/failures. Low-memory success must not be claimed
 before testing both windows open simultaneously.
+
+### M1.11 — GadTools counters in two-window demonstration (unverified)
+
+User tested the initial two-window demo on MC68000 / 512 KiB Chip /
+Kickstart 2.04: main and auxiliary window lifecycle was functional,
+but screenshot showed a damaged Sheep Counter view, bad-looking
+numbers (e.g. `Blocks: 29 / 0 | Errors: 42582912`) and slow full
+redraws on every progress tick. The source used `sprintf`, `Text`,
+and a full 24x8 grid redraw at every tick. This was inferior to the
+previously validated standalone Sheep Counter.
+
+The next code revision replaces both numeric counters with native
+GadTools `NUMBER_KIND` gadgets updated using `GT_SetGadgetAttrs`,
+while rendering labels only during creation/refresh. It uses incremental
+cell changes for the 24x8 synthetic grid rather than redrawing 192 cells
+on every progress tick. The star uses Topaz/8 with transparent `JAM1`.
+The operation remains in a single shared C99 `OperationSession`
+and progresses even when the auxiliary window is hidden.
+
+This version is an integration prototype, **not yet** the polished
+resizable Sheep Counter. It must be compiled and tested in WinUAE
+before the counter rendering, screen appearance or memory footprint
+can be called validated. Production code will use existing GadTools
+controls whenever appropriate, with direct drawing reserved for custom
+progress maps/visuals for which GadTools has no suitable gadget.
