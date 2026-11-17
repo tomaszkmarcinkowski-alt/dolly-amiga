@@ -5,6 +5,8 @@
  */
 #include "dolly_operation_session.h"
 #include "dolly_gui_minimum.h"
+#include "dolly_endpoint.h"
+#include "dolly_amiga_endpoint_picker.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
@@ -24,6 +26,7 @@
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
+struct Library *AslBase;
 
 #define GRID_COLS 24u
 #define GRID_ROWS 8u
@@ -39,10 +42,16 @@ struct Library *GadToolsBase;
 #define MAIN_DEVICE_ID 209u
 #define MAIN_OPERATION_ID 210u
 #define MAIN_STATUS_ID 211u
+#define MAIN_SOURCE_ID 212u
+#define MAIN_TARGET_ID 213u
+#define MAIN_DESC_ID 214u
+#define MAIN_SOURCE_TEXT_ID 215u
+#define MAIN_TARGET_TEXT_ID 216u
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
-    LONG main_device_y, main_operation_y, main_status_y;
+    LONG main_device_y, main_target_y, main_operation_y;
+    LONG main_desc_y, main_status_y, main_count_y;
     LONG pad_x, pad_y;
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h;
@@ -53,8 +62,10 @@ typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
     struct Gadget *show, *quit, *start, *hide, *count, *errors, *percent;
-    struct Gadget *device, *op_selector, *status;
-    char status_label[48];
+    struct Gadget *device,*target_button,*source_text,*target_text;
+    struct Gadget *description,*op_selector,*status;
+    char source_label[72],target_label[72],desc_label[96];
+    char status_label[64];
     char block_label[40];
     char percent_label[8];
     APTR visual;
@@ -67,21 +78,68 @@ static struct DrawInfo *screen_info;
 static struct TextFont *marker_font;
 static DollyOperationSession operation;
 static DollyDemoView main_view, sheep_view;
-/* No enumeration of real disks or access to scsi.device in this demo. */
-static STRPTR demo_devices[]={(STRPTR)"Synthetic unit 0",
-                              (STRPTR)"Synthetic unit 1",NULL};
-static STRPTR demo_operations[]={(STRPTR)"Surface scan demo",
-                                 (STRPTR)"Inventory preview",NULL};
-static UWORD selected_device=0;
+/* SYNTHETIC device tree. This demo never opens physical media. */
+static DollyEndpoint selected_source,selected_target;
+static DollyEndpointPicker source_picker,target_picker;
+static STRPTR demo_operations[]={
+    (STRPTR)"Surface scan demo",
+    (STRPTR)"Inventory preview",
+    (STRPTR)"Copy disk/file demo",
+    (STRPTR)"Restore image demo",NULL
+};
+static const char *demo_descriptions[]={
+    "Read-only scan of source blocks.",
+    "Inspect device and partition layout.",
+    "Copy blocks from source to destination.",
+    "Restore a file image to a destination."
+};
 static UWORD selected_operation=0;
+static void text_copy(char *dst,size_t cap,const char *src) {
+    size_t n=src?strlen(src):0u;
+    if(n>=cap)n=cap-1u;
+    if(n)memcpy(dst,src,n);
+    dst[n]='\0';
+}
+static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
+    char tmp[72];
+    if(e->kind==DOLLY_ENDPOINT_NONE){
+        text_copy(out,cap,"<not selected>");return;
+    }
+    if(e->kind==DOLLY_ENDPOINT_FILE){
+        text_copy(out,cap,e->path);return;
+    }
+    sprintf(tmp,"Demo device %u / unit %u",e->device,e->unit);
+    if(e->kind==DOLLY_ENDPOINT_PARTITION)
+        sprintf(tmp+strlen(tmp)," / partition %u",e->partition);
+    else
+        strcat(tmp," (whole)");
+    text_copy(out,cap,tmp);
+}
 static void update_main_status(void) {
-    const char *message=selected_operation==0 ?
-        "Read only / synthetic scan" : "Read only / inventory preview";
-    size_t len=strlen(message);
-    if(len>=sizeof(main_view.status_label))
-        len=sizeof(main_view.status_label)-1;
-    memcpy(main_view.status_label,message,len);
-    main_view.status_label[len]='\0';
+    int need=dolly_demo_needs_target((DollyDemoOperation)selected_operation);
+    int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
+                                &selected_source,&selected_target);
+    text_copy(main_view.desc_label,sizeof(main_view.desc_label),
+              demo_descriptions[selected_operation]);
+    if(operation.state==DOLLY_OP_RUNNING)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Synthetic operation running...");
+    else if(!selected_source.kind)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Choose source.");
+    else if(need && !selected_target.kind)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Choose destination.");
+    else if(!can)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Source and destination overlap.");
+    else
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Ready. No disk I/O.");
+    format_endpoint(main_view.source_label,sizeof(main_view.source_label),
+                    &selected_source);
+    format_endpoint(main_view.target_label,sizeof(main_view.target_label),
+                    &selected_target);
 }
 
 /* Bounds-checked C99 decimal formatter. No format varargs or overflow. */
@@ -150,13 +208,16 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_w=d.right-d.left+1;
     avail_h=d.bottom-d.top+1;
     if(main_window) {
-        if(avail_w<190 || avail_h<70)return 0;
+        if(avail_w<320 || avail_h<175)return 0;
         d.main_device_y=d.top+18;
-        d.main_operation_y=d.top+39;
-        d.main_status_y=d.top+60;
-        d.controls_y=d.top+84;
+        d.main_target_y=d.top+38;
+        d.main_operation_y=d.top+58;
+        d.main_desc_y=d.top+78;
+        d.controls_y=d.top+100;
+        d.main_count_y=d.top+143;
+        d.main_status_y=d.bottom-16;
         d.number_w=avail_w/3;
-        if(d.number_w>124)d.number_w=124;
+        if(d.number_w>150)d.number_w=150;
     } else {
         if(avail_w<248 || avail_h<140)return 0;
         d.hide_w=76;
@@ -235,7 +296,8 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)value,
-                        GTTX_Border,border,TAG_DONE);
+                        GTTX_Border,border,
+                        GTTX_Clipped,TRUE,TAG_DONE);
 }
 static struct Gadget *make_cycle(struct Gadget *last,DollyDemoView *v,
                                   UWORD id,LONG x,LONG y,LONG width,
@@ -274,7 +336,9 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->gadgets=NULL;
         v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;
-        v->device=NULL;v->op_selector=NULL;v->status=NULL;
+        v->device=NULL;v->target_button=NULL;
+        v->source_text=NULL;v->target_text=NULL;
+        v->description=NULL;v->op_selector=NULL;v->status=NULL;
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
@@ -349,7 +413,9 @@ static void destroy_view(DollyDemoView *v) {
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
     v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
-    v->device=NULL;v->op_selector=NULL;v->status=NULL;
+    v->device=NULL;v->target_button=NULL;
+    v->source_text=NULL;v->target_text=NULL;
+    v->description=NULL;v->op_selector=NULL;v->status=NULL;
 }
 /* Measure the actual active font and window chrome, then tell Intuition
  * the smallest outer rectangle that fits the required GadTools controls.
