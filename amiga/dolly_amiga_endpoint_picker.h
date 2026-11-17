@@ -2,6 +2,7 @@
 #define DOLLY_AMIGA_ENDPOINT_PICKER_H
 #include "dolly_endpoint.h"
 #include "dolly_amiga_dos_devices.h"
+#include "dolly_amiga_physical_catalog.h"
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <libraries/gadtools.h>
@@ -16,7 +17,13 @@ typedef struct DollyEndpointPicker {
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text;
     struct List devices,units,partitions,logical_devices;
-    struct Node device_nodes[2],unit_nodes[2],partition_nodes[2];
+    struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX];
+    struct Node partition_nodes[2];
+    char physical_names[DOLLY_PHYS_MAX][DOLLY_PHYS_DRIVER_LEN];
+    char unit_names[DOLLY_PHYS_MAX][20];
+    ULONG physical_units[DOLLY_PHYS_MAX];
+    unsigned device_count,unit_count;
+    DollyPhysicalCatalog physical_catalog;
     struct Node logical_nodes[DOLLY_DOS_MAX_DEVICES];
     DollyDosDevices dos_devices;
     DollyEndpoint result;
