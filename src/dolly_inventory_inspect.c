@@ -19,6 +19,9 @@ static int emit_field(const DollyInventoryField *f,void *ctx){
     }
     if(f->kind==DOLLY_INV_TEXT){
         fprintf(out,"  %-23s %s (source: %s)\n",f->label,f->text,source);
+    }else if(f->kind==DOLLY_INV_I64){
+        fprintf(out,"  %-23s %" PRIi64 " %s (source: %s)\n",
+                f->label,f->signed_number,f->unit,source);
     }else if(!strcmp(f->unit,"hex32")){
         fprintf(out,"  %-23s 0x%08" PRIX32 " (source: %s)\n",f->label,(uint32_t)f->number,source);
     }else{
