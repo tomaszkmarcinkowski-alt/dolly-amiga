@@ -99,9 +99,22 @@ int main(void) {
     largest_after = AvailMem(MEMF_CHIP | MEMF_LARGEST);
     printf("SCREEN closed chip=%lu largest=%lu\n",
            (unsigned long)free_after, (unsigned long)largest_after);
-    printf("SCREEN %s\n",
-           (free_after == free_before) ? "PASS" : "WARN: free RAM changed");
-    exit_code = (free_after == free_before) ? 0 : 10;
+    if (free_after != free_before) {
+        puts("SCREEN FAIL: free Chip RAM was not fully restored");
+        exit_code = 10;
+    } else {
+        puts("SCREEN PASS: total free Chip RAM restored");
+        exit_code = 0;
+    }
+    if (largest_after < largest_before) {
+        printf("SCREEN WARN: largest free block shrank by %lu bytes\n",
+               (unsigned long)(largest_before - largest_after));
+    } else if (largest_after > largest_before) {
+        printf("SCREEN NOTE: largest free block grew by %lu bytes\n",
+               (unsigned long)(largest_after - largest_before));
+    } else {
+        puts("SCREEN NOTE: largest free block unchanged");
+    }
 
 cleanup:
     if (screen) CloseScreen(screen);
