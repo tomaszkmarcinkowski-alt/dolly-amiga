@@ -946,3 +946,42 @@ and Destination and resizes use the same layout rules.
 This is a geometry-only change; no changes to DOS discovery or disk
 I/O. Newly added tests GUI-33–37 are pending 640x256 verification.
 RTG/proportional mode testing remains deferred.
+
+### M1.23 — physical candidate discovery and opt-in identity probe
+
+M1.22 left the Physical device and Partition selection lists
+synthetic. To avoid probing arbitrary guessed driver/unit pairs,
+M1.23 first creates a separate **console-only** executable
+\`dolly-physical-probe\`. It is not automatically invoked by the GUI
+and has no write commands.
+
+Without arguments, the executable snapshots up to 16 unique
+driver/unit candidates from *registered* AmigaDOS DLT_DEVICE entries
+under a read lock, validating plausible FileSysStartupMsg and DosEnvec
+metadata (including TypeOfMem and BSTR checks), then unlocks before
+printing. Multiple DOS partitions sharing one physical driver/unit
+are deduplicated. Entries with unfamiliar startup formats are skipped.
+This is conservative and still not a general proof of an object's
+block capability: third-party startup messages can be driver-specific.
+Unknown entries are explicitly counted rather than guessed.
+
+\`dolly-physical-probe --probe INDEX\` sends two read-only queries to
+**one** explicitly chosen candidate: TD_GETGEOMETRY reports total
+sectors and sector size (if supported), and HD_SCSICMD INQUIRY
+(0x12, 36-byte data) reports sanitized vendor/product/revision.
+Both the CDB and returned SCSI data use Chip RAM to accommodate
+older DMA requirements. Drivers may reject either query; absent
+results are labelled unavailable, never fabricated. INQUIRY itself
+does not report disk size. The hardware commands are synchronous,
+so no transport timeout is implemented yet. Limit these tests to a
+controlled WinUAE configuration before further robustness work.
+
+No I/O is issued in normal Dolly GUI operation; no actual RDB/MBR
+partition scan is attached. Only after the verified driver/unit
+mapping and driver capability results have passed PHYS-01..10 can
+this information replace synthetic Physical/Partition entries and
+fill the second inset panel. This deliberately isolates the highest
+risk new code path from the previously accepted M1.22 GUI.
+
+Test commands and expected observations are in docs/TEST_MATRIX.md.
+RTG tests and memory footprint profiling remain postponed.

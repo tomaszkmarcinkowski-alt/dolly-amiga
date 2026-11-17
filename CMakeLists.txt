@@ -106,6 +106,13 @@ if(DOLLY_NATIVE_ONLY)
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
     target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation dollyguimin dollyendpoint amiga)
+    # M1.23 independent diagnostic: enumerate without device I/O by
+    # default; optional "--probe" sends only read-only queries.
+    add_executable(dolly-physical-probe amiga/dolly_amiga_physical_probe.c)
+    target_compile_options(dolly-physical-probe PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-physical-probe PRIVATE -m68000)
+    target_link_libraries(dolly-physical-probe PRIVATE amiga)
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice
