@@ -50,6 +50,10 @@ typedef struct InspectRecord {
     ULONG startup;
     ULONG env_sizeblock;
     ULONG env_tablesize;
+    ULONG env_surfaces;
+    ULONG env_blocks_per_track;
+    ULONG unit;
+    char driver[DRIVER_LEN];
 } InspectRecord;
 static InspectRecord inspect_records[MAX_INSPECT];
 static unsigned inspect_count,reason_counts[EXTRACT_REASON_COUNT];
@@ -118,13 +122,20 @@ static ExtractReason extract(const struct DosList *entry,
     env=(const struct DosEnvec *)BADDR(f->fssm_Environ);
     record->env_tablesize=env->de_TableSize;
     record->env_sizeblock=env->de_SizeBlock;
+    record->env_surfaces=env->de_Surfaces;
+    record->env_blocks_per_track=env->de_BlocksPerTrack;
+    record->unit=f->fssm_Unit;
+    /* These are filesystem/partition geometry hints, not driver
+     * identity. Some virtual controllers provide zero or synthetic
+     * heads/sectors-per-track. Never reject the underlying device
+     * solely because these optional geometry hints are unusual.
+     */
     if(env->de_TableSize<10ul || env->de_TableSize>256ul ||
-       env->de_SizeBlock<64ul || env->de_SizeBlock>4096ul ||
-       !env->de_Surfaces || env->de_Surfaces>256ul ||
-       !env->de_BlocksPerTrack || env->de_BlocksPerTrack>1024ul)
+       env->de_SizeBlock<64ul || env->de_SizeBlock>4096ul)
         return EXTRACT_BAD_GEOMETRY;
     if(!bstr_copy(out->driver,sizeof(out->driver),f->fssm_Device))
         return EXTRACT_BAD_DRIVER_BSTR;
+    strcpy(record->driver,out->driver);
     if(!driver_suffix(out->driver))return EXTRACT_NOT_DEVICE_DRIVER;
     if(!bstr_copy(out->volume,sizeof(out->volume),entry->dol_Name))
         return EXTRACT_BAD_DOS_NAME;
@@ -172,10 +183,17 @@ static void report_inspection(void) {
         const InspectRecord *r=&inspect_records[i];
         printf("  %s: %s",r->dos_name,
                extract_reason_names[r->reason]);
-        if(r->reason==EXTRACT_BAD_GEOMETRY)
-            printf(" (table=%lu blockwords=%lu)",
+        if(r->env_tablesize || r->env_sizeblock) {
+            printf(" (table=%lu blockwords=%lu heads=%lu spt=%lu",
                    (unsigned long)r->env_tablesize,
-                   (unsigned long)r->env_sizeblock);
+                   (unsigned long)r->env_sizeblock,
+                   (unsigned long)r->env_surfaces,
+                   (unsigned long)r->env_blocks_per_track);
+            if(r->driver[0])
+                printf(" drv=%s unit=%lu",
+                       r->driver,(unsigned long)r->unit);
+            printf(")");
+        }
         printf("\n");
     }
     if(reason_counts[EXTRACT_BAD_STARTUP] ||
