@@ -419,3 +419,28 @@ Docker m68k build or WinUAE runtime test.
 ### M1.13 GadTools TEXT_KIND compile correction
 
 The first Docker m68k build reported `GTST_Border` undeclared. The source accidentally used STRING_KIND (`GTST_*`) tags for read-only TEXT_KIND controls. Updated all affected creation and runtime attributes to `GTTX_Text` and `GTTX_Border` according to AmigaOS V36 GadTools documentation. Percent and `current / total` remain TEXT_KIND, with view-owned buffers; Errors remains NUMBER_KIND. Native rebuild and WinUAE verification are still outstanding.
+
+### M1.14 — prevent interim old-size gadget painting during resize (unverified)
+
+Tester clarified that main-window GadTools button geometry is **correct
+after resizing**, but while dragging smaller the old-size button is
+temporarily painted and overlaps the new frame. This is **not** an
+incorrect minimum window width. Do not change the accepted dimensions
+or font/layout calculations to compensate.
+
+On AmigaOS 2.x, `IDCMP_SIZEVERIFY` arrives before interactive
+window sizing and `IDCMP_NEWSIZE` when complete. The M1.14
+two-window prototype now detaches its GadTools list in
+`IDCMP_SIZEVERIFY`, replies immediately, and rebuilds + reattaches
+it after `IDCMP_NEWSIZE`. A detached-state flag prevents duplicate
+`RemoveGList` and an invalid geometry retains a reattach path.
+Full custom rendering remains limited to layout/refresh; routine
+progress is incremental.
+
+Keep `WA_SmartRefresh`: Intuition already preserves obscured
+window pixels where possible. `GT_RefreshWindow` is called only
+after gadget insertion/reinsertion, not on each progress tick.
+This specific change is intended to avoid old-size gadget redraw
+during drag; it must be cross-compiled and tested on WinUAE
+MC68000 / 512 KiB Chip / Kickstart 2.04. It has **not** been
+runtime-validated.
