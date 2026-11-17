@@ -102,3 +102,6 @@ add_executable(test-maxtransfer tests/test_maxtransfer.c)
 target_link_libraries(test-maxtransfer PRIVATE dollymaxtransfer)
 add_test(NAME maxtransfer_advisory COMMAND test-maxtransfer)
 target_link_libraries(dolly-rdb PRIVATE dollymaxtransfer)
+
+# Full layout CLI uses the same MaxTransfer advisory as dolly-rdb.
+target_link_libraries(dolly-layout PRIVATE dollymaxtransfer)
