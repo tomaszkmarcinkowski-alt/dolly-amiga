@@ -16,6 +16,7 @@
 #define SMOKE_BS 512u
 #define SMOKE_CAPACITY 4096u
 static unsigned char disk_bytes[SMOKE_CAPACITY];
+static unsigned smoke_stage;
 
 static void put_be32(unsigned char *b, uint32_t value) {
     b[0]=(unsigned char)(value>>24);
@@ -91,6 +92,7 @@ static int run_selftest(void){
     DollyBlockStatus status;
     unsigned fields=0;
     int success=0;
+    smoke_stage=1;
     build_fixture();
     status=dolly_block_open_backend(sizeof(disk_bytes),mem_read,mem_close,
                                     disk_bytes,&source);
@@ -98,6 +100,7 @@ static int run_selftest(void){
     /* Allocate RDB result on the heap, never on the Amiga task stack. */
     rdb=(DollyRdb *)malloc(sizeof(*rdb));
     if(!rdb)goto cleanup;
+    smoke_stage=2;
     parsed=dolly_rdb_scan(source,0,SMOKE_BS,4,rdb);
     if(parsed!=DOLLY_RDB_OK || rdb->partition_count!=1)goto cleanup;
     if(strcmp(rdb->partitions[0].name,"DH0")!=0 ||
@@ -105,18 +108,22 @@ static int run_selftest(void){
        rdb->partitions[0].length_bytes!=512)goto cleanup;
     if(!rdb->partitions[0].max_transfer_present ||
        rdb->partitions[0].max_transfer_bytes!=0x1fe00)goto cleanup;
+    smoke_stage=3;
     audit=dolly_rdb_audit(rdb,0,SMOKE_CAPACITY);
     if(audit.flags)goto cleanup;
     if(dolly_maxtransfer_classify(rdb->partitions[0].max_transfer_bytes,1)
        !=DOLLY_MT_AT_REFERENCE)goto cleanup;
+    smoke_stage=4;
     if(dolly_inventory_partition(&rdb->partitions[0],field_count,&fields)!=0
        || fields<10)goto cleanup;
+    smoke_stage=5;
     if(dolly_io_plan_read(UINT64_C(0x100000000),512,512,4096,0,&plan)
        !=DOLLY_BLOCK_EUNSUPPORTED)goto cleanup;
     if(dolly_io_plan_read(UINT64_C(0x100000000),512,512,4096,1,&plan)
        !=DOLLY_BLOCK_OK || plan.offset_high!=1 ||
        plan.command!=DOLLY_NSCMD_TD_READ64)goto cleanup;
     /* Fail closed on intentionally corrupted on-disk metadata. */
+    smoke_stage=6;
     disk_bytes[64]^=1;
     parsed=dolly_rdb_scan(source,0,SMOKE_BS,1,rdb);
     disk_bytes[64]^=1;
@@ -126,6 +133,7 @@ static int run_selftest(void){
     disk_bytes[SMOKE_BS+196]^=1;
     if(parsed!=DOLLY_RDB_BAD_CHECKSUM)goto cleanup;
     success=1;
+    smoke_stage=0;
 cleanup:
     if(rdb)free(rdb);
     if(source)dolly_block_close(source);
@@ -138,6 +146,8 @@ int main(int argc,char **argv){
     if(argc==2 && strcmp(argv[1],"--selftest")==0){
         int result=run_selftest();
         puts(result?"Dolly native smoke: PASS":"Dolly native smoke: FAIL");
+        if(!result)printf("Failed at stage %u\n",smoke_stage);
+        printf("RDB result allocation: %lu bytes\n",(unsigned long)sizeof(DollyRdb));
         return result?0:10;
     }
     puts("Usage: dolly-native-smoke --version | --selftest | --help");
