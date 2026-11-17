@@ -45,7 +45,7 @@ ctest --test-dir build --output-on-failure
 See [AmigaOS I/O limitations](docs/AMIGA_IO.md) and [IFF format state](docs/IFF_FORMAT.md).
 
 ## Plans and community
-See [project scope](docs/SPECIFICATION.md), the [59-story backlog](docs/BACKLOG.md), [M0 sprint](docs/SPRINT_M0.md), [roadmap](docs/ROADMAP.md), [Polish introduction article](docs/ARTICLE_PL.md), [Retroware](RETROWARE.md), [contributing](CONTRIBUTING.md) and the [Post-MVP Flock Manager epic](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
+See [project scope](docs/SPECIFICATION.md), the [60-story backlog](docs/BACKLOG.md), [M0 sprint](docs/SPRINT_M0.md), [roadmap](docs/ROADMAP.md), [Polish introduction article](docs/ARTICLE_PL.md), [Retroware](RETROWARE.md), [contributing](CONTRIBUTING.md) and the [Post-MVP Flock Manager epic](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
 ## Engineering journal
 
@@ -54,6 +54,10 @@ Read the chronological [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md) fo
 ## RDB collision and hybrid diagnostics
 
 The experimental host utilities also detect collisions between RDB partitions, `RDSK` and `PART` metadata. `dolly-layout` reports when MBR and a whole-device RDB are both present; neither view is automatically assumed safe for writes. This is preliminary inspection, not full hybrid-drive support. See [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
+
+## Sheep Inventory (early host prototype)
+
+The preliminary `dolly-inventory IMAGE [BLOCK_BYTES]` command displays MBR/RDB partition details using a **streaming, allocation-free field API** with units, provenance and explicit unavailable values. A GadTools window and richer device/volume providers are future work. See [Sheep Inventory design](docs/SHEEP_INVENTORY.md) and [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
 
 ## MaxTransfer audit
 
