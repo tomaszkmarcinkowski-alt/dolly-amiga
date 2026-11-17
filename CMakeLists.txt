@@ -229,3 +229,17 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-dma-advice PRIVATE -UNDEBUG)
   target_compile_options(dolly-dma-advice PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
+
+# Portable layout preflight for the built-in classic GadTools GUI.
+# This only validates geometry; it does not open Intuition windows.
+add_library(dollyguilayout STATIC src/dolly_gui_layout.c)
+target_include_directories(dollyguilayout PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyguilayout PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-gui-layout tests/test_gui_layout.c)
+target_link_libraries(test-gui-layout PRIVATE dollyguilayout)
+add_test(NAME gadtools_640x256_font_fallback COMMAND test-gui-layout)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-gui-layout PRIVATE -UNDEBUG)
+endif()
