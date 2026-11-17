@@ -8,7 +8,7 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 
 ## Goals
 - AmigaOS 2.04+, Motorola 68000 baseline, no FPU or MMU required.
-- CLI plus **built-in GadTools GUI**; independent optional ReAction and future MUI modules (toolkit loader still planned).
+- CLI plus **built-in GadTools GUI** in the MVP; optional ReAction and MUI backends are **post-MVP**, separately delivered extensions.
 - Read/write ADF, HDF, RAW; IFF `FORM DOLY` image container with segmented/compressed data.
 - RDB, nested/hybrid MBR/RDB, PiStorm/Emu68 layouts and later GPT.
 - RAW cloning and filesystem-aware resizing for OFS/FFS (`DOS\0`–`DOS\7`).
@@ -74,6 +74,10 @@ The preliminary `dolly-inventory IMAGE [BLOCK_BYTES]` command displays MBR/RDB p
 ## MaxTransfer audit
 
 Dolly's experimental read-only RDB tools now report per-partition `de_MaxTransfer` values and flag settings above conservative `0x1FE00`. See [MaxTransfer diagnostics](docs/MAXTRANSFER.md); no setting is changed automatically.
+
+## Installation convention: DOLLY:
+
+The main Amiga installation root uses `DOLLY:` for program files and resources, independent of the user's current directory. The classic Installer package is planned (Issue #16); the M0 C99 path resolver and its tests are already in the repository. The installer will ask before adding a persistent `S:User-startup` assignment. See [installation specification](docs/INSTALLATION.md).
 
 ## Licensing
 Dolly source code is licensed under the **[MIT License](LICENSE)**. Software will remain free of mandatory fees. Gifts of retro-computing hardware are wholly voluntary and confer no entitlement.
