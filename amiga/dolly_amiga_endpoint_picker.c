@@ -23,6 +23,7 @@ extern struct Library *AslBase;
 #define PICK_FILE 506u
 #define PICK_CANCEL 507u
 #define PICK_LOGICAL 508u
+#define PICK_FILE_TEXT 509u
 
 static STRPTR mode_names[]={
     (STRPTR)"Physical device",
@@ -83,6 +84,22 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
                         GTLV_Selected,(ULONG)~0ul,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
+/* Read-only GadTools text field with the same inset border convention as
+ * the other Dolly controls. The string lives in the picker until close.
+ */
+static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=20;ng.ng_TopEdge=105;
+    ng.ng_Width=566;ng.ng_Height=17;
+    ng.ng_GadgetID=PICK_FILE_TEXT;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTTX_Text,(ULONG)p->file_display,
+                        GTTX_Border,TRUE,TAG_DONE);
+}
 static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
@@ -114,8 +131,8 @@ static void captions(DollyEndpointPicker *p) {
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         Move(rp,20,59);Text(rp,(STRPTR)"Mounted logical device (demo)",29);
     } else {
-        Move(rp,20,85);
-        Text(rp,(STRPTR)"Choose a path with the system file requester.",45);
+        Move(rp,20,99);
+        Text(rp,(STRPTR)"Selected file:",14);
     }
     if(info)FreeScreenDrawInfo(p->screen,info);
 }
@@ -130,7 +147,9 @@ static void change_enabled(DollyEndpointPicker *p) {
     if(p->choose_button) {
         int ready=(p->mode==DOLLY_MODE_PHYSICAL && p->has_unit) ||
                   (p->mode==DOLLY_MODE_LOGICAL && p->has_logical) ||
-                  (p->mode==DOLLY_MODE_PARTITION && p->has_partition);
+                  (p->mode==DOLLY_MODE_PARTITION && p->has_partition) ||
+                  (p->mode==DOLLY_MODE_FILE &&
+                   p->pending_file.kind==DOLLY_ENDPOINT_FILE);
         GT_SetGadgetAttrs(p->choose_button,p->window,NULL,
                           GA_Disabled,(ULONG)!ready,TAG_DONE);
     }
@@ -169,7 +188,7 @@ static int rebuild(DollyEndpointPicker *p) {
     clear_picker_client(p);
     p->device_list=NULL;p->unit_list=NULL;
     p->partition_list=NULL;p->logical_list=NULL;
-    p->choose_button=NULL;p->mode_cycle=NULL;
+    p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -194,13 +213,17 @@ static int rebuild(DollyEndpointPicker *p) {
         p->logical_list=last;
     }
     if(p->mode==DOLLY_MODE_FILE) {
-        last=button(last,p,PICK_FILE,20,160,172,"Browse file...",0);
+        /* Reuse the otherwise empty LISTVIEW area. Full client width. */
+        last=button(last,p,PICK_FILE,20,66,566,"Browse file...",0);
         if(!last)return 0;
-    } else {
-        last=button(last,p,PICK_SELECT,20,160,172,"Use selection",1);
+        last=file_text(last,p);
         if(!last)return 0;
-        p->choose_button=last;
+        p->file_text=last;
     }
+    /* File mode now commits exactly like every other mode. */
+    last=button(last,p,PICK_SELECT,20,160,172,"Use selection",1);
+    if(!last)return 0;
+    p->choose_button=last;
     last=button(last,p,PICK_CANCEL,410,160,176,"Cancel",0);
     if(!last)return 0;
     AddGList(p->window,p->gadgets,(ULONG)-1,-1,NULL);
@@ -245,7 +268,14 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     memset(p,0,sizeof(*p));
     p->screen=screen;
     p->role=role;
-    if(initial)p->result=*initial;
+    if(initial) {
+        p->result=*initial;
+        if(initial->kind==DOLLY_ENDPOINT_FILE) {
+            p->pending_file=*initial;
+            memcpy(p->file_display,initial->path,
+                   sizeof(p->file_display));
+        }
+    }
     p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE) ?
             dolly_endpoint_mode(initial) : preferred_mode;
     make_list(&p->devices,p->device_nodes,device_names);
@@ -326,9 +356,24 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                                                 p->unit,p->partition);
             else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical)
                 ok=dolly_endpoint_set_logical(&p->result,p->logical);
+            else if(p->mode==DOLLY_MODE_FILE &&
+                    p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
+                p->result=p->pending_file;
+                ok=1;
+            }
             if(ok){p->changed=1;close=1;}
         } else if(id==PICK_FILE && p->mode==DOLLY_MODE_FILE) {
-            if(pick_file(&p->result,p->role)){p->changed=1;close=1;}
+            DollyEndpoint selected={0};
+            if(pick_file(&selected,p->role)) {
+                p->pending_file=selected;
+                memcpy(p->file_display,selected.path,
+                       sizeof(p->file_display));
+                if(p->file_text)
+                    GT_SetGadgetAttrs(p->file_text,p->window,NULL,
+                                      GTTX_Text,(ULONG)p->file_display,
+                                      TAG_DONE);
+                change_enabled(p);
+            }
         }
         if(close){dolly_picker_close(p);return;}
     }
