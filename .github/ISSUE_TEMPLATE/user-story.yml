@@ -1,0 +1,22 @@
+name: User story
+description: Suggest or refine functionality
+title: "[Story] "
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: Story
+      placeholder: "As a ..., I want ..., so that ..."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "Given / When / Then"
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Compatibility, memory and data safety
