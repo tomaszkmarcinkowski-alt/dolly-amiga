@@ -126,3 +126,15 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] Compile/test current entire repository and validate these additions on an m68k AmigaOS build.
 - [ ] Implement file-bound version verification in actual AmigaDOS loader and wire notices into the GadTools 640×256 UI.
 - [ ] Build real source-cited controller profile datasets; independent controller/DMA verification is still required.
+
+## CRC32 + release identity, profile-local settings (2026-11-17)
+
+- [x] Frozen simple policy: **exact Dolly build/release ID + CRC32**, main binary and optional assets; ABI/schema for add-ons. Detects accidental corruption, **not intentional tampering**.
+- [x] Added portable streaming CRC32 and host-side release generator/verifier, including file-size checks.
+- [x] Optional asset gate requires expected release, per-file format/API, CRC32 and size. Wrong files disable only their dependent features; no silent execution.
+- [x] Added safe device-profile settings proposal: may reduce a Dolly-local block-aligned transfer chunk, never increase it, never auto-authorize DMA or modify OS/RDB.
+- [x] Added corresponding test cases and CMake targets; local isolated CRC32 C99 tests passed under GCC and Clang.
+- [ ] Verify complete current `main` with CMake/CTest and native cross compiler. A reconstructed subset is not sufficient.
+- [ ] Native prelaunch checker for executable, actual file checksum reader, file-bound version metadata and safe loader, GadTools notices.
+- [ ] Device-proposal review/confirm/rollback and real controller validation.
+- [ ] Separate future **Dolly Rescue** GadTools-only bootable floppy (Issue #20) does not gate M0.
