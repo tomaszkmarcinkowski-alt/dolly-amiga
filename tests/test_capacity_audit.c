@@ -7,7 +7,7 @@ static DollyRdb r;
 int main(void){
     DollyCapacityAudit a;
     memset(&r,0,sizeof(r));
-    r.block_bytes=512;r.cylinders=100;r.heads=4;r.sectors=32;
+    r.block_bytes=512;r.cylinders=1;r.heads=4;r.sectors=32;
     r.header_block=0;r.partition_count=1;
     r.partitions[0].descriptor_block=1;
     r.partitions[0].start_bytes=4096;
@@ -38,7 +38,7 @@ int main(void){
     a=dolly_capacity_audit(&r,0,65536u);
     assert(a.flags&DOLLY_CAPACITY_GEOMETRY_UNKNOWN);
     assert(!(a.flags&DOLLY_CAPACITY_GEOMETRY_LARGER));
-    r.cylinders=100;r.partitions[0].start_bytes=4096;
+    r.cylinders=1;r.partitions[0].start_bytes=4096;
     r.partitions[0].descriptor_block=500;
     a=dolly_capacity_audit(&r,0,65536u);
     assert(a.flags&DOLLY_CAPACITY_META_OUTSIDE);
