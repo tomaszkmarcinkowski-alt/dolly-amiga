@@ -708,7 +708,7 @@
 
 **Cel:** w przyszłości umożliwić migrację obrazu RAW na mniejszy dysk/kartę przez rzeczywiste zmniejszenie partycji i, gdy trzeba, bezpieczne przemieszczenie bloków danych oraz przebudowanie metadanych obsługiwanego systemu plików.
 
-**Warunki:** nie sprowadzać redukcji do zmiany `de_HighCyl` w `PART`; bez analizy wszystkich bloków użytych, katalogów, plików, bitmap i struktur filesystemu spowodowałoby to utratę danych. Wymagać zdrowego, obsługiwanego, niezamontowanego wolumenu, pełnego backupu, trybu dry-run, wykonalnego planu relokacji, potwierdzenia użytkownika i możliwości odzyskania po przerwanym zapisie. Osobna implementacja dla OFS/FFS i dla ewentualnych filesystemów pluginowych; nie obsługiwać nieznanych systemów plików przez zgadywanie.
+**Warunki:** nie sprowadzać redukcji do zmiany `de_HighCyl` w `PART`; bez analizy wszystkich bloków użytych, katalogów, plików, bitmap i struktur filesystemu spowodowałoby to utratę danych. Wymagać zdrowego, obsługiwanego, niezamontowanego wolumenu, silnie zalecanej pełnej kopii (możliwej do pominięcia po osobnym potwierdzeniu ryzyka), trybu dry-run, wykonalnego planu relokacji, potwierdzenia użytkownika i możliwości odzyskania po przerwanym zapisie. Osobna implementacja dla OFS/FFS i dla ewentualnych filesystemów pluginowych; nie obsługiwać nieznanych systemów plików przez zgadywanie.
 
 **Status:** backlog badawczo-rozwojowy, **post-MVP**.
 
@@ -730,11 +730,11 @@
 **User story:** Przed potencjalnie destruktywną zmianą Dolly proponuje wykonanie kopii/obrazu **modyfikowanego obiektu**: RDB, partycji, wolumenu, kontenera MBR lub całego dysku — z wyjaśnieniem, co dokładnie obejmuje kopia i co będzie można z niej odtworzyć.
 
 **Kryteria akceptacji:**
-- Określić rzeczywisty zakres modyfikacji (LBA, bajty, urządzenie) i minimalny **wystarczający** zakres kopii. Dla zmiany metadanych RDB kopia RDB; dla redukcji/relokacji danych — pełny obraz danych, których zmiana może dotknąć.
+- Określić rzeczywisty zakres modyfikacji (LBA, bajty, urządzenie) i minimalny **wystarczający** zakres kopii. Dla zmiany metadanych RDB zalecana kopia RDB; dla redukcji/relokacji danych — zalecany pełny obraz danych, których zmiana może dotknąć.
 - W komunikacie podać szacowaną wielkość i miejsce zapisu; nie dopuścić do zapisu kopii na obszar, który operacja nadpisze. Gdy nie da się ustalić niezależności celu — odmówić ryzykownej operacji.
-- Tworzyć kopię strumieniowo, weryfikować jej długość i CRC32 (w miarę możliwości ponownie odczytać plik z nośnika docelowego). Błąd, brak miejsca, przerwanie, niezgodna suma albo niekompletny obraz **blokują późniejszą operację destruktywną**.
-- Użytkownik może odrzucić propozycję tylko w przypadkach, w których odrębna polityka danej operacji dopuszcza świadomą rezygnację. **Restore RDB, przebudowa RDB i relokacja/redukcja partycji wymagają zweryfikowanej kopii**.
-- Komunikaty wyjaśniają konsekwencje, zawierają instrukcję odzyskania danych, są dostępne w CLI oraz GadTools (640×256, Topaz/8) i nie pozwalają przypadkowo pominąć ostrzeżenia.
+- Tworzyć kopię strumieniowo, weryfikować jej długość i CRC32 (w miarę możliwości ponownie odczytać plik z nośnika docelowego). Błąd, brak miejsca, przerwanie, niezgodna suma albo niekompletny obraz powodują silne ostrzeżenie, możliwość ponowienia kopii lub wybrania innej lokalizacji; użytkownik może również **świadomie kontynuować bez kopii** po dodatkowym potwierdzeniu ryzyka.
+- **Każda kopia jest opcjonalna**, także przy Restore RDB, przebudowie RDB oraz relokacji/redukcji partycji. Domyślnie proponujemy wykonanie kopii, z silnym zaleceniem; pominięcie wymaga osobnego świadomego potwierdzenia możliwości nieodwracalnej utraty danych. Brak kopii nie znosi pozostałych kontroli bezpieczeństwa.
+- Komunikaty wyjaśniają konsekwencje, zawierają instrukcję odzyskania danych, są dostępne w CLI oraz GadTools (640×256, Topaz/8) i nie pozwalają przypadkowo pominąć ostrzeżenia, ale zawsze oferują świadomy wybór kontynuacji bez kopii.
 - Działa jako wspólny mechanizm dla wszystkich przyszłych zapisów; **nie przerywa ani nie opóźnia operacji wyłącznie odczytowych**.
 
-**Stan:** wymaganie i Issue zapisane; **brak implementacji oraz testów sprzętowych**. Nie włączać zapisu na urządzeniach w M0.
+**Zasada:** backup jest mocno zalecany, lecz nigdy nie jest obowiązkowym warunkiem uruchomienia operacji. Można kontynuować bez kopii po osobnym potwierdzeniu. **Stan:** wymaganie i Issue zapisane; **brak implementacji oraz testów sprzętowych**. Nie włączać zapisu na urządzeniach w M0.
