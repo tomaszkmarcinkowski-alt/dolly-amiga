@@ -63,3 +63,14 @@ On this **64-bit host**, the heap-allocated `DollyRdb` result reports **14376 by
 The reconstructed host source subset is not a complete checkout of current `main`. GitHub Actions, the real m68k cross build and WinUAE are not yet independently validated.
 
 The native-only memory smoke now includes a third DMA policy check rejecting an interval that crosses a forbidden **interior hole** in an irregular address mask. The reconstructed local native-only source path (GCC, Clang and GCC ASan/UBSan) completed `--selftest` successfully after the DMA policy fix. This remains host verification, not a native AmigaOS result.
+
+## Standalone DMA help command (source ready)
+
+The `DOLLY_NATIVE_ONLY` CMake mode also defines the portable `dolly-dma-advice` executable. After cross-compilation, it can print a stable diagnostic code, probable cause and up to three safe troubleshooting steps for DMA problems:
+
+```
+dolly-dma-advice DMA_ADDRESS_MASK en
+dolly-dma-advice DMA_ALIGNMENT pl
+```
+
+The `pl` catalog currently uses Polish written with 7-bit ASCII characters as a compatibility fallback; proper Polish locale catalogs and the final GadTools warning window remain future work. This helper accesses no disk, and has not yet been executed in WinUAE or on physical AmigaOS.
