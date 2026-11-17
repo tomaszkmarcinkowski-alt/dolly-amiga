@@ -386,3 +386,32 @@ Kickstart 2.04, 640x256 Workbench: resize both windows to minima and
 back, verify all controls accessible, grid frame inside boundaries,
 no excessive flicker, Hide/reopen preserves progress, and successful
 cleanup. No physical device operations are performed by this demo.
+
+### M1.13 — current / total and system-style progress bezel (unverified)
+
+User requested that the two-window demo display block counts as
+`current / total` (for example `29 / 192`) in both windows and show
+a numeric completion percentage immediately **to the right** of the
+Sheep Counter progress bar. Use native GadTools `TEXT_KIND` gadgets
+for these composite string values (not per-frame direct Text/sprintf),
+updated with `GT_SetGadgetAttrs(..., GTST_String, ...)` and backed by
+stable, view-owned character arrays. Keep `NUMBER_KIND` for the
+standalone Errors counter.
+
+The progress bar has a `DrawBevelBoxA(GTBB_Recessed)` frame matching
+the grid's classic GadTools recessed container. **Do not** paint a
+separate black/shadow rectangle around the colour fill. Only fill the
+interior with BACKGROUNDPEN and FILLPEN from the current screen's palette.
+Routine progress updates fill only the newly completed interior span;
+the native percentage gadget is refreshed separately. On resize/exposure,
+the same bezel and fill are reconstructed at the new dimensions.
+
+Progress percent is based on completed/total blocks and clamped to 100.
+The current 192-block synthetic demo fits in ULONG. A real operation
+with 64-bit block counters will require a proper 64-bit text conversion
+without truncation before integration with device I/O. The separate
+Sheep Counter remains optional/auxiliary: Hide never cancels or pauses
+the shared OperationSession; the main window remains open.
+
+This is source code in a draft PR and has not yet passed the user's
+Docker m68k build or WinUAE runtime test.
