@@ -1036,3 +1036,21 @@ startup driver/unit candidates and the opt-in read-only diagnostic.
 
 This preserves current UI without adding risky media I/O.
 See PHYS-11 through PHYS-17 in docs/TEST_MATRIX.md.
+
+### M1.24 — scope of floppy and PCMCIA device support
+
+For generic Physical device / Partition discovery and imaging,
+exclude **only** `trackdisk.device` (floppy). Floppy-specific
+handling is reserved for the future filesystem repair module.
+
+`carddisk.device` **remains in the general device discovery and
+picker**; its unusual PCMCIA SRAM characteristics will be documented
+and tested later using the user's real Amiga and SRAM card. Do not
+exclude it or infer full SCSI/IDE compatibility from the name.
+`scsi.device` and `uaehf.device` continue to be used for the
+immediate WinUAE investigation. The standalone diagnostic deliberately
+only removes trackdisk from probeable candidates, so indexes must be
+rechecked on each run.
+
+The approved M1.24 GUI retains independent recessed fields for
+Device name and Size. No automatic device probe has been connected.
