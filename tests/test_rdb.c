@@ -38,6 +38,7 @@ int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;
  assert(run(path,base,&r)==DOLLY_RDB_OK);
  assert(!r.partitions[0].max_transfer_present);
  assert(r.partitions[0].dos_type==0);
+ assert(!r.partitions[0].dos_type_present);
  make_part(part,DOLLY_RDB_END);store(f,base+2*BS,part);fflush(f);
 
  /* 256 longwords per filesystem block = 1024 bytes, RDB device blocks 512. */
