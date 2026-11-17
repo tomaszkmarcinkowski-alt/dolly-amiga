@@ -44,6 +44,22 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
+# Endpoint roles, whole-unit/partition/file selections and safe target gating.
+add_library(dollyendpoint STATIC src/dolly_endpoint.c)
+target_include_directories(dollyendpoint PUBLIC ${PROJECT_SOURCE_DIR}/include)
+add_executable(test-endpoint tests/test_endpoint.c)
+target_link_libraries(test-endpoint PRIVATE dollyendpoint)
+add_test(NAME endpoint_selection_safety COMMAND test-endpoint)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyendpoint PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(test-endpoint PRIVATE -UNDEBUG)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyendpoint PRIVATE -m68000)
+    target_compile_options(test-endpoint PRIVATE -m68000)
+    target_link_options(test-endpoint PRIVATE -m68000)
+  endif()
+endif()
+
 if(DOLLY_NATIVE_ONLY)
   enable_testing()
   add_executable(dolly-native-smoke
@@ -83,11 +99,12 @@ if(DOLLY_NATIVE_ONLY)
     target_link_options(dolly-sheep-window PRIVATE -m68000)
     target_link_libraries(dolly-sheep-window PRIVATE amiga)
     # Two concurrent views share a single C99 OperationSession.
-    add_executable(dolly-two-window-demo amiga/dolly_two_window_demo.c)
+    add_executable(dolly-two-window-demo amiga/dolly_two_window_demo.c
+      amiga/dolly_amiga_endpoint_picker.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
-    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation dollyguimin amiga)
+    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation dollyguimin dollyendpoint amiga)
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice
