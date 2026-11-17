@@ -83,6 +83,23 @@ DollyMapStatus dolly_partition_map_scan(DollyBlockSource *source,
   d->contains_rdb=1;
   {DollyMapStatus s=check_inner(d);if(s!=DOLLY_MAP_OK)return s;}
  }
+ /* Advanced hybrid media may have MBR AND an independent whole-device RDB.
+  * Discover both views, warn on overlapping data extents, NEVER infer a
+  * safe write target from this inspection. Invalid disk-wide RDB must not
+  * hide an otherwise valid primary MBR. */
+ rs=dolly_rdb_scan(source,0,block_bytes,16,&out->whole_disk_rdb);
+ if(rs==DOLLY_RDB_OK){
+  out->has_whole_disk_rdb=1;
+  out->hybrid_mbr_rdb=1;
+  for(i=0;i<out->whole_disk_rdb.partition_count;i++){
+   const DollyPartition *r=&out->whole_disk_rdb.partitions[i];
+   for(j=0;j<out->partition_count;j++){
+    const DollyMbrPartition *m=&out->primary[j];
+    if(overlaps(r->start_bytes,r->length_bytes,m->start_bytes,m->length_bytes))
+     out->hybrid_mbr_overlap=1;
+   }
+  }
+ }
  return DOLLY_MAP_OK;
 }
 const char *dolly_map_status_name(DollyMapStatus s) {
