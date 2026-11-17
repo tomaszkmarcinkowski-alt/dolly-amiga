@@ -243,3 +243,18 @@ add_test(NAME gadtools_640x256_font_fallback COMMAND test-gui-layout)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-gui-layout PRIVATE -UNDEBUG)
 endif()
+
+# Optional screen/font change coalescing: portable core used by all GUI backends.
+# The native DOS StartNotify adapter is in amiga/dolly_amiga_pref_notify.c
+# and requires an actual AmigaOS NDK (not part of host builds).
+add_library(dollyscreenwatch STATIC src/dolly_screen_watch.c)
+target_include_directories(dollyscreenwatch PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyscreenwatch PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-screen-watch tests/test_screen_watch.c)
+target_link_libraries(test-screen-watch PRIVATE dollyscreenwatch)
+add_test(NAME screen_preferences_relayout COMMAND test-screen-watch)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-screen-watch PRIVATE -UNDEBUG)
+endif()
