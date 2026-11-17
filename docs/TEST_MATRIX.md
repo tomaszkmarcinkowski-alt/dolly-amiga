@@ -646,3 +646,41 @@ Physical Query remains explicit and never fires due to selection.
 This patch is a **hypothesis-driven fix**, not a confirmed root cause.
 Compile and controlled WinUAE reproduction are required.
 Do not enable real-media writes; Query remains read-only.
+
+## X. M1.31 — Destination Query HALT3 diagnostic isolation
+
+Additional user observation: in the exact Source -> disk-to-disk ->
+Destination -> scsi.device Unit 0 path, **Unit selection completed**
+and the failure appeared only on **Query**. WinUAE displayed HALT3.
+This supersedes the earlier assumption that clicking Unit 0 itself
+caused the crash. The previous M1.30 deferred-message patch did not
+resolve it.
+
+M1.31 is a **diagnostic and lifetime-management patch**, not a
+verified cure. It adds a key separation: after draining the
+GT_GetIMsg queue, destroy the old GadTools context with FreeGadgets
+**before** repopulating any LISTVIEW node chain or executing a Query
+that may mutate Partition labels. Removing gadgets from the Window
+alone does not release references retained by the GadTools context.
+
+Temporary flush-to-stdout trace markers:
+- DOLLY M1.31 DEST Query: gadgets teardown
+- DOLLY M1.31 DEST Query: device commands begin
+- DOLLY M1.31 DEST Query: device commands returned
+- DOLLY M1.31 DEST Query: partition scan begin
+- DOLLY M1.31 DEST Query: partition scan returned
+- DOLLY M1.31 DEST Query: populate partition nodes
+- DOLLY M1.31 DEST Query: partition nodes ready
+- DOLLY M1.31 DEST Rebuild: begin/completed
+
+Run from AmigaShell with Stack 16384 and keep stdout visible.
+If HALT3 recurs, capture the *last printed marker*, differentiating
+query/driver/RDB from GadTools rendering/rebuild. Source and
+Destination traces include their role. Only the explicit Query path
+uses hardware requests; nothing is written to the disk.
+
+Test: re-run the previously crashing sequence on A1200 / OS3.1 /
+controlled WinUAE test HDF. Inspect that Query returns Device name
+and Size and creates numbered RDB partition rows. Also test Source
+alone; repeat Source -> Destination and Destination -> Source.
+Do not use a physical Amiga until the HALT3 failure is resolved.
