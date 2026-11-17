@@ -62,6 +62,8 @@ typedef struct PickerGeometry {
     WORD mode_x,mode_w;
     WORD list_y,list_h,action_y,preview_y,disk_info_y;
     WORD browse_y,path_y,detail_y;
+    WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
+    WORD format_y;
     WORD format_x,format_w;
 } PickerGeometry;
 static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
@@ -69,14 +71,24 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     const struct Window *w=p->window;
     LONG left=20;
     LONG right=(LONG)w->Width-(LONG)w->BorderRight-20;
-    LONG action=(LONG)w->Height-(LONG)w->BorderBottom-31;
+    /* Classic non-square-pixel Workbench modes (e.g. 640x256)
+     * benefit from tighter top/bottom margins. Keep the accepted
+     * spacing for conventional 4:3 and RTG screen geometries.
+     */
+    int compact=(ULONG)p->screen->Width >
+                2ul*(ULONG)p->screen->Height;
+    LONG lift=compact?5:0;
+    LONG action=(LONG)w->Height-(LONG)w->BorderBottom-
+                (compact?23:31);
     /* Physical/Partition: two 16px inset panels with 3px gaps.
-     * Logical: one panel, closer to buttons than before.
+     * Logical: one panel. Give all reclaimed height to LISTVIEWs.
      */
     LONG preview=action-19;
     LONG first=action-38;
+    LONG list_top=66-lift;
     LONG height=(p->mode==DOLLY_MODE_PHYSICAL ||
-                 p->mode==DOLLY_MODE_PARTITION ? first : preview)-66-3;
+                 p->mode==DOLLY_MODE_PARTITION ? first : preview)-
+                 list_top-3;
     if(right<left+320)right=left+320;
     if(height<40)height=40;
     g.left=(WORD)left;
@@ -87,16 +99,22 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
      */
     g.mode_x=250;
     g.mode_w=(WORD)(right-250);
-    g.list_y=66;
+    g.list_y=(WORD)list_top;
+    g.cycle_y=(WORD)(24-lift);
+    g.heading_y=(WORD)(36-lift);
+    g.list_label_y=(WORD)(59-lift);
+    g.file_label_y=(WORD)(99-lift);
+    g.format_label_y=(WORD)(143-lift);
+    g.format_y=(WORD)(130-lift);
     g.list_h=(WORD)height;
     g.action_y=(WORD)action;
     g.preview_y=(WORD)(p->mode==DOLLY_MODE_PHYSICAL ||
                             p->mode==DOLLY_MODE_PARTITION ?
                             first:preview);
     g.disk_info_y=(WORD)preview;
-    g.browse_y=66;
-    g.path_y=105;
-    g.detail_y=132;
+    g.browse_y=(WORD)list_top;
+    g.path_y=(WORD)(105-lift);
+    g.detail_y=(WORD)(132-lift);
     g.format_x=159;
     g.format_w=(WORD)(right-159);
     return g;
@@ -336,7 +354,7 @@ static struct Gadget *format_choice(struct Gadget *last,DollyEndpointPicker *p) 
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
     ng.ng_LeftEdge=picker_geometry(p).format_x;
-    ng.ng_TopEdge=130;
+    ng.ng_TopEdge=picker_geometry(p).format_y;
     ng.ng_Width=picker_geometry(p).format_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_IMAGE_FORMAT;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
@@ -401,7 +419,7 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
     ng.ng_LeftEdge=picker_geometry(p).mode_x;
-    ng.ng_TopEdge=24;
+    ng.ng_TopEdge=picker_geometry(p).cycle_y;
     ng.ng_Width=picker_geometry(p).mode_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_MODE;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
@@ -424,12 +442,14 @@ static void column_geometry(DollyEndpointPicker *p,unsigned count,
 static void captions(DollyEndpointPicker *p) {
     struct RastPort *rp;
     struct DrawInfo *info;
+    PickerGeometry g;
     if(!p->window)return;
     rp=p->window->RPort;
+    g=picker_geometry(p);
     info=GetScreenDrawInfo(p->screen);
     SetDrMd(rp,JAM1);
     SetAPen(rp,info?info->dri_Pens[TEXTPEN]:1u);
-    Move(rp,20,36);
+    Move(rp,20,g.heading_y);
     if(p->role)
         Text(rp,(STRPTR)"Select Destination Medium",25);
     else
@@ -438,22 +458,22 @@ static void captions(DollyEndpointPicker *p) {
         WORD x,w;
         unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
         column_geometry(p,columns,0u,&x,&w);
-        Move(rp,x,59);Text(rp,(STRPTR)"Device",6);
+        Move(rp,x,g.list_label_y);Text(rp,(STRPTR)"Device",6);
         column_geometry(p,columns,1u,&x,&w);
-        Move(rp,x,59);Text(rp,(STRPTR)"Unit",4);
+        Move(rp,x,g.list_label_y);Text(rp,(STRPTR)"Unit",4);
         if(columns==3u) {
             column_geometry(p,columns,2u,&x,&w);
-            Move(rp,x,59);
+            Move(rp,x,g.list_label_y);
             Text(rp,(STRPTR)"Partition (RDB/MBR)",19);
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
-        Move(rp,20,59);
+        Move(rp,20,g.list_label_y);
         Text(rp,(STRPTR)"Registered DOS devices (read-only)",34);
     } else {
-        Move(rp,20,99);
+        Move(rp,20,g.file_label_y);
         Text(rp,(STRPTR)"Selected file:",14);
         if(p->role) {
-            Move(rp,20,143);
+            Move(rp,20,g.format_label_y);
             Text(rp,(STRPTR)"Image format:",13);
         }
     }
