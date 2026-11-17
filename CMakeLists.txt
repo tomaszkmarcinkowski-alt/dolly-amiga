@@ -7,6 +7,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Cross-build with the separate AmigaOS toolchain file and an installed SDK.
 option(DOLLY_NATIVE_ONLY "Build only native AmigaOS smoke executable" OFF)
 option(DOLLY_NATIVE_M68000 "Pass -m68000 for classic Motorola 68000" OFF)
+# Optional NDK compile target for the AmigaDOS preferences notification adapter.
+# This does not yet create a working GadTools event loop or plugin loader.
+option(DOLLY_NATIVE_GUI_WATCH "Compile AmigaDOS screen/font notify adapter (NDK required)" OFF)
 if(DOLLY_NATIVE_ONLY)
   add_executable(dolly-native-smoke
     amiga/dolly_native_smoke.c
@@ -32,6 +35,15 @@ if(DOLLY_NATIVE_ONLY)
     if(DOLLY_NATIVE_M68000)
       target_compile_options(dolly-dma-advice PRIVATE -m68000)
       target_link_options(dolly-dma-advice PRIVATE -m68000)
+    endif()
+  endif()
+  if(DOLLY_NATIVE_GUI_WATCH)
+    add_library(dolly-native-gui-watch STATIC
+      amiga/dolly_amiga_pref_notify.c src/dolly_screen_watch.c)
+    target_include_directories(dolly-native-gui-watch PRIVATE
+      ${PROJECT_SOURCE_DIR}/include)
+    if(DOLLY_NATIVE_M68000 AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+      target_compile_options(dolly-native-gui-watch PRIVATE -m68000)
     endif()
   endif()
   # This also allows a host smoke build; host success is not Amiga validation.
