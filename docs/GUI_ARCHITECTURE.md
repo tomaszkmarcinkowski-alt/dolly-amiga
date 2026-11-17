@@ -1076,3 +1076,27 @@ with independent Unavailable states. The approved M1.24 picker
 layout stays untouched, and GUI auto-probing remains disabled.
 Synchronous DoIO currently has no transport timeout; this test
 must be run only in WinUAE on a controlled, disposable disk image.
+
+### M1.26 — separate identification and capacity query results
+
+User's A1200/OS 3.1 WinUAE test reported the real identity
+\`UAE-IDE rafael.hdf\` via HD_SCSICMD INQUIRY on
+\`scsi.device\`, unit 0. Size was Unavailable from the original
+geometry request.
+
+The independent opt-in Shell probe now allocates a full IOExtTD
+request for TD_GETGEOMETRY, logging command status, io_Error,
+reported sector count and sector size. If no usable capacity is
+returned, it attempts SCSI READ CAPACITY(10) (0x25) as a read-only
+fallback. It calculates total bytes from (last LBA + 1) * block
+size using 64-bit arithmetic, and reports Size in MiB. The CDB and
+reply use allocated Chip RAM; if the 10-byte command returns
+last LBA 0xFFFFFFFF, Size stays Unavailable until READ CAPACITY(16)
+is added. An unsupported command never invents capacity.
+
+Do not change the accepted M1.24 GUI layout: **Device name** comes
+from INQUIRY vendor+product and **Size** from geometry/capacity.
+The two recessed boxes remain independent. Device probing in the
+GUI is not enabled, as its physical lists are still synthetic.
+Trackdisk is excluded from generic disk discovery, while
+carddisk remains a candidate for later PCMCIA SRAM testing.
