@@ -937,3 +937,16 @@ M1.40 has not been cross-compiled or checked in WinUAE.
 | GUI-171 | Open main | No measured-minimum failure; unchanged compact footer |
 
 Not yet cross-compiled or tested in WinUAE.
+
+## AJ. M1.42 — registered versus verified physical media
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-172 | Open Physical Source on AmigaOS 2.04 | Physical drivers and units come only from DOS startup registrations; no fabricated unit numbers |
+| GUI-173 | Select a registered unit before Query | Preview reads `Registered; press Query`; capacity `Not verified`; Use selection disabled |
+| GUI-174 | Query a device with verified TD_GETGEOMETRY or READ CAPACITY(10) | Reported capacity displayed; physical Use selection enabled |
+| GUI-175 | Query a driver with no media, failing geometry or INQUIRY only | Unknown capacity; physical Use selection remains disabled |
+| GUI-176 | Query a unit in Partition mode | Partition scan requires verified capacity; existing double-bank list remains safe |
+| GUI-177 | Main window | M1.41 layout unchanged except version text `Dolly M1.42` |
+
+M1.42 code not cross-compiled or WinUAE-tested; no real media writes enabled.
