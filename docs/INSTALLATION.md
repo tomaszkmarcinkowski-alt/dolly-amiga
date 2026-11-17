@@ -36,7 +36,7 @@ Do not treat path construction as a guarantee that an existing `DOLLY:` assignme
 
 ## Classic Installer (DOL-065, post-M0 packaging)
 
-The requested installer targets **Commodore's classic Installer script language**, not AmigaOS 4's Python-based Installation Utility. Compatibility target: AmigaOS 2.04+ on Motorola 68000.
+The requested installer targets **Commodore's classic Installer script language**, not AmigaOS 4's Python-based Installation Utility. Compatibility target: AmigaOS 2.04+ on Motorola 68000. **The classic Installer executable is not guaranteed to be present on a bare OS 2.04 system** (the language entered distributions around 2.1); packaging must document and, if redistributable, bundle a compatible Installer or provide a safe manual/Shell route. Do not assume OS 4's Python utility is present.
 
 Installation steps:
 1. Welcome, license and disk-space check; choose destination drawer.
