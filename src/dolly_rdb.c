@@ -55,7 +55,11 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
   high=be32(buf+128+10*4);
   dos=be32(buf+128+16*4);
   if(!surfaces||!bpt||!size_block||high<low)return DOLLY_RDB_BAD_BLOCK;
-  /* de_SizeBlock is in 32-bit longwords and may differ from the RDB\n   * device block size. Account for it when calculating byte positions. */\n  if(!mul_u64(size_block,4u,&fs_block_bytes) || fs_block_bytes < out->block_bytes ||\n     fs_block_bytes % out->block_bytes != 0) return DOLLY_RDB_BAD_BLOCK;\n  if(!mul_u64(surfaces,bpt,&cyl_bytes) || !mul_u64(cyl_bytes,fs_block_bytes,&cyl_bytes))return DOLLY_RDB_OUT_OF_RANGE;
+  /* de_SizeBlock is in 32-bit longwords and may differ from the RDB
+   * device block size. Account for it when calculating byte positions. */
+  if(!mul_u64(size_block,4u,&fs_block_bytes) || fs_block_bytes < out->block_bytes ||
+     fs_block_bytes % out->block_bytes != 0) return DOLLY_RDB_BAD_BLOCK;
+  if(!mul_u64(surfaces,bpt,&cyl_bytes) || !mul_u64(cyl_bytes,fs_block_bytes,&cyl_bytes))return DOLLY_RDB_OUT_OF_RANGE;
   if(!mul_u64(low,cyl_bytes,&relative) || !add_u64(out->base_offset,relative,&start))return DOLLY_RDB_OUT_OF_RANGE;
   if(!mul_u64((uint64_t)high-low+1,cyl_bytes,&length) || !add_u64(start,length,&end))return DOLLY_RDB_OUT_OF_RANGE;
   if(end>dolly_block_size(src))return DOLLY_RDB_OUT_OF_RANGE;
@@ -63,6 +67,9 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
    DollyPartition *p=&out->partitions[out->partition_count++];
    memset(p,0,sizeof(*p));p->descriptor_block=current;
    p->low_cylinder=low;p->high_cylinder=high;p->dos_type=dos;
+   /* de_TableSize describes the last valid DosEnvec index. */
+   p->max_transfer_present = be32(buf+128)>=13;
+   if(p->max_transfer_present) p->max_transfer_bytes=be32(buf+128+13*4);
    p->start_bytes=start;p->length_bytes=length;
    name_len=buf[36];if(name_len>31)name_len=31;
    memcpy(p->name,buf+37,name_len);p->name[name_len]=0;
