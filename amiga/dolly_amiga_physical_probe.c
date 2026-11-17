@@ -276,6 +276,14 @@ static void sanitize(char *dest,ULONG cap,const UBYTE *src,ULONG len) {
  * TD_GETGEOMETRY but not HD_SCSICMD, or the other way round.
  * Keep status explicit and never derive bytes from SCSI INQUIRY.
  */
+static ULONG be32(const UBYTE *p) {
+    return ((ULONG)p[0]<<24)|((ULONG)p[1]<<16)|
+           ((ULONG)p[2]<<8)|(ULONG)p[3];
+}
+/* One request, independently measured identity and capacity. Every
+ * command is opt-in. Do not infer physical capacity from the DOS
+ * partition geometry or SCSI INQUIRY strings.
+ */
 static void probe(const ProbeCandidate *c) {
     struct MsgPort *port=NULL;
     struct IOStdReq *io=NULL;
@@ -284,12 +292,16 @@ static void probe(const ProbeCandidate *c) {
     UBYTE *data=NULL;
     char name[64],size[40];
     LONG status;
-    int opened=0;
+    int opened=0,have_size=0;
     strcpy(name,"Unavailable");
     strcpy(size,"Unavailable");
     port=CreateMsgPort();
     if(!port)goto done;
-    io=(struct IOStdReq *)CreateIORequest(port,sizeof(*io));
+    /* TD_GETGEOMETRY is specified against IOExtTD, not merely the
+     * shorter IOStdReq. Keep the SCSI-direct request compatible
+     * with the same IOExtTD allocation.
+     */
+    io=(struct IOStdReq *)CreateIORequest(port,sizeof(struct IOExtTD));
     if(!io)goto done;
     status=OpenDevice((STRPTR)c->driver,c->unit,
                       (struct IORequest *)io,0);
@@ -303,15 +315,22 @@ static void probe(const ProbeCandidate *c) {
     io->io_Data=&geom;
     io->io_Length=sizeof(geom);
     io->io_Offset=0;
-    if(DoIO((struct IORequest *)io)==0 &&
-       geom.dg_SectorSize && geom.dg_TotalSectors) {
+    io->io_Flags=0;
+    io->io_Actual=0;
+    status=DoIO((struct IORequest *)io);
+    printf("  TD_GETGEOMETRY: rc=%ld error=%ld sectors=%lu"
+           " sector_bytes=%lu\n",
+           status,(LONG)io->io_Error,
+           (unsigned long)geom.dg_TotalSectors,
+           (unsigned long)geom.dg_SectorSize);
+    if(status==0 && geom.dg_SectorSize && geom.dg_TotalSectors) {
         uint64_t bytes=(uint64_t)geom.dg_TotalSectors*
                        (uint64_t)geom.dg_SectorSize;
-        unsigned long mib=(unsigned long)(bytes/1048576u);
-        sprintf(size,"%lu MiB",mib);
+        sprintf(size,"%lu MiB",(unsigned long)(bytes/1048576u));
+        have_size=1;
     }
-    /* Both the SCSI CDB and data buffer are in Chip RAM for old DMA
-     * controllers. No physical sectors are read or changed.
+    /* The CDB and response live in Chip RAM for legacy DMA hardware.
+     * Reuse the allocation for the later READ CAPACITY (10) fallback.
      */
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
     if(data) {
@@ -328,7 +347,9 @@ static void probe(const ProbeCandidate *c) {
         io->io_Data=&sc;
         io->io_Length=sizeof(sc);
         io->io_Offset=0;
-        if(DoIO((struct IORequest *)io)==0 &&
+        io->io_Flags=0;
+        status=DoIO((struct IORequest *)io);
+        if(status==0 &&
            sc.scsi_Status==0 && sc.scsi_Actual>=36) {
             sanitize(vendor,sizeof(vendor),data+8,8);
             sanitize(product,sizeof(product),data+16,16);
@@ -339,6 +360,48 @@ static void probe(const ProbeCandidate *c) {
             else if(vendor[0])
                 strcpy(name,vendor);
         }
+        printf("  INQUIRY status: rc=%ld scsi=%lu actual=%lu\n",
+               status,(unsigned long)sc.scsi_Status,
+               (unsigned long)sc.scsi_Actual);
+        if(!have_size) {
+            ULONG last_lba,block_size;
+            uint64_t blocks,bytes;
+            memset(data,0,64);
+            memset(&sc,0,sizeof(sc));
+            data[40]=0x25u; /* SCSI READ CAPACITY (10) */
+            sc.scsi_Data=(UWORD *)data;
+            sc.scsi_Length=8;
+            sc.scsi_Command=data+40;
+            sc.scsi_CmdLength=10;
+            sc.scsi_Flags=SCSIF_READ;
+            io->io_Command=HD_SCSICMD;
+            io->io_Data=&sc;
+            io->io_Length=sizeof(sc);
+            io->io_Offset=0;
+            io->io_Flags=0;
+            status=DoIO((struct IORequest *)io);
+            printf("  READ CAPACITY(10): rc=%ld scsi=%lu actual=%lu\n",
+                   status,(unsigned long)sc.scsi_Status,
+                   (unsigned long)sc.scsi_Actual);
+            if(status==0 && sc.scsi_Status==0 && sc.scsi_Actual>=8) {
+                last_lba=be32(data);
+                block_size=be32(data+4);
+                if(last_lba==0xfffffffful) {
+                    puts("  Capacity exceeds READ CAPACITY(10) range;"
+                         " READ CAPACITY(16) not yet supported.");
+                } else if(block_size>=128ul && block_size<=65536ul) {
+                    blocks=(uint64_t)last_lba+1u;
+                    bytes=blocks*(uint64_t)block_size;
+                    sprintf(size,"%lu MiB",
+                            (unsigned long)(bytes/1048576u));
+                    have_size=1;
+                } else {
+                    puts("  READ CAPACITY: invalid block size.");
+                }
+            }
+        }
+    } else {
+        puts("  INQUIRY / READ CAPACITY unavailable (no Chip RAM).");
     }
 done:
     if(opened)CloseDevice((struct IORequest *)io);
