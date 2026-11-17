@@ -103,7 +103,8 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_endpoint_picker.c
       amiga/dolly_amiga_dos_devices.c
       amiga/dolly_amiga_physical_catalog.c
-      amiga/dolly_amiga_device_query.c)
+      amiga/dolly_amiga_device_query.c
+      amiga/dolly_amiga_partition_scan.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
