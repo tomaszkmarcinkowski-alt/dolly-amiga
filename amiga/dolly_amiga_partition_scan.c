@@ -149,7 +149,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         p=&out->parts[out->count++];
         memset(p,0,sizeof(*p));
         safe_label(p->label,r->buffer+37,r->buffer[36]);
-        if(!p->label[0])sprintf(p->label,"RDB %u",out->count);
+        if(!p->label[0])sprintf(p->label,"RDB %lu",(unsigned long)out->count);
         p->is_rdb=1;
         p->start_bytes=begin;p->length_bytes=length;
         p->low_cyl=low;p->high_cyl=high;
@@ -230,7 +230,7 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
         }
         part=&out->parts[out->count++];
         memset(part,0,sizeof(*part));
-        sprintf(part->label,"MBR %u",i+1u);
+        sprintf(part->label,"MBR %lu",(unsigned long)(i+1u));
         strcpy(label_copy,part->label);
         part->mbr_type=p[4];
         part->start_bytes=begin;part->length_bytes=length;
