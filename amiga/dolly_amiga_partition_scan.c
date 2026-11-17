@@ -69,7 +69,8 @@ static void dos_name(char *dest,ULONG dos) {
 }
 static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
                     ULONG base_lba,ULONG scan_limit) {
-    ULONG block,head=RDB_END,seen[DOLLY_PART_MAX];
+    ULONG block,head=RDB_END,header_block=RDB_END;
+    ULONG seen[DOLLY_PART_MAX];
     unsigned used=0,i,j;
     r->base_lba=base_lba;
     for(block=0;block<scan_limit;++block) {
@@ -83,6 +84,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
             return -1;
         }
         head=be32(r->buffer+28);
+        header_block=block;
         break;
     }
     if(head==RDB_END)return 0;
@@ -155,6 +157,25 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
                 (unsigned long)p->fs_block_bytes,
                 (unsigned long)p->sectors_per_block);
         head=next;
+    }
+    /* Do not accept a partition covering RDB metadata blocks. */
+    for(i=0;i<out->count;++i) {
+        DollyNativePartition *part=&out->parts[i];
+        uint64_t metadata=((uint64_t)base_lba+
+                           (uint64_t)header_block)*BLK;
+        if(metadata>=part->start_bytes &&
+           metadata-part->start_bytes<part->length_bytes) {
+            strcpy(out->status,"Partition overlaps RDB header");
+            return -1;
+        }
+        for(j=0;j<used;++j) {
+            metadata=((uint64_t)base_lba+(uint64_t)seen[j])*BLK;
+            if(metadata>=part->start_bytes &&
+               metadata-part->start_bytes<part->length_bytes) {
+                strcpy(out->status,"Partition overlaps RDB PART");
+                return -1;
+            }
+        }
     }
     /* Fail closed if RDB partitions overlap one another. */
     for(i=0;i<out->count;++i)
@@ -245,8 +266,18 @@ int dolly_amiga_partition_scan(const char *driver,ULONG unit,
     r.buffer=(UBYTE *)AllocMem(BLK,MEMF_CHIP|MEMF_CLEAR);
     if(!r.buffer)goto finish;
     rs=scan_rdb(&r,out,0ul,16ul);
-    if(rs==1)ok=1;
-    else if(rs==0)ok=scan_mbr(&r,out);
+    if(rs==1) {
+        /* Reject ambiguous hybrid RDB and MBR media until a full
+         * collision audit can account for both partition schemes.
+         */
+        if(!load_sector(&r,0ul)) {
+            strcpy(out->status,"Cannot verify RDB/MBR coexistence");
+        } else if(r.buffer[510]==0x55u && r.buffer[511]==0xaau &&
+                  (r.buffer[450]!=0 || r.buffer[466]!=0 ||
+                   r.buffer[482]!=0 || r.buffer[498]!=0)) {
+            strcpy(out->status,"Hybrid RDB/MBR unsupported");
+        } else ok=1;
+    } else if(rs==0)ok=scan_mbr(&r,out);
 finish:
     if(opened)CloseDevice((struct IORequest *)io);
     if(r.buffer)FreeMem(r.buffer,BLK);
