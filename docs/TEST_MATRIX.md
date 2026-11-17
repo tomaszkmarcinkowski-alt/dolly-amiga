@@ -587,3 +587,20 @@ itself verify all M1.28 tests, particularly cancellation semantics,
 Query gating before selection, failure paths, MBR interpretation,
 or actual copying/imaging. No write operations have been added.
 Keep those cases pending before treating M1.28 as fully validated.
+
+## V. M1.29 — list selection persistence and partition ordinals
+
+| ID | Test | Expected |
+|---|---|---|
+| GUI-81 | AmigaOS 3.1: click Device row | Selected row stays highlighted after release |
+| GUI-82 | AmigaOS 3.1: click Unit / Partition / Logical | Each selected row remains highlighted until another selection |
+| GUI-83 | Rebuild or resize with a selected row | Persistent highlight restored through GTLV_Selected |
+| GUI-84 | RDB Query for rafael.hdf | Third LISTVIEW displays `1: WB_1.3`, `2: WB_2.x`, `3: OS`, `4: GRY` |
+| GUI-85 | Select `3: OS` | Upper preview and committed endpoint use `OS`, not `3: OS` |
+| GUI-86 | RDB order | Ordinals represent encountered PART-chain sequence, no alphabetical sorting |
+| GUI-87 | AmigaOS 2.04 / GadTools V37 | Selected entry appears in a read-only field under list; V39 highlight cannot be assumed |
+| GUI-88 | Query gating and no double-click | Existing explicit Query and Use requirements unchanged |
+
+These tests remain pending WinUAE verification. Numbering affects
+display only and does not alter the on-disk RDB, parser or source/target
+identity. Extra V37 selection display may reduce visible list rows.
