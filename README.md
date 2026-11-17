@@ -98,6 +98,6 @@ The planned controller knowledge base under `DOLLY:Plugins/Devices/` can give **
 
 ## Integrity and configuration (M0 groundwork)
 
-We use **exact Dolly release/build identity + CRC32** for the main executable and all optional assets; the per-resource format/API is checked for plugins. The host release manifest tools and a C99 checksum implementation are available. These detect **accidental** corruption, not malicious tampering. Native executable prelaunch verification and AmigaOS file probing are still planned — see [integrity policy](docs/INTEGRITY.md).
+We use **exact Dolly release/build identity + CRC32** for the main executable and all optional assets; the per-resource format/API is checked for plugins. The host release manifest tools and a C99 checksum implementation are available. These detect **accidental** corruption, not malicious tampering. In-process self-check of Dolly's own executable **immediately after startup**, plus native AmigaDOS file probing, are still to be integrated — see [integrity policy](docs/INTEGRITY.md).
 
 A compatible controller database can prepare a user-approved proposal to **reduce** Dolly's local transfer size, but it cannot modify RDB, AmigaDOS settings or automatically authorize DMA. The optional [Dolly Rescue floppy](docs/RESCUE_FLOPPY.md) remains a future post-M0 deliverable.
