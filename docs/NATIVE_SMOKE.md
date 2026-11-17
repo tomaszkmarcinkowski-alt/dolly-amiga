@@ -1,6 +1,6 @@
 # Dolly — first native 68000 smoke milestone
 
-**Status:** source and an isolated CMake build route are published; not yet compiled with an actual AmigaOS cross compiler or executed in WinUAE or on real hardware. The host C compiler is NOT a native build.
+**Status (2026-11-17):** user-reported successful cross-build and WinUAE MC68000 / Kickstart 2.04 smoke run (`PASS`, RC=0). Physical Amiga hardware has not been tested. Host CTest is not a substitute for a native run.
 
 ## Goal
 
@@ -78,3 +78,39 @@ The `pl` catalog currently uses Polish written with 7-bit ASCII characters as a 
 ## Optional native ScreenMode/Screen Font watcher build
 
 For NDK-enabled native cross-build validation, add `-DDOLLY_NATIVE_GUI_WATCH=ON` alongside the existing AmigaOS toolchain file. This requests compilation of an **experimental** `dolly-native-gui-watch` static library containing `amiga/dolly_amiga_pref_notify.c` and `src/dolly_screen_watch.c`. It does **not** create a running GUI nor prove DOS/Intuition integration. Do not enable it for the plain host-only `DOLLY_NATIVE_ONLY` smoke test, as that host lacks AmigaOS NDK headers.
+
+## WinUAE MC68000 result and memory checkpoints (2026-11-17)
+
+Environment reported by tester: Windows 11 + Docker + Ubuntu on WSL2,
+WinUAE configured for MC68000, 512 KiB Chip RAM and Kickstart 2.04.
+The Amiga-format executable was verified by `m68k-amigaos-objdump -f`
+(`architecture: m68k:68000`). The default runtime failed to open
+`mathieeedoubbas.library` (absent in the tested image). Rebuilding with
+`-noixemul` (libnix) fixed startup and yielded `Dolly native smoke: PASS`,
+`RDB result allocation: 13604 bytes`, and return code 0.
+
+The shell's free-memory reports were 347352 bytes before and 347328 bytes
+after the process, a difference of 24 bytes. This is **not** evidence of
+24 bytes of peak memory use or a confirmed leak.
+
+The native-only m68k smoke now records four AmigaOS `AvailMem()` checkpoints:
+`start`, `allocated`, `parsed`, `released`. Each `MEM` line shows
+free Chip RAM, Fast RAM, total RAM and the largest contiguous free block.
+Sampling avoids heap allocation and is excluded from ordinary host builds.
+These values are **snapshots**, not a true peak heap or stack measurement;
+they include unrelated OS activity and effects of the C runtime allocator.
+The largest-block value is important on low-memory systems.
+
+Fresh build using Dockerized `m68k-amigaos-gcc`:
+
+```sh
+cmake -S . -B build-m68k-memory \\
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/amigaos-m68k.cmake \\
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-m68k-memory -j2
+```
+
+The toolchain preset defaults to `-noixemul`; the compile target defines
+`DOLLY_AMIGAOS_MEMORY_PROFILING`. After copying the executable to the
+WinUAE shared directory, run `Stack 16384`, then
+`dolly-native-smoke --selftest` and `Echo $RC`.
