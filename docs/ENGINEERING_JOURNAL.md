@@ -81,6 +81,52 @@
 
 **Działanie:** osobny [Issue #7](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7); brak wpływu na zakres M0/MVP. Przyszła synchronizacja musi szanować atrybuty AmigaDOS, lokalne konflikty i brak sieci.
 
+
+### DJ-0009 · 2026-11-17 · Architektura / poprawa · POTWIERDZONE LOKALNIE
+**Temat:** Przenośny interfejs `BlockSource`.
+
+**Wykrycie:** pierwotnie `BlockSource` zawierał bezpośrednio `FILE*`, co uzależniało wspólne parsowanie od POSIX i komplikowało natywny backend AmigaOS.
+
+**Zmiana:** callbacki `read`/`close`, niezależny `src/dolly_file_source.c` i weryfikacja błędnych liczników bajtów zwracanych przez backend. Zestaw testów hostowych zakończony powodzeniem; kompilacja natywna 68000 wciąż niepotwierdzona.
+
+### DJ-0010 · 2026-11-17 · I/O / bezpieczeństwo · PROTOTYP
+**Temat:** Granica 4 GiB w `CMD_READ`.
+
+**Ryzyko:** 32-bitowy `io_Offset` może zawinąć się przy dużym nośniku. Sama 64-bitowa arytmetyka w rdzeniu Dolly nie zabezpiecza wywołania sterownika.
+
+**Zmiana:** `dolly_io_plan_read()` odmawia żądań przekraczających granicę 4 GiB, chyba że wcześniej zweryfikowano obsługę `NSCMD_TD_READ64`. Dla NSD górne 32 bity offsetu są przekazywane w `io_Actual`; brak automatycznego zakładania TD64. Testowano na symulowanym Exec, **nie na fizycznym kontrolerze**.
+
+**Źródła:** [TrackDisk64](https://wiki.amigaos.net/wiki/TrackDisk64_Standard), [NSD](https://wiki.amigaos.net/wiki/NSD_Command_Specifications).
+
+### DJ-0011 · 2026-11-17 · QA / sprostowanie · POPRAWIONE
+**Temat:** Oczekiwany kod błędu dla `UINT64_MAX-511`.
+
+**Wykrycie:** początkowy test błędnie uznał offset za niewyrównany do 512 bajtów. W rzeczywistości jest wyrównany, a odczyt 512 bajtów przekracza koniec przestrzeni adresowej 64-bitowej.
+
+**Zmiana:** poprawiono oczekiwany wynik z `EINVAL` na `ERANGE`; test regresyjny uruchomiony ponownie. To była usterka testu, nie implementacji urządzenia.
+
+### DJ-0012 · 2026-11-17 · IFF / integralność · POTWIERDZONE LOKALNIE
+**Temat:** Rozpoznanie nagłówka `FORM DOLY` nie oznacza poprawności jego chunków.
+
+**Rozwiązanie:** `dolly_iff_scan()` waliduje big-endian długości, padding, ucięcia i wyjścia poza FORM. Nie wymaga odczytywania dużych payloadów ani ich alokacji. Akceptacja nieznanych chunków służy rozszerzalności.
+
+**Testy:** 7/7 zwykłych CTest oraz 7/7 w ASan/UBSan na komputerze hosta. **Brak jeszcze walidacji semantyki `HEAD/CHNK/INDX` i sum kontrolnych danych.**
+
+### DJ-0013 · 2026-11-17 · Sprzęt / DMA · OTWARTE
+**Temat:** `MEMF_PUBLIC` i pośredni bufor nie gwarantują poprawnego DMA dla wszystkich kontrolerów.
+
+**Ryzyko:** rozmaite sterowniki Amigi mogą wymagać własnej maski adresowej, alignmentu i limitu `MaxTransfer`; dochodzą zmiany nośnika podczas pracy.
+
+**Działanie:** backend AmigaOS wyraźnie eksperymentalny; brak produkcyjnego odczytu z realnych urządzeń bez kontroli maski, geometrii i testów sprzętowych. Zob. [projekt adaptera](AMIGA_IO.md).
+
+### DJ-0014 · 2026-11-17 · Amiga 68000 / mały RAM · OTWARTE
+**Temat:** Nadmierna pamięć na stosie przy strukturach wynikowych RDB/MBR.
+
+**Wykrycie:** `DollyRdb` ma wbudowane rekordy maks. 128 partycji, a `DollyPartitionMap` osadza kilka takich struktur. To wygodne na PC, lecz potencjalnie za duże dla małych stosów AmigaOS.
+
+**Działanie:** w fazie natywnej przenieść wyniki na stertę lub scratch, z czasem rozważyć strumieniowe wyliczanie partycji. Rozmiary i zużycie pamięci muszą zostać zmierzone na docelowym sprzęcie.
+
+
 ---
 
 ## Szablon nowego wpisu
