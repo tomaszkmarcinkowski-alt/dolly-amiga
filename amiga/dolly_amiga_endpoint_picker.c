@@ -914,22 +914,30 @@ void dolly_picker_close(DollyEndpointPicker *p) {
     if(p->gadgets){FreeGadgets(p->gadgets);p->gadgets=NULL;}
     if(p->visual){FreeVisualInfo(p->visual);p->visual=NULL;}
 }
-/* All commit methods (button or list double-click) use one path.
+/* Only Use selection commits the choice. */
+/*
  * changed/result deliberately survive dolly_picker_close(), so the
  * main event loop can copy the endpoint after the chooser disappears.
  */
 static int commit_picker(DollyEndpointPicker *p) {
     int ok=0;
-    if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p)) {
+    if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p) &&
+       p->queried) {
         ok=dolly_endpoint_set_unit(&p->result,p->device,p->unit);
         if(ok)sprintf(p->result.path,"%s / Unit %lu",
                       p->physical_names[p->device],
                       (unsigned long)p->physical_units[p->unit]);
     }
-    else if(p->mode==DOLLY_MODE_PARTITION &&
-            p->has_device && p->has_unit && p->has_partition)
+    else if(p->mode==DOLLY_MODE_PARTITION && physical_choice(p) &&
+            p->queried && p->partition_scan.valid &&
+            p->has_partition && p->partition<p->partition_scan.count) {
         ok=dolly_endpoint_set_partition(&p->result,p->device,
                                         p->unit,p->partition);
+        if(ok)sprintf(p->result.path,"%s / Unit %lu / %s",
+                      p->physical_names[p->device],
+                      (unsigned long)p->physical_units[p->unit],
+                      p->partition_scan.entries[p->partition].label);
+    }
     else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
         if(p->logical<p->logical_count) {
             ok=dolly_endpoint_set_logical(&p->result,p->logical);
@@ -945,32 +953,12 @@ static int commit_picker(DollyEndpointPicker *p) {
     if(ok)p->changed=1;
     return ok;
 }
-/* DoubleClick() uses timestamps from GT_GetIMsg BEFORE GT_ReplyIMsg.
- * A click on a different row, different list, or stale event cannot
- * commit the previous selection. A parent Device click never commits.
- */
-static int picker_double_click(DollyEndpointPicker *p,UWORD id,UWORD code,
-                               ULONG seconds,ULONG micros) {
-    int is_double=p->last_click_valid &&
-                  p->last_click_id==id &&
-                  p->last_click_code==code &&
-                  DoubleClick(p->last_click_seconds,
-                              p->last_click_micros,
-                              seconds,micros);
-    p->last_click_id=id;
-    p->last_click_code=code;
-    p->last_click_seconds=seconds;
-    p->last_click_micros=micros;
-    p->last_click_valid=1;
-    return is_double;
-}
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
         UWORD id=0,code=msg->Code;
-        ULONG seconds=msg->Seconds,micros=msg->Micros;
         int close=0;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
@@ -988,7 +976,6 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         GT_ReplyIMsg(msg);
         if(cls==IDCMP_NEWSIZE) {
-            p->last_click_valid=0;
             /* Resize completed: discard old pixel positions, build
              * fresh GadTools gadgets at the newly measured geometry.
              */
@@ -1015,7 +1002,6 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             }
             populate_units(p);
             invalidate_query(p);
-            p->last_click_valid=0;
             if(!rebuild(p))close=1;
             if(close)dolly_picker_close(p);
             return; /* never use a stale gadget ID after a rebuild */
@@ -1036,36 +1022,70 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             return;
         } else if(id==PICK_UNIT &&
                   (unsigned)code<p->unit_count && p->has_device) {
-            if(p->mode==DOLLY_MODE_PARTITION)
-                p->last_click_valid=0;
-            p->unit=code;p->has_unit=1;p->has_partition=0;
+            p->unit=code;p->has_unit=1;
             invalidate_query(p);
-            if(p->partition_list)
-                GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
-                                  GTLV_Selected,(ULONG)~0ul,TAG_DONE);
+            if(p->mode==DOLLY_MODE_PARTITION) {
+                /* Detach before replacing any LISTVIEW-owned nodes. */
+                if(p->gadgets && !p->gadgets_detached) {
+                    RemoveGList(p->window,p->gadgets,-1);
+                    p->gadgets_detached=1;
+                }
+                populate_partitions(p);
+                if(!rebuild(p)){dolly_picker_close(p);return;}
+                return;
+            }
             change_enabled(p);
             refresh_selection_preview(p);
             refresh_disk_info(p);
-            if(p->mode==DOLLY_MODE_PHYSICAL &&
-               picker_double_click(p,id,code,seconds,micros))
-                close=commit_picker(p);
-        } else if(id==PICK_LOGICAL && (unsigned)code<p->logical_count) {
+        } else if(id==PICK_PARTITION &&
+                  p->mode==DOLLY_MODE_PARTITION &&
+                  p->partition_scan.valid &&
+                  (unsigned)code<p->partition_scan.count) {
+            p->partition=code;p->has_partition=1;
+            change_enabled(p);
+            refresh_selection_preview(p);
+            refresh_partition_details(p);
+        } else if(id==PICK_LOGICAL &&
+                  (unsigned)code<p->logical_count) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);
-            if(picker_double_click(p,id,code,seconds,micros))
-                close=commit_picker(p);
         } else if(id==PICK_QUERY &&
                   (p->mode==DOLLY_MODE_PHYSICAL ||
                    p->mode==DOLLY_MODE_PARTITION) &&
                   physical_choice(p)) {
+            int opened;
+            invalidate_query(p);
             p->query_attempted=1;
-            p->queried=(unsigned char)dolly_amiga_device_query(
+            opened=dolly_amiga_device_query_ex(
                   p->physical_names[p->device],
                   p->physical_units[p->unit],
                   p->disk_info_display,sizeof(p->disk_info_display),
-                  p->disk_size_display,sizeof(p->disk_size_display));
+                  p->disk_size_display,sizeof(p->disk_size_display),
+                  &p->query_info);
+            p->queried=(unsigned char)(opened &&
+                  (p->query_info.identity_valid ||
+                   p->query_info.capacity_valid));
+            if(p->mode==DOLLY_MODE_PARTITION) {
+                if(p->queried && p->query_info.capacity_valid)
+                    dolly_amiga_partition_query(
+                      p->physical_names[p->device],
+                      p->physical_units[p->unit],
+                      p->query_info.capacity_bytes,
+                      p->query_info.sector_bytes,
+                      &p->partition_scan);
+                else strcpy(p->partition_scan.status,
+                            "Capacity unavailable; cannot scan");
+                if(p->gadgets && !p->gadgets_detached) {
+                    RemoveGList(p->window,p->gadgets,-1);
+                    p->gadgets_detached=1;
+                }
+                populate_partitions(p);
+                if(!rebuild(p)){dolly_picker_close(p);return;}
+                return;
+            }
             refresh_disk_info(p);
+            change_enabled(p);
         } else if(id==PICK_SELECT) {
             close=commit_picker(p);
         } else if(id==PICK_IMAGE_FORMAT && p->role && code<4u) {
