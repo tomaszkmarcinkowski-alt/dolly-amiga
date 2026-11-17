@@ -128,6 +128,9 @@ static int run_selftest(void){
        !=DOLLY_DMA_OK)goto cleanup;
     if(dolly_dma_check_buffer(UINT64_C(0x00ffff00),512,0x00fffffeu,2)
        !=DOLLY_DMA_OUTSIDE_MASK)goto cleanup;
+    if(dolly_dma_check_buffer(UINT64_C(0x00000ff0),0x1020,
+                              0x00002ffeu,2)!=DOLLY_DMA_OUTSIDE_MASK)
+        goto cleanup;
     smoke_stage=6;
     disk_bytes[64]^=1;
     parsed=dolly_rdb_scan(source,0,SMOKE_BS,1,rdb);
