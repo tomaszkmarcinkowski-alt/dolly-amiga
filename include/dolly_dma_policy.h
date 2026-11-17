@@ -8,7 +8,8 @@ typedef enum DollyDmaStatus {
     DOLLY_DMA_BAD_PROFILE,
     DOLLY_DMA_OUTSIDE_MASK,
     DOLLY_DMA_MISALIGNED,
-    DOLLY_DMA_ADDRESS_OVERFLOW
+    DOLLY_DMA_ADDRESS_OVERFLOW,
+    DOLLY_DMA_NO_COMPATIBLE_MEMORY
 } DollyDmaStatus;
 /* mask: permitted start-address bits (e.g. 0x00fffffe);
  * alignment: a power of two, at least 2. A buffer spanning forbidden
