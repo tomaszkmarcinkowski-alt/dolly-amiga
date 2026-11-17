@@ -55,8 +55,8 @@ static void build_fixture(void) {
     put_be32(part+148,1);   /* blocks per track */
     put_be32(part+164,4);   /* first cylinder => byte offset 2048 */
     put_be32(part+168,4);
-    put_be32(part+180,30);  /* de_NumBuffers */
-    put_be32(part+184,0);   /* de_BufMemType */
+    put_be32(part+128+11*4,30);  /* de_NumBuffers */
+    put_be32(part+128+12*4,0);   /* de_BufMemType */
     put_be32(part+128+13*4,0x1fe00); /* de_MaxTransfer */
     put_be32(part+128+14*4,0x00fffffe); /* de_Mask */
     put_be32(part+192,0x444f5301);  /* de_DosType at 128+16*4 */
