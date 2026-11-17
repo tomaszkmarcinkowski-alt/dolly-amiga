@@ -87,12 +87,11 @@ static int run_chip_budget(void) {
         {
             int intact = p[0] == 0x55u && p[bytes-1] == 0xaau;
             FreeMem(p, bytes);
-                restored = (unsigned long)AvailMem(MEMF_CHIP);
+            restored = (unsigned long)AvailMem(MEMF_CHIP);
             printf("CHIP %u planes bytes=%lu status=%s free_before=%lu free_during=%lu free_after=%lu\n",
-               planes[i], bytes,
-               (intact && restored == before) ?
-               "PASS" : "FAIL",
-               before, after, restored);
+                   planes[i], bytes,
+                   (intact && restored == before) ? "PASS" : "FAIL",
+                   before, after, restored);
             if (!intact || restored != before) failed = 1;
         }
     }
