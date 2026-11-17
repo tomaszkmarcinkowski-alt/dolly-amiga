@@ -12,6 +12,9 @@ typedef struct DollyGuiMinMetrics {
     uint32_t border_left,border_right,border_top,border_bottom;
     uint32_t padding_x,padding_y;
     uint32_t line_height;
+    /* Main-window layout's measured lowest extent (client coordinates). */
+    uint32_t main_content_height;
+    uint32_t main_build_label_width;
     uint32_t heading_width;
     uint32_t show_button_text_width;
     uint32_t quit_button_text_width;
