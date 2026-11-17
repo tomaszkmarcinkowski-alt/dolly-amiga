@@ -506,3 +506,30 @@ fallback works; it does not prove TD_GETGEOMETRY behavior on other
 controllers or a safe automatic GUI probe. Continue with a separate,
 bounded hardware-discovery GUI integration, retaining the M1.24
 `Device name` and `Size` recessed fields as independent values.
+
+## S. M1.27 — user-driven physical Query in the native GUI
+
+| ID | Test on 640x256 | Expected |
+|---|---|---|
+| GUI-47 | Open Source/Physical | Real DOS-startup driver list (no trackdisk), NO physical I/O |
+| GUI-48 | Select scsi.device | Real registered units shown, Query remains disabled until unit selected |
+| GUI-49 | Select Unit 0 but do not press Query | Device name says Press Query; Size says Not queried, no OpenDevice/DoIO |
+| GUI-50 | Press Query on scsi.device unit 0 | Device name = UAE-IDE rafael.hdf, Size = 1881 MiB on observed WinUAE HDF |
+| GUI-51 | Query again | Explicit second query, no automatic background retries |
+| GUI-52 | Switch driver/unit after Query | Previous results cleared; displays prompt until next Query |
+| GUI-53 | Resize after Query | Values persist, separate right-hand Size box and Query alignment stay correct |
+| GUI-54 | Double-click Unit without Query | Commits physical selection; no implicit device I/O |
+| GUI-55 | Physical Use selection | Main window displays real driver name/unit, not Demo device index |
+| GUI-56 | Source/Destination independence | Querying one chooser does not change the other's selection |
+| GUI-57 | Partition mode | Real device/unit list but empty/disabled Partition list; no fabricated RDB/MBR |
+| GUI-58 | Logical/File modes | No Query button, existing behavior unchanged |
+| GUI-59 | carddisk.device | Visible, but special behavior deferred to physical SRAM test |
+| GUI-60 | Missing media or unsupported query | Unavailable per field; no crash or invented size |
+| GUI-61 | Test release | Native m68k -Werror and portable endpoint test pass |
+
+Query is the **only** GUI action that sends physical device commands.
+All other actions (opening, listing, selecting, double-clicking,
+resizing, switching modes, cancelling) must remain free of OpenDevice
+and DoIO. Synchronous commands currently have no timeout, so test
+this build on WinUAE disposable images only. RTG and memory testing
+are still deferred.
