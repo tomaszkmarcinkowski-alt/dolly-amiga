@@ -28,5 +28,8 @@ int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;
  part[40]^=1;store(f,base+2*BS,part);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_BAD_CHECKSUM);
  make_part(part,2);store(f,base+2*BS,part);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_CYCLE);
  make_part(part,DOLLY_RDB_END);wr32(part+168,300);finish_sum(part,64);store(f,base+2*BS,part);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_OUT_OF_RANGE);
- make_part(part,DOLLY_RDB_END);store(f,base+2*BS,part);rdb[40]^=1;store(f,base+BS,rdb);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_NOT_FOUND);
+ make_part(part,DOLLY_RDB_END);store(f,base+2*BS,part);rdb[40]^=1;store(f,base+BS,rdb);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_BAD_CHECKSUM);
+ /* Valid secondary RDSK takes priority over damaged earlier candidate. */
+ make_rdb(rdb,2);store(f,base+3*BS,rdb);fflush(f);
+ assert(run(path,base,&r)==DOLLY_RDB_OK&&r.header_block==3);
  assert(fclose(f)==0);assert(unlink(path)==0);puts("RDB tests passed");return 0;}
