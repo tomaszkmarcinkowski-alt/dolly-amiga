@@ -1,33 +1,41 @@
-# Dolly integrity policy — exact release version + CRC32
+# Dolly integrity — self-check after startup (version + CRC32)
 
-**Decision (2026-11-17):** lightweight file verification for the Motorola 68000 baseline. The executable and every optional asset must match the **exact Dolly release/build ID**, expected byte length and **CRC32** from a release manifest. Optional plugins additionally check their own ABI/schema version.
+**Accepted decision (2026-11-17):** Dolly itself checks the CRC32 and exact release version of its *own executable file* immediately after its process starts. **No separate bootstrap, launcher or verification executable.** The same version + checksum policy applies to optional resources.
 
-## What this achieves
-- Detects most accidental corruption, incomplete copying, mixed-version installations and wrongly packaged files.
-- A faulty optional asset is **never used**: Dolly names the exact DOLLY: path, explains the affected feature and continues with GadTools/core features.
-- A faulty main executable blocks launch of the normal program with a clear error; the bootstrap/installer can suggest reinstalling the matching release.
+## Startup sequence
 
-## Critical limitation
-CRC32 is **not an authentication or anti-malware mechanism**. A malicious party who can replace both files and manifest can adjust the checksum. No self-contained program can reliably prove the authenticity of its own binary before its first instruction executes. Therefore the executable itself needs a **separate startup checker/installer/bootstrap** using the expected manifest. That prelaunch component is not implemented yet; documentation must not claim that main executable self-verification already works.
+1. AmigaOS loads and launches Dolly normally.
+2. Before exposing any disk/physical-device operation, the **main Dolly executable** locates and opens its **actual program file** read-only. Do not assume `DOLLY:Dolly` is the file currently executing: a Shell/Workbench may launch a copy elsewhere. Native path resolution must handle both invocation modes and detect ambiguity.
+3. Dolly obtains its expected exact release/build ID, file size and CRC32 from the distribution's release manifest and compares release identity with its own compiled build identifier.
+4. Dolly streams its executable bytes through `dolly_selfcheck_stream()` using a bounded buffer, comparing actual size/CRC32 with manifest values.
+5. On success, the application's normal initialization may continue. On any missing manifest, unreadable self-file, version/size/CRC mismatch or unidentified program path, **the disk-operation gate stays disabled** and the main program presents a clear failure message. The final native GUI flow may allow a limited Help/About or exit; it must not silently proceed with potentially unsafe I/O.
+6. Only requested optional resources are subsequently validated; missing/incompatible additions are disabled without preventing base GadTools/core startup.
 
-## Current M0 components
-- `dolly_checksum`: streaming, allocation-free C99 CRC32 over bytes, including standard `123456789 → CBF43926` regression.
-- `tools/make_release_manifest.py`: generate JSON manifest with exact release, CRC32 and byte count for all staged files. Runs on packaging host, not AmigaOS.
-- `tools/verify_release_manifest.py`: offline package validation before distribution; checks version and every file's size/CRC32.
-- `dolly_resources_scan_optional`: read-only decision layer rejecting absent/unreadable/wrong-release/wrong-ABI/wrong-size/wrong-CRC files. An OS file-probing adapter must still calculate the actual checksum and bind it to the actual file. Merely setting a boolean `integrity_ok` from untrusted metadata is insufficient.
-- Tests are registered in CMake; **current full CTest and native 68000 results not independently confirmed**.
+**The manifest is a data file, not a second executable.** There is no circular checksum embedded inside the executable. The main program has a compiled-in release ID while expected CRC32/size reside in the release manifest.
 
-## Example packaging flow
-```sh
-python3 tools/make_release_manifest.py build/staging \
-  --release Dolly-0.1.0+release-id --output build/staging/manifest.json
-python3 tools/verify_release_manifest.py build/staging \
-  build/staging/manifest.json --release Dolly-0.1.0+release-id
+## Limitations
+
+- The verification runs **after** AmigaOS has already loaded the binary, not before its first instruction. It cannot prevent an early crash if the code itself was corrupted.
+- CRC32 catches accidental corruption and mixed releases, **not deliberate attacks**, especially if the manifest can be changed at the same time.
+- The checked *disk file* might not precisely match the loaded executable in memory (media changes/altered file after load), another reason this is best-effort integrity checking rather than tamper-proofing.
+- Correct behavior when the self-file is unavailable: **clear, blocking warning and no disk I/O** rather than claiming success. Optional plugin failures remain non-blocking.
+- Native AmigaDOS startup integration and locating the actual loaded program file are still open. It may be necessary to use process/program directory context carefully; simply reading `DOLLY:Dolly` can verify the wrong binary.
+
+## Current implementation
+
+- `include/dolly_selfcheck.h`, `src/dolly_selfcheck.c`: C99 self-check state machine with read callback, bounded streaming CRC32 and human-readable failures.
+- `tests/test_selfcheck.c`: tests of valid data, changed content, truncation, build-version mismatch and interrupted reads.
+- `dolly_checksum`: streaming CRC32; `tools/make_release_manifest.py` and `tools/verify_release_manifest.py` are host-side package utilities and remain useful.
+- CMake includes tests in normal and native-only source modes. **No claim of real AmigaOS native execution or final production startup integration yet.**
+
+Example concept:
+
+```text
+Owce wykryly problem z programem!
+Plik: [actual Dolly executable path]
+Problem: niezgodna suma kontrolna CRC32.
+Skutek: funkcje odczytu/zapisu urzadzen zostaly zablokowane.
+Rozwiazanie: zainstaluj ponownie pliki z jednego, zgodnego wydania Dolly.
 ```
 
-This assumes a prepared staging directory. The version string is illustrative, not a claim that this release exists. Production packaging must generate it once, from the actual release metadata, and compile the same identifier into the executable.
-
-### Planned AmigaOS verification
-Build a small **read-only native checker** which can validate the main Dolly file **before launching it**, using a bounded buffer and known expected release/CRC32. Then validate each *requested* optional plugin/resource before loading it. On failure never guess a path or load it anyway. The main program remains usable with other optional features absent.
-
-See [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19), [installation](INSTALLATION.md), [Engineering Journal](ENGINEERING_JOURNAL.md).
+See [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19) and [Engineering Journal](ENGINEERING_JOURNAL.md).
