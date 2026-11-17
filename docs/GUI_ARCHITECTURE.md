@@ -1369,3 +1369,18 @@ to prevent stale references.
 No changes to source/destination pickers, partition-node bank
 lifetime, Query, Disk Vet or real disk I/O. Cross-build and WinUAE
 verification pending at user request.
+
+### M1.39 — compact bottom margin and inline build identity
+
+Reduce default main outer window height from 195px to 190px. Move
+Progress and recessed status up by four pixels (relative offsets 125
+and 147, respectively); the status bezel now ends at offset 164.
+The minimum content height guard becomes 166px. Preserve the existing
+main window width limits and the Stop/Quit geometry from M1.38.
+
+Draw a centered `Dolly build M1.39` label between the compact progress
+percentage and Stop. Use the active window font's TextLength to check
+whether the whole label fits with 6px padding at both sides. On narrow
+windows omit the label rather than overlap active controls. The label
+is static text, not a gadget. Update the build string for later GUI
+revisions. Cross-build and WinUAE verification are pending.
