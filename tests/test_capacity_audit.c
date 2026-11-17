@@ -52,6 +52,21 @@ int main(void){
     a=dolly_capacity_audit(&r,0,100000u);
     assert(a.flags&DOLLY_CAPACITY_OVERFLOW);
     assert(a.declared_geometry_bytes==0);
+    /* >4 GiB and non-512-byte logical blocks must not truncate values. */
+    r.block_bytes=1024;r.cylinders=1024;r.heads=8;r.sectors=1024;
+    r.partitions[0].descriptor_block=1;
+    r.partitions[0].start_bytes=4096;
+    r.partitions[0].length_bytes=1024;
+    a=dolly_capacity_audit(&r,0,UINT64_C(4294967296));
+    assert(a.flags==DOLLY_CAPACITY_GEOMETRY_LARGER);
+    assert(a.declared_geometry_bytes==UINT64_C(8589934592));
+    assert(a.shortfall_bytes==UINT64_C(4294967296));
+    a=dolly_capacity_audit(&r,0,UINT64_C(12884901888));
+    assert(a.flags==DOLLY_CAPACITY_GEOMETRY_SMALLER);
+    assert(a.extra_bytes==UINT64_C(4294967296));
+    /* A reversed, overflowing container address is rejected. */
+    a=dolly_capacity_audit(&r,UINT64_MAX-100,1024);
+    assert(a.flags==DOLLY_CAPACITY_INVALID);
     puts("RDB independent-media capacity audit passed");
     return 0;
 }
