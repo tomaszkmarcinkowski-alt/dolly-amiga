@@ -191,3 +191,10 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] Obtain actual device capacity with provenance on classic Amiga drivers (including 64-bit size support), not merely RDB values or host-image file length.
 - [ ] Distinguish merely *larger observed size* from actually unallocated, safe-to-use trailing storage after inspecting reserved metadata, other partition formats and mounted volumes.
 - [ ] Complete current `main` build/CTest, 68000 NDK compilation and WinUAE/physical verification. No physical writes enabled.
+
+## WSL2 host integration milestone — 2026-11-17
+
+- [x] User confirmed **28/28 PASS** for full host CTest after fixing the GadTools missing-font `NO_FIT` / `BAD_INPUT` mismatch.
+- [ ] Run a separate host dry run with `-DDOLLY_NATIVE_ONLY=ON`; do not confuse host execution with AmigaOS native build.
+- [ ] Build `dolly-native-smoke` using an installed `m68k-amigaos-gcc`, then launch in WinUAE / real MC68000.
+- [ ] Run GCC/Clang sanitizers for the full current tree; no new complete sanitizer result has been reported.
