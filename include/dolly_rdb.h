@@ -17,6 +17,7 @@ typedef struct DollyPartition {
  uint8_t max_transfer_present;
  uint8_t dos_type_present; /* Distinguish absent DosType from value zero */
  uint32_t buffer_count, buffer_memory_type, dma_mask;
+ uint32_t block_size_longwords, sectors_per_block, reserved_blocks, preallocated_blocks;
  uint8_t buffer_count_present, buffer_memory_type_present, dma_mask_present;
  uint64_t start_bytes, length_bytes;
  char name[32];
