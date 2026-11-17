@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-def main(script):
+def main(script, verifier):
     with tempfile.TemporaryDirectory(prefix="dolly-manifest-") as temp:
         root = Path(temp)
         package = root / "release"
@@ -22,6 +22,8 @@ def main(script):
         manifest = json.loads(output.read_text(encoding="utf-8"))
         assert manifest["release"] == "Dolly-build-test"
         assert manifest["algorithm"] == "CRC32/ISO-HDLC"
+        subprocess.run([sys.executable, verifier, str(package), str(output),
+                        "--release", "Dolly-build-test"], check=True)
         files = {entry["path"]: entry for entry in manifest["files"]}
         assert files["Dolly"]["size"] == 9
         assert files["Dolly"]["crc32"] == "CBF43926"
@@ -30,9 +32,12 @@ def main(script):
         (package / "Dolly").write_bytes(b"12345678x")
         import zlib
         assert f"{zlib.crc32((package / 'Dolly').read_bytes()):08X}" != files["Dolly"]["crc32"]
+        corrupt = subprocess.run([sys.executable, verifier, str(package), str(output),
+                                  "--release", "Dolly-build-test"], capture_output=True)
+        assert corrupt.returncode != 0 and b"CRC32/size mismatch" in corrupt.stderr
     print("Dolly CRC32 release manifest tests passed")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: test_release_manifest.py path/to/make_release_manifest.py")
-    main(sys.argv[1])
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: test_release_manifest.py generator verifier")
+    main(sys.argv[1], sys.argv[2])
