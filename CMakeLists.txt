@@ -2,6 +2,31 @@ cmake_minimum_required(VERSION 3.13)
 project(dolly C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# Native 68000 smoke-only mode: NO POSIX backend, NO disk access.
+# Cross-build with the separate AmigaOS toolchain file and an installed SDK.
+option(DOLLY_NATIVE_ONLY "Build only native AmigaOS smoke executable" OFF)
+option(DOLLY_NATIVE_M68000 "Pass -m68000 for classic Motorola 68000" OFF)
+if(DOLLY_NATIVE_ONLY)
+  add_executable(dolly-native-smoke
+    amiga/dolly_native_smoke.c
+    src/dolly_block_source.c src/dolly_rdb.c src/dolly_rdb_audit.c
+    src/dolly_inventory.c src/dolly_io_plan.c src/dolly_maxtransfer.c)
+  target_include_directories(dolly-native-smoke PRIVATE
+    ${PROJECT_SOURCE_DIR}/include)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(dolly-native-smoke PRIVATE
+      -Wall -Wextra -Wpedantic -Werror)
+    if(DOLLY_NATIVE_M68000)
+      target_compile_options(dolly-native-smoke PRIVATE -m68000)
+      target_link_options(dolly-native-smoke PRIVATE -m68000)
+    endif()
+  endif()
+  # This also allows a host smoke build; host success is not Amiga validation.
+  enable_testing()
+  add_test(NAME native_memory_smoke COMMAND dolly-native-smoke --selftest)
+  return()
+endif()
 add_library(dollyprobe STATIC src/dolly_probe.c)
 target_include_directories(dollyprobe PUBLIC ${PROJECT_SOURCE_DIR}/include)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
