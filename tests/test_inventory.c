@@ -37,6 +37,16 @@ static int collect(const DollyInventoryField *f,void *user){
        f->availability==DOLLY_INV_UNAVAILABLE)c->overflow_seen++;
     return 0;
 }
+static int count_mbr(const DollyInventoryField *f,void *user){
+    unsigned *count=(unsigned *)user;
+    assert(f->origin==DOLLY_INV_MBR);
+    assert(f->kind==DOLLY_INV_U64);
+    assert(f->availability==DOLLY_INV_PRESENT);
+    if(!strcmp(f->key,"mbr_type"))assert(f->number==0x76u);
+    if(!strcmp(f->key,"mbr_first_lba"))assert(f->number==4096u);
+    if(!strcmp(f->key,"mbr_contains_rdb"))assert(f->number==1);
+    ++*count;return 0;
+}
 static int stop_early(const DollyInventoryField *f,void *user){
     unsigned *count=(unsigned *)user;(void)f;(*count)++;return 7;
 }
@@ -71,7 +81,9 @@ int main(void){
         assert(dolly_inventory_mbr_partition(&m,stop_early,&n)==7);
         assert(n==2);
         /* Full MBR stream has seven fields and never allocates. */
-        (void)fields;
+        assert(dolly_inventory_mbr_partition(&m,count_mbr,&fields)==0);
+        assert(fields==7);
+        assert(dolly_inventory_mbr_partition(NULL,count_mbr,&fields)==-1);
     }
     assert(dolly_inventory_partition(0,collect,&c)==-1);
     assert(dolly_inventory_partition(&p,0,&c)==-1);
