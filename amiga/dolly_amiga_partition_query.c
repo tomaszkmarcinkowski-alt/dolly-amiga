@@ -49,9 +49,11 @@ static void close_reader(MediaReader *m) {
 static void fs_label(char *out,uint32_t fs) {
     unsigned version=fs&255u;
     if((fs>>8)==0x444f53u && version<=7u) {
-        if(version==0u)strcpy(out,"OFS");
-        else if(version==1u)strcpy(out,"FFS");
-        else sprintf(out,"DOS/%lu",(unsigned long)version);
+        static const char *const names[]={
+            "OFS","FFS","OFS-Intl","FFS-Intl",
+            "OFS-DirC","FFS-DirC","OFS-LFN","FFS-LFN"
+        };
+        strcpy(out,names[version]);
     } else {
         sprintf(out,"%08lx",(unsigned long)fs);
     }
