@@ -23,12 +23,13 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
         client_w=max_u32(m.heading_width,
                  2u*max_u32(m.show_button_text_width+12u,
                             m.quit_button_text_width+12u)+8u);
-        client_w=max_u32(client_w,168u); /* read-only count + caption */
-        /* heading baseline, buttons, number & minimum vertical spacing */
-        /* Heading, two CYCLE_KIND selectors, TEXT_KIND status,
-         * action row, Start row and count field with vertical gaps. */
-        client_h=max_u32(145u,
-                 m.line_height+21u+21u+21u+24u+19u+28u);
+        /* Main shell: source/target BUTTON+TEXT, operation CYCLE,
+         * description, two action rows, blocks, bottom status strip.
+         * Minimum vertical client area follows the actual last control.
+         */
+        client_w=max_u32(client_w,320u);
+        client_h=max_u32(175u,
+                 m.line_height+20u+20u+20u+22u+19u+19u+35u);
     } else {
         /* 24x8 grid, minimum 10x9 pixels per cell; labels and Hide remain. */
         client_w=max_u32(m.heading_width,24u*10u+8u);
