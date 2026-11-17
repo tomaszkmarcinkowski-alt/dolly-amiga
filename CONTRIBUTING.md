@@ -9,5 +9,6 @@ Welcome! We are beginning with Milestone M0: safe read-only inspection and a tes
 - Preserve support for a baseline Motorola 68000 / low-memory Amiga.
 - Separate professional diagnostics from optional sheep-related humor.
 - Do not add third-party artwork, samples or code without verifying distribution rights.
+- When fixing a surprising bug, hardware incompatibility or architectural assumption, add a dated, traceable entry to [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md). Preserve corrected hypotheses rather than silently erasing history.
 
 **License:** Dolly is MIT-licensed (see [LICENSE](LICENSE)). By contributing you agree that your contributions are submitted under the same MIT terms; only submit work you have the rights to contribute.
