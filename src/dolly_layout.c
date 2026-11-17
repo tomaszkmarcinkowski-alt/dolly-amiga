@@ -75,6 +75,11 @@ int main(int argc,char **argv){
    if(p->contains_rdb)show_rdb(&p->nested_rdb,"    ",p->start_bytes,p->length_bytes);
   }
  }
+ if(map->hybrid_mbr_rdb){
+  puts("WARNING: both MBR and disk-wide RDB are present; this is an ambiguous hybrid layout.");
+  if(map->hybrid_mbr_overlap)
+   puts("WARNING: disk-wide RDB data overlaps MBR partitions. Do not write or clone automatically.");
+ }
  if(map->has_whole_disk_rdb)show_rdb(&map->whole_disk_rdb,"  ",0,dolly_block_size(src));
  free(map);dolly_block_close(src);
  puts("NOTE: not a complete disk-integrity or bootability check.");return 0;
