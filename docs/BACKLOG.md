@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**61 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**63 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -540,3 +540,30 @@
 - W logu zachować urządzenie/unit oraz kod problemu, a adresy/maski ujawniać tylko w diagnostyce zaawansowanej, bez prywatnych danych.
 - Przewidzieć lokalizację PL/EN (Locale), testy poprawności callbacku także na fake Exec, przypadki braku bufora.
 - **Status:** wdrożono strukturalny katalog przyczyn i podpowiedzi, przenośne `dolly-dma-advice` CLI (w tym cel do kompilacji m68k), testy katalogu i ścieżki CLI dodane do CMake. Rzeczywiste okno GadTools, pełny CI i test AmigaOS pozostają otwarte.
+
+
+## Epic: Modular GUI / low-resolution safety
+
+### DOL-062 — GadTools wbudowany, ReAction i MUI jako niezalezne moduly GUI
+
+**Priorytet:** P1 dla architektury, P0 dla 640×256 · **Etap:** M3/M5 · [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14)
+
+**User story:** Dolly uruchamia sie domyslnie z GadTools na AmigaOS 2.04+/68000, a posiadacz opcjonalnych bibliotek moze wybrac oddzielny backend ReAction lub przyszly MUI, bez przymusu ich instalowania.
+
+**Zalozenia:** niezalezny od GUI core, wersjonowany interfejs backendu, bez wymuszonych zaleznosci na ReAction/MUI, czytelny fallback do GadTools w razie niedostepnosci pluginu. Dopiero po sprawdzeniu natywnego ABI projektujemy wczytywanie modulow. Kazde okno, dialog i komunikat GadTools musi miescic sie w 640×256 przy Topaz/8 z uwzglednieniem obramowania, tytulu i przyciskow; dlugie informacje dzielimy na strony.
+
+**Font:** domyslnie rzeczywisty systemowy Screen Font; opcjonalny font ustawiony przez uzytkownika w Dolly ma pierwszenstwo, jesli okno sie miesci. W przeciwnym razie najpierw font ekranu, ostatecznie Topaz/8 i uklady kompaktowe. Gdy nawet to nie miesci sie bezpiecznie — odmowa otwarcia wadliwego okna i alternatywne powiadomienie/CLI.
+
+**Status:** przenosny kalkulator geometrii/fallbacku, kontrakt GUI i testy graniczne sa opublikowane; rzeczywiste okna i plugin loader jeszcze nie sa zaimplementowane.
+
+### DOL-063 — Powiadomienia o zmianie ekranu, fontu i ponowne przeliczanie GUI
+
+**Priorytet:** P0 (niedopuszczenie do przyciecia kontrolek) · **Etap:** M3/M5 · [Issue #15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15)
+
+**User story:** Dolly reaguje na zmiany ScreenMode i Screen Font, zamykanie/otwieranie ekranu publicznego oraz zmiany fontu w swoich preferencjach. Po zdarzeniu ponownie mierzy ekran, font, ramki i okna, zachowuje stan i wybiera bezpieczny layout.
+
+**Implementacja:** AmigaDOS V36+ `StartNotify` dla `ENV:sys/screenmode.prefs` i `ENV:sys/screenfont.prefs`; niezalezny od systemu mechanizm laczenia zdarzen; `screennotify.library` jako **opcjonalny** adapter cyklu zycia ekranu, a nie wymagana biblioteka. Sam `IDCMP_NEWPREFS` nie wykrywa wszystkich zmian fontu/ekranu.
+
+**Akceptacja:** brak uzywania starych wskaznikow `Screen*`; po zmianie ekran i fonty pozyskiwane na nowo, a GUI przebudowywane dopiero gdy ekran jest dostepny. Bez dodatkowej biblioteki nadal dziala powiadamianie o preferencjach, ponowne mierzenie przy otwarciu/aktywacji/zmianie rozmiaru; nie obiecujemy wykrycia kazdego zdarzenia zamkniecia ekranu w takim trybie. Sprawdzic OS 2.04, 3.1, 3.1.4 i 3.2 pod WinUAE.
+
+**Status:** opublikowano model zdarzen, testy i eksperymentalny adapter AmigaDOS; natywna kompilacja i `screennotify.library` API niepotwierdzone.
