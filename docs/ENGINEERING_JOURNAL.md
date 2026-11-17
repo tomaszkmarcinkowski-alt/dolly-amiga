@@ -442,12 +442,24 @@
 **Ograniczenia:** polski zapis ASCII jest świadomym etapem przejściowym dla klasycznych konsol; docelowe tłumaczenia powinny korzystać z katalogów Locale i właściwego kodowania. Brakuje też podłączenia pełnych podpowiedzi do rzeczywistego okna GadTools.
 
 
+### DJ-0043 · 2026-11-17 · Sheep Inventory / wskazowki diagnostyczne · OPUBLIKOWANO KOD; CALY BUILD OTWARTY
+**Temat:** Wskazowki dla uzytkownika nie moga byc zarezerwowane wylacznie dla problemow DMA.
+
+**Odkrycie:** wspolny strumien `DollyInventoryNotice` podawal kod, poziom i opis, ale nie zawieral osobnego, niezaleznego od interfejsu UI pola ze wskazowka. Dotyczylo to m.in. `MAXTRANSFER_ABOVE_REFERENCE` i `RDB_PARTITIONS_OVERLAP`.
+
+**Dzialanie:** dodano `suggested_action` i katalog bezpiecznych podpowiedzi dla kazdego emitowanego kodu diagnostycznego. `dolly-inventory` wypisuje `Suggested check:` pod ostrzezeniem. Dla MaxTransfer wskazuje sprawdzenie typu kontrolera, sterownika i jego udokumentowanego limitu. Dla kolizji RDB zaleca porownanie zakresow i pozostawienie nosnika w trybie tylko do odczytu. Zadne ostrzezenie nie proponuje automatycznego zapisu lub zgadywania parametrow.
+
+**Testy:** w `tests/test_inventory_notices.c` dodano wymaganie obecnosci wskazowki, a w syntetycznym CLI smoke test oczekiwanie na jej wyswietlenie. Wdrozenie i testy opublikowano w repozytorium, lecz **wynik pelnego CTest aktualnego main i test na Amidze sa nadal niepotwierdzone**.
+
+**Wniosek architektoniczny:** docelowo kod, prawdopodobna przyczyna, proponowane kroki oraz poziom pewnosci powinny byc rozdzielone, aby translacje PL/EN i GadTools nie musialy implementowac logiki diagnostycznej osobno. [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0043 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0044 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
