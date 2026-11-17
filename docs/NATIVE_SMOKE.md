@@ -171,3 +171,25 @@ Stack 16384
 DOLLYTEST:dolly-memory --chip-budget
 Echo $RC
 ```
+
+### M1.2 WinUAE result (2026-11-17)
+
+Tester confirmed all three `--chip-budget` allocations on MC68000,
+512 KiB Chip RAM, Kickstart 2.04, no Fast RAM:
+
+```text
+Dolly native smoke: PASS
+RDB result allocation: 13604 bytes
+MEM start       chip=277928 fast=0 total=277928 largest=277200
+MEM allocated   chip=261544 fast=0 total=261544 largest=260816
+MEM parsed      chip=261544 fast=0 total=261544 largest=260816
+MEM released    chip=277928 fast=0 total=277928 largest=277200
+CHIP 2 planes bytes=20480 status=PASS free_before=277920 free_during=257440 free_after=277920
+CHIP 3 planes bytes=30720 status=PASS free_before=277920 free_during=247200 free_after=277920
+CHIP 4 planes bytes=40960 status=PASS free_before=277920 free_during=236960 free_after=277920
+RC=0
+```
+
+All three independent allocations restored their initial free Chip RAM.
+These confirm raw planar-buffer feasibility, **not** a rendered Intuition
+screen or the full Sheep Counter memory footprint.
