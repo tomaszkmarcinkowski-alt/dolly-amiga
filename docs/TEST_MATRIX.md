@@ -604,3 +604,45 @@ Keep those cases pending before treating M1.28 as fully validated.
 These tests remain pending WinUAE verification. Numbering affects
 display only and does not alter the on-disk RDB, parser or source/target
 identity. Extra V37 selection display may reduce visible list rows.
+
+## W. M1.30 — reported Destination Unit click Guru #8000000B
+
+User-confirmed M1.29 persistent GadTools LISTVIEW highlighting works,
+but the following regression was reported on WinUAE A1200 / OS 3.1:
+
+1. Choose and commit Source device.
+2. Set Copy disk-to-disk operation.
+3. Open Destination physical device chooser.
+4. Click Unit 0.
+5. System crashes with Guru \`#8000000B\` (CPU Line-F exception).
+
+The exact corruption site is **not yet proven**. One suspicious pattern
+in M1.29 was destroying and recreating GadTools LISTVIEW gadgets and
+mutating their linked lists directly inside a GADGETUP message handler.
+The failure happened on a Unit change, which uses that path. With
+GTLV_ShowSelected enabled on V39+, GadTools keeps selection state and
+may reference its existing list until all pending messages are replied.
+
+M1.30 first drains all GT_GetIMsg messages, using GT_ReplyIMsg on
+each, *without* modifying any LISTVIEW nodes or destroying gadgets.
+An update flag remembers whether Mode, Device, Unit, or a Partition
+Query needs a rebuild. At the end of the pump, the old gadget list
+is detached, then node lists and query state are updated, then the
+new GadTools context is constructed. Further queued messages
+while an update is pending are replied and ignored as stale.
+Physical Query remains explicit and never fires due to selection.
+
+| ID | Regression sequence | Expected |
+|---|---|---|
+| GUI-89 | Source physical → Query → Use | Source committed normally |
+| GUI-90 | Change operation to disk-to-disk | Main selector keeps stable source |
+| GUI-91 | Destination Physical → driver → Unit 0 | No Guru/Line-F; persistent unit highlight |
+| GUI-92 | Query destination then Use | Two independent endpoints, stable name/size |
+| GUI-93 | Alternate Source/Destination chooser multiple times | No crash or stale gadget pointers |
+| GUI-94 | Repeated driver changes in Partition mode | Gadgets rebuilt only after message drain |
+| GUI-95 | Partition Query → RDB list → selection | Persistent highlight and numbered entries preserved |
+| GUI-96 | OS2.04 / V37 after tests on 3.1 | No crash; version-specific list rendering unchanged |
+
+This patch is a **hypothesis-driven fix**, not a confirmed root cause.
+Compile and controlled WinUAE reproduction are required.
+Do not enable real-media writes; Query remains read-only.
