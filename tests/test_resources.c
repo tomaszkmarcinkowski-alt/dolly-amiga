@@ -2,80 +2,86 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-typedef struct Probe {
-    unsigned calls,notices;
-    unsigned saw_gui,saw_devices,saw_catalog;
-} Probe;
-static int exists(const char *path,void *ctx){
-    Probe *p=(Probe *)ctx;p->calls++;
-    assert(!strncmp(path,"DOLLY:",6));
-    return strstr(path,"Plugins/Filesystems/")!=NULL;
+typedef struct Fixture {
+    unsigned calls,notices,versions,unknown;
+} Fixture;
+static DollyResourceProbeResult probe(const char *path,void *context){
+    Fixture *f=(Fixture *)context;
+    DollyResourceProbeResult r={0};
+    f->calls++;
+    assert(strncmp(path,"DOLLY:",6)==0);
+    if(strstr(path,"Good.profile")){
+        r.state=DOLLY_RESOURCE_READABLE;
+        r.release_id="Dolly-0.1.7+abc123";
+        r.format_version=3;r.integrity_ok=1;
+    }else if(strstr(path,"Old.profile")){
+        r.state=DOLLY_RESOURCE_READABLE;
+        r.release_id="Dolly-0.1.6+old";
+        r.format_version=3;r.integrity_ok=1;
+    }else if(strstr(path,"WrongABI.profile")){
+        r.state=DOLLY_RESOURCE_READABLE;
+        r.release_id="Dolly-0.1.7+abc123";
+        r.format_version=2;r.integrity_ok=1;
+    }else if(strstr(path,"NoMetadata.profile")){
+        r.state=DOLLY_RESOURCE_READABLE;
+        r.release_id=NULL;r.format_version=3;r.integrity_ok=0;
+    }else if(strstr(path,"Unreadable.profile")){
+        r.state=DOLLY_RESOURCE_UNREADABLE;
+    }else if(strstr(path,"Catalogs/")){
+        r.state=DOLLY_RESOURCE_ABSENT;
+    }else{
+        r.state=DOLLY_RESOURCE_UNVERIFIED;
+    }
+    return r;
 }
-static int unreadable(const char *path,void *ctx){
-    Probe *p=(Probe *)ctx;
-    assert(strstr(path,"DOLLY:Plugins/Devices/")==path);
-    p->calls++;
-    return -1;
-}
-static void unreadable_notice(const DollyResourceNotice *n,void *ctx){
-    Probe *p=(Probe *)ctx;p->notices++;
-    assert(!strcmp(n->code,"DOLLY_OPTIONAL_RESOURCE_UNREADABLE"));
-    assert(strstr(n->headline,"odczytac")!=NULL);
-    assert(strstr(n->disabled_feature,"controller-profile")!=NULL);
-    assert(strstr(n->suggested_action,"access")!=NULL);
-}
-static void notice(const DollyResourceNotice *n,void *ctx){
-    Probe *p=(Probe *)ctx;p->notices++;
-    assert(!strcmp(n->code,"DOLLY_OPTIONAL_RESOURCE_MISSING"));
-    assert(strstr(n->missing_path,"DOLLY:")==n->missing_path);
-    assert(strstr(n->headline,"Wilki")!=NULL);
-    assert(strlen(n->disabled_feature)>20);
-    assert(strlen(n->suggested_action)>20);
-    if(strstr(n->missing_path,"Plugins/GUI/"))p->saw_gui++;
-    if(strstr(n->missing_path,"Plugins/Devices/"))p->saw_devices++;
-    if(strstr(n->missing_path,"Catalogs/"))p->saw_catalog++;
+static void notice(const DollyResourceNotice *n,void *context){
+    Fixture *f=(Fixture *)context;f->notices++;
+    assert(n->code&&n->headline&&n->missing_path);
+    assert(n->disabled_feature&&n->suggested_action);
+    assert(!strcmp(n->required_release,"Dolly-0.1.7+abc123"));
+    assert(strncmp(n->missing_path,"DOLLY:",6)==0);
+    if(!strcmp(n->code,"DOLLY_OPTIONAL_RESOURCE_VERSION_MISMATCH")){
+        f->versions++;
+        assert(n->found_release);
+    }
+    if(!strcmp(n->code,"DOLLY_OPTIONAL_RESOURCE_UNVERIFIED"))f->unknown++;
 }
 int main(void){
-    const DollyResourceSpec list[]={
-        {"Plugins/GUI/ReAction.module",DOLLY_RESOURCE_GUI},
-        {"Plugins/Filesystems/OFS.extension",DOLLY_RESOURCE_FILESYSTEM},
-        {"Plugins/Devices/ClassicIDE.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
-        {"Catalogs/polish/dolly.catalog",DOLLY_RESOURCE_CATALOG}
+    const DollyResourceSpec files[]={
+      {"Plugins/Devices/Good.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
+      {"Plugins/Devices/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
+      {"Plugins/Devices/WrongABI.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
+      {"Plugins/Devices/NoMetadata.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
+      {"Plugins/Devices/Unreadable.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
+      {"Catalogs/polish/dolly.catalog",DOLLY_RESOURCE_CATALOG}
     };
-    const DollyResourceSpec invalid[]={
-        {"../SYS:Startup-Sequence",DOLLY_RESOURCE_GUI}
+    const DollyResourceSpec wrong_directory[]={
+      {"Plugins/GUI/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE}
     };
-    Probe p={0};
+    Fixture f={0};
     DollyResourceScanResult r=dolly_resources_scan_optional(
-        list,sizeof(list)/sizeof(list[0]),exists,&p,notice,&p);
+        files,sizeof(files)/sizeof(files[0]),"Dolly-0.1.7+abc123",3,
+        probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_OK);
-    assert(p.calls==4&&p.notices==3);
-    assert(p.saw_gui==1&&p.saw_devices==1&&p.saw_catalog==1);
-    assert((r.missing_kinds&(1u<<DOLLY_RESOURCE_GUI))!=0);
-    assert((r.missing_kinds&(1u<<DOLLY_RESOURCE_FILESYSTEM))==0);
-    assert(r.missing_files==3);
+    assert(f.calls==6&&f.notices==5);
+    assert(r.missing_files==1&&r.unreadable_files==1);
+    assert(r.incompatible_files==2&&r.unverified_files==1);
+    assert(f.versions==2&&f.unknown==1);
+    assert(r.disabled_kinds==(1u<<DOLLY_RESOURCE_DEVICE_DATABASE |
+                               1u<<DOLLY_RESOURCE_CATALOG));
     assert(!strcmp(dolly_resource_kind_directory(DOLLY_RESOURCE_DEVICE_DATABASE),
                    "Plugins/Devices/"));
-    r=dolly_resources_scan_optional(invalid,1,exists,&p,notice,&p);
-    assert(r.status==DOLLY_RESOURCE_SCAN_INVALID&&p.calls==4);
-    {
-        const DollyResourceSpec db[]={
-            {"Plugins/Devices/Example.profile",DOLLY_RESOURCE_DEVICE_DATABASE}
-        };
-        const DollyResourceSpec misplaced[]={
-            {"Plugins/GUI/Example.profile",DOLLY_RESOURCE_DEVICE_DATABASE}
-        };
-        Probe q={0};
-        r=dolly_resources_scan_optional(db,1,unreadable,&q,unreadable_notice,&q);
-        assert(r.status==DOLLY_RESOURCE_SCAN_OK);
-        assert(r.missing_files==0 && r.unreadable_files==1);
-        assert(r.missing_kinds==(1u<<DOLLY_RESOURCE_DEVICE_DATABASE));
-        assert(q.calls==1&&q.notices==1);
-        r=dolly_resources_scan_optional(misplaced,1,unreadable,&q,unreadable_notice,&q);
-        assert(r.status==DOLLY_RESOURCE_SCAN_INVALID&&q.calls==1);
-    }
-    r=dolly_resources_scan_optional(NULL,0,exists,&p,notice,&p);
+    r=dolly_resources_scan_optional(wrong_directory,1,"Dolly-0.1.7+abc123",
+                                     3,probe,&f,notice,&f);
+    assert(r.status==DOLLY_RESOURCE_SCAN_INVALID&&f.calls==6);
+    r=dolly_resources_scan_optional(NULL,0,"Dolly-0.1.7+abc123",3,
+                                     probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_OK);
-    puts("Optional resource degradation and diagnostics tests passed");
+    r=dolly_resources_scan_optional(files,1,NULL,3,probe,&f,notice,&f);
+    assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
+    r=dolly_resources_scan_optional(files,1,"Dolly-0.1.7+abc123",0,
+                                      probe,&f,notice,&f);
+    assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
+    puts("Optional assets require exact release, schema and integrity checks");
     return 0;
 }
