@@ -35,6 +35,8 @@ static int emit_notice(const DollyInventoryNotice *notice,void *ctx){
     fprintf(out,"    [%s] %s: %s\n",
             dolly_notice_severity_name(notice->severity),
             notice->code,notice->message);
+    if(notice->suggested_action)
+        fprintf(out,"      Suggested check: %s\n",notice->suggested_action);
     return ferror(out)?1:0;
 }
 static void show_rdb(const DollyRdb *r,const char *type,
