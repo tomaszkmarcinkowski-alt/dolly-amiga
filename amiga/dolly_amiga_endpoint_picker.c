@@ -205,6 +205,8 @@ static void update_selection_preview(DollyEndpointPicker *p) {
             strcpy(full,"AmigaDOS device list unavailable.");
         else if(!p->logical_count)
             strcpy(full,"No AmigaDOS devices found.");
+        else if(p->dos_devices.truncated)
+            strcpy(full,"Select device... (list limited to first 24)");
         else strcpy(full,"Select logical device...");
     } else if(!p->has_device) {
         strcpy(full,"Select device...");
@@ -395,7 +397,7 @@ static void captions(DollyEndpointPicker *p) {
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         Move(rp,20,59);
-        Text(rp,(STRPTR)"AmigaDOS logical devices (read-only)",36);
+        Text(rp,(STRPTR)"Registered DOS devices (read-only)",34);
     } else {
         Move(rp,20,99);
         Text(rp,(STRPTR)"Selected file:",14);
