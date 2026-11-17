@@ -129,22 +129,6 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.name_w=(WORD)(g.size_label_x-8-g.name_x);
     return g;
 }
-static void make_list(struct List *l,struct Node *nodes,STRPTR *names) {
-    unsigned i;
-    l->lh_Head=(struct Node *)&l->lh_Tail;
-    l->lh_Tail=NULL;
-    l->lh_TailPred=(struct Node *)&l->lh_Head;
-    l->lh_Type=NT_USER;
-    l->l_pad=0;
-    for(i=0;i<2u;++i) {
-        memset(&nodes[i],0,sizeof(nodes[i]));
-        nodes[i].ln_Name=(char *)names[i];
-        AddTail(l,&nodes[i]);
-    }
-}
-/* Snapshot list nodes refer only to picker-owned names. They remain
- * valid until the chooser closes; no DosList pointers remain.
- */
 static void init_list(struct List *l) {
     l->lh_Head=(struct Node *)&l->lh_Tail;
     l->lh_Tail=NULL;
@@ -316,7 +300,9 @@ static void update_selection_preview(DollyEndpointPicker *p) {
     while(length>3u &&
           (LONG)TextLength(p->window->RPort,
                (STRPTR)p->selection_display,length)>
-               (LONG)picker_geometry(p).value_w-16)
+               (LONG)picker_geometry(p).value_w-
+               ((p->mode==DOLLY_MODE_PHYSICAL ||
+                 p->mode==DOLLY_MODE_PARTITION)?100:16))
         p->selection_display[--length]='\0';
     if(length<(ULONG)strlen(full) && length>=3u) {
         p->selection_display[length-3u]='.';
@@ -960,6 +946,8 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->mode=(DollyEndpointMode)code;
             p->has_device=0;p->has_unit=0;
             p->has_partition=0;p->has_logical=0;
+            populate_units(p);
+            invalidate_query(p);
             p->last_click_valid=0;
             if(!rebuild(p))close=1;
             if(close)dolly_picker_close(p);
