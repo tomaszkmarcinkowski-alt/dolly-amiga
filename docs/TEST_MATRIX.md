@@ -533,3 +533,35 @@ resizing, switching modes, cancelling) must remain free of OpenDevice
 and DoIO. Synchronous commands currently have no timeout, so test
 this build on WinUAE disposable images only. RTG and memory testing
 are still deferred.
+
+
+## T. M1.28 — explicit Query, partition scanning and details
+
+| ID | Scenario | Expected |
+|---|---|---|
+| GUI-62 | Physical, select Unit 0 | Use selection disabled; no device I/O |
+| GUI-63 | Physical, Query succeeds | Device name and Size independently populated; Use enabled |
+| GUI-64 | Physical, Query fails | Use stays disabled; no false success |
+| GUI-65 | Change driver or unit after Query | Old identity/capacity cleared, Use disabled |
+| GUI-66 | Double-click Unit / Volume / Partition | No automatic Use/Close in ANY mode |
+| GUI-67 | Logical/File Use selection | Explicit button unchanged; no double-click |
+| GUI-68 | Partition, before Query | Third list empty, Use disabled, extra Partition info inset visible |
+| GUI-69 | Partition, Query finds valid whole-disk RDB | Third list shows actual PART names (e.g. OS:, WB_1.3:), no duplicates invented |
+| GUI-70 | Highlight RDB partition | Extra inset shows volume, MiB, DosType, LowCyl, HighCyl, block size, sectors-per-block |
+| GUI-71 | Valid simple MBR, Query | Four primary entries at most, each labelled MBR n; metadata uses type code and LBA, no fabricated volume/cylinders |
+| GUI-72 | No recognized map or invalid RDB checksum | Third list empty, Use disabled, explicit status |
+| GUI-73 | GPT / extended MBR / MBR 0x76 nested RDB | Unsupported, no selectable unverified partition |
+| GUI-74 | RDB cycle or partition extent outside medium | Reject map without silently returning partial partitions |
+| GUI-75 | Change selection after partition Query | Partition nodes and detail cleared before list rebuild |
+| GUI-76 | Resize 640x256 Partition window | Third inset above actions; no list overlap or field clipping beyond approved widths |
+| GUI-77 | Device-vs-partition copy of the same unit | Reject same physical address even when displayed endpoint strings differ |
+| GUI-78 | Different units 1 and 10 | Not incorrectly identified as same unit |
+| GUI-79 | Source vs Destination | Query and partition selection are independent, Cancel does not commit |
+| GUI-80 | Native cross-compile / endpoint portable test | \`-Werror\` build and \`test-endpoint\` pass |
+
+**Strict safety gate:** these are tests to run, not claims of PASS.
+Do not run this unverified build against real media. Scanner reads
+only on explicit Query; no sector writes exist, and the source
+driver may still block on synchronous DoIO. Use the controlled
+WinUAE A1200/OS3.1 test HDF. RTG and memory usage profiling remain
+postponed.
