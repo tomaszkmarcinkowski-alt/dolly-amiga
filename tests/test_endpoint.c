@@ -1,6 +1,7 @@
 #include "dolly_endpoint.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 int main(void) {
     DollyEndpoint src={0},dst={0};
     assert(!dolly_demo_can_start(DOLLY_DEMO_SCAN,&src,&dst));
@@ -40,7 +41,15 @@ int main(void) {
     assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(dolly_endpoint_set_logical(&dst,1));
     assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
-    assert(!dolly_endpoint_set_logical(&src,2));
+    assert(dolly_endpoint_set_logical(&src,23));
+    assert(!dolly_endpoint_set_logical(&src,24));
+    assert(dolly_endpoint_set_logical(&src,0));
+    assert(dolly_endpoint_set_logical(&dst,1));
+    strcpy(src.path,"DH0:");
+    strcpy(dst.path,"DH0:");
+    assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
+    strcpy(dst.path,"DH1:");
+    assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(!dolly_endpoint_set_file(&dst,""));
     assert(!dolly_endpoint_set_unit(&dst,2,0));
     assert(dolly_demo_needs_target(DOLLY_DEMO_COPY));
