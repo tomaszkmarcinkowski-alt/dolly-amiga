@@ -100,7 +100,8 @@ if(DOLLY_NATIVE_ONLY)
     target_link_libraries(dolly-sheep-window PRIVATE amiga)
     # Two concurrent views share a single C99 OperationSession.
     add_executable(dolly-two-window-demo amiga/dolly_two_window_demo.c
-      amiga/dolly_amiga_endpoint_picker.c)
+      amiga/dolly_amiga_endpoint_picker.c
+      amiga/dolly_amiga_dos_devices.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
