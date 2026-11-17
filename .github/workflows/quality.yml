@@ -1,14 +1,24 @@
-name: Build and test read-only host inspector
+name: Host build, parser tests and safety checks
 on:
   push:
   pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   build-test:
+    name: C99 (${{ matrix.compiler }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler }}
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror"
       - name: Build
         run: cmake --build build --parallel
       - name: Test
@@ -16,5 +26,22 @@ jobs:
       - name: Documentation checks
         run: |
           test -s README.md
+          test -s LICENSE
           test -s docs/SPECIFICATION.md
-          test -s RETROWARE.md
+          test -s docs/ENGINEERING_JOURNAL.md
+          test -s docs/IFF_FORMAT.md
+          test -s docs/AMIGA_IO.md
+  sanitizers:
+    name: AddressSanitizer + UBSan (host)
+    runs-on: ubuntu-latest
+    env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        run: cmake --build build-asan --parallel
+      - name: Test
+        run: ctest --test-dir build-asan --output-on-failure
