@@ -46,7 +46,7 @@ static STRPTR mode_names[]={
 };
 static STRPTR device_names[]={
     (STRPTR)"scsi.device (demo)",
-    (STRPTR)"uaehf.device (demo)"
+    (STRPTR)"carddisk.device (demo)"
 };
 static STRPTR unit_names[]={(STRPTR)"Unit 0",(STRPTR)"Unit 1"};
 static STRPTR partition_names[]={
