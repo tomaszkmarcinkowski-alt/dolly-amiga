@@ -187,3 +187,27 @@ not Cancel or Exit. The window close gadget has the same meaning.
 The user confirmed the earlier M1.7 WinUAE build and that the resizable
 GadTools appearance is an acceptable minimum on MC68000, 512 KiB Chip,
 Kickstart 2.04. The subsequent Hide-label change is not yet retested.
+
+### M1.7 minimum-width resize regression (2026-11-17)
+
+User-reported WinUAE failure at the horizontal minimum:
+
+```text
+WINDOW before chip=302520
+WINDOW open chip=270288
+WINDOW FAIL: resize reflow
+```
+
+The window did not survive the attempted minimum-width reflow. Source
+inspection identified an inconsistent minimum: Intuition allowed an
+outer window width of 420 pixels while `calculate()` required an
+**inner** width of at least 400 pixels, excluding the OS borders.
+The check was relaxed to 360 pixels inner width, consistent with a
+420-pixel outer minimum on the tested classic border geometry.
+
+Furthermore, geometry is now validated before detaching existing
+GadTools, and the proposed layout is not committed unless validation
+succeeds. A rejected transient geometry with a still-valid previous
+gadget list now reports a warning rather than closing the viewer.
+This fix must be cross-compiled and independently retested on MC68000,
+512 KiB Chip, Kickstart 2.04. No test success is claimed yet.
