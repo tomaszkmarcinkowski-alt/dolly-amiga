@@ -354,7 +354,10 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
          */
         d.progress_x=d.left+86;
         d.progress_w=66;
-        d.stop_quit_w=90;
+        /* Keep 320px client layouts viable: shorten both buttons
+         * together instead of raising the minimum width.
+         */
+        d.stop_quit_w=avail_w<360?70:90;
         d.quit_x=d.right-d.stop_quit_w+1;
         d.stop_x=d.quit_x-d.stop_quit_w-6;
         if(d.stop_x<d.progress_x+d.progress_w+6)return 0;
