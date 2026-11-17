@@ -212,15 +212,18 @@ static int pick_file(DollyEndpoint *result,unsigned destination) {
     return ok;
 }
 int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
-                      unsigned role,const DollyEndpoint *initial) {
+                      unsigned role,const DollyEndpoint *initial,
+                      DollyEndpointMode preferred_mode) {
     LONG top;
-    if(!p || !screen || role>1u)return 0;
+    if(!p || !screen || role>1u ||
+       (unsigned)preferred_mode>3u)return 0;
     if(p->window)return 1;
     memset(p,0,sizeof(*p));
     p->screen=screen;
     p->role=role;
     if(initial)p->result=*initial;
-    p->mode=dolly_endpoint_mode(initial);
+    p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE) ?
+            dolly_endpoint_mode(initial) : preferred_mode;
     make_list(&p->devices,p->device_nodes,device_names);
     make_list(&p->units,p->unit_nodes,unit_names);
     make_list(&p->partitions,p->partition_nodes,partition_names);
