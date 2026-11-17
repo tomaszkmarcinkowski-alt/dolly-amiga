@@ -14,6 +14,10 @@ int main(void){
     assert(dolly_dma_check_buffer(0x00100000u,0,0xffffffffu,2)==DOLLY_DMA_BAD_PROFILE);
     assert(dolly_dma_check_buffer(UINT64_MAX-1,4,0xffffffffu,2)==DOLLY_DMA_ADDRESS_OVERFLOW);
     assert(dolly_dma_check_buffer(UINT64_C(0x100000000),512,0xffffffffu,2)==DOLLY_DMA_OUTSIDE_MASK);
+    /* Endpoints may each satisfy a sparse mask even though the interval
+     * traverses a forbidden address region in between them. */
+    assert(dolly_dma_check_buffer(0x00000ff0u,0x1020u,
+                                  0x00002ffeu,2)==DOLLY_DMA_OUTSIDE_MASK);
     puts("DMA profile range/alignment tests passed");
     return 0;
 }
