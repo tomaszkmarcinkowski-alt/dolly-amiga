@@ -137,3 +137,32 @@ ctest --test-dir build-native-tests --output-on-failure
 
 Native UI acceptance remains on the established WSL2 -> Docker m68k
 build -> WinUAE route. Do not run AmigaOS binaries on the WSL host.
+
+## E. M1.21 live AmigaDOS logical discovery (next WinUAE run)
+
+This is a **read-only preview** of names registered in the AmigaDOS
+device list (LockDosList(LDF_DEVICES|LDF_READ) /
+NextDosEntry(LDF_DEVICES)). A DOS device list entry is **not**
+proof that a medium is currently inserted or that a filesystem is
+mounted. The physical and partition chooser lists remain synthetic.
+
+| ID | Case | Expected result |
+|---|---|---|
+| DISC-10 | Open Logical on reference Workbench 640x256 | Real DOS device names, not synthetic DH0/DH1 |
+| DISC-11 | Machine has DF0: and/or DH0: | Present names appear only if registered; no fabricated entries |
+| DISC-12 | Select registered DOS device and Use selection | Main shows its actual name with colon; Source/Destination independent |
+| DISC-13 | Double-click registered device | Same result as Use selection |
+| DISC-14 | Repeat opening both pickers | No crash, stale names or unexpected mutation |
+| DISC-15 | Switch modes, resize, Cancel | Selection controls remain usable; Cancel does not commit |
+| DISC-16 | No registered entries or discovery unavailable | Explicit preview message; no selectable fake item |
+| DISC-17 | More than 24 entries | No overflow, explicit first-24 limitation |
+| DISC-18 | Source and target refer to same DOS name | Refuse Copy even if entry ordering changes |
+| DISC-19 | Physical device / Partition after upgrade | Clearly synthetic test labels remain; no physical I/O |
+| DISC-20 | Startup Shell and exit | No Software Failure, exit cleanly |
+
+**Do not infer** media presence, unit index, device driver or RDB/MBR
+from a DOS registration name. No OpenDevice(), DoIO(), TD_READ,
+CMD_READ or write operation is introduced in M1.21.
+
+State: **implementation committed; untested in Docker/WinUAE**.
+RTG tests and RAM profiling are still postponed.
