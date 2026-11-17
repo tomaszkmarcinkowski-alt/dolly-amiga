@@ -182,21 +182,21 @@ static void update_selection_preview(DollyEndpointPicker *p) {
         (const char *)unit_names[p->unit] : NULL;
     const char *part=p->has_partition ?
         (const char *)partition_names[p->partition] : NULL;
+    /* These names come from fixed, short synthetic arrays. */
     if(p->mode==DOLLY_MODE_LOGICAL) {
         if(p->has_logical)
-            snprintf(full,sizeof(full),"%s",
-                     (const char *)logical_names[p->logical]);
+            strcpy(full,(const char *)logical_names[p->logical]);
         else strcpy(full,"Select logical device...");
     } else if(!p->has_device) {
         strcpy(full,"Select device...");
     } else if(!p->has_unit) {
-        snprintf(full,sizeof(full),"%s / select unit...",dev);
+        sprintf(full,"%s / select unit...",dev);
     } else if(p->mode==DOLLY_MODE_PARTITION && !p->has_partition) {
-        snprintf(full,sizeof(full),"%s / %s / select partition...",dev,unit);
+        sprintf(full,"%s / %s / select partition...",dev,unit);
     } else if(p->mode==DOLLY_MODE_PARTITION) {
-        snprintf(full,sizeof(full),"%s / %s / %s",dev,unit,part);
+        sprintf(full,"%s / %s / %s",dev,unit,part);
     } else {
-        snprintf(full,sizeof(full),"%s / %s (whole unit)",dev,unit);
+        sprintf(full,"%s / %s (whole unit)",dev,unit);
     }
     strncpy(p->selection_display,full,sizeof(p->selection_display)-1u);
     p->selection_display[sizeof(p->selection_display)-1u]='\0';
