@@ -193,3 +193,119 @@ RC=0
 All three independent allocations restored their initial free Chip RAM.
 These confirm raw planar-buffer feasibility, **not** a rendered Intuition
 screen or the full Sheep Counter memory footprint.
+
+## M1.3 — first real Sheep Counter screen (UNVERIFIED)
+
+Experimental AmigaOS 2.04+ `dolly-screen-smoke` target opens its **own**
+320x256, 2-bitplane (four-colour) Intuition screen, draws a few text lines
+and closes after about 250 display frames. It captures Chip RAM and largest
+contiguous free block before opening, while open, and after closing. It
+requires at least 128 KiB available Chip RAM and a largest contiguous
+block of 64 KiB before attempting to open.
+
+This is **not** the final Sheep Counter: no real sheep graphics, progress
+animations, user input, audio, gadget UI, disk reads or writes. The screen
+smoke is a separate CLI executable; the proven memory-test binary is left
+untouched.
+
+The screen target is compiled only in an actual m68k native-only build and
+links against AmigaOS's system library stubs (`-lamiga`). In the existing
+Windows 11 + WSL2 Ubuntu + Docker workflow, use a fresh build folder:
+
+```sh
+cmake -S . -B build-m68k-screen \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/amigaos-m68k.cmake \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-m68k-screen -j2
+```
+
+Copy `build-m68k-screen/dolly-screen-smoke` to the WinUAE shared
+`DOLLYTEST:` directory, then run:
+
+```text
+Stack 16384
+DOLLYTEST:dolly-screen-smoke
+Echo $RC
+```
+
+Capture the full `SCREEN before`, `SCREEN opened`, `SCREEN closed`
+and `SCREEN PASS/FAIL` output, or any compile/runtime error. A screen
+allocation can legitimately fail on a 512 KiB machine; record and analyze
+rather than increasing RAM. CloseScreen cleanup is mandatory. Do not claim
+a native PASS until the tester has run it under WinUAE.
+
+### M1.3 WinUAE screen result and fragmentation follow-up (2026-11-17)
+
+Tester reports native `dolly-screen-smoke` successfully opened and closed a
+320x256 two-bitplane Intuition screen on MC68000 / 512 KiB Chip /
+Kickstart 2.04. The first measured run was:
+
+```text
+SCREEN before chip=306760 largest=306160
+SCREEN opened chip=283800 largest=283712
+SCREEN closed chip=306760 largest=283544
+SCREEN PASS
+```
+
+The screen occupied **22960 bytes of free Chip RAM** while open;
+all 22960 bytes were returned after closing. However, the largest
+contiguous free block remained **22616 bytes smaller** than before
+the screen opened, despite unchanged total free memory. This
+may indicate fragmentation or other allocator/runtime behavior,
+not necessarily a leak. The first implementation's `SCREEN PASS`
+was based only on restoration of total free Chip RAM.
+
+The smoke tool now prints separate messages for free-RAM cleanup
+(PASS/FAIL) and largest-block changes (WARN/NOTE). Follow-up:
+run the screen test three times consecutively in the same WinUAE
+session and record `before/opened/closed` for each. Track whether
+the largest block stabilizes, shrinks repeatedly, or recovers.
+Do not treat an isolated `SCREEN PASS` as proof of fragmentation-free
+operation. No device or disk access is performed by this test.
+
+### M1.3 follow-up native screen run (2026-11-17)
+
+A subsequent tester-supplied WinUAE screenshot shows:
+
+```text
+SCREEN before chip=306512 largest=283528
+SCREEN opened chip=283552 largest=283096
+SCREEN closed chip=306512 largest=283880
+SCREEN PASS: total free Chip RAM restored
+SCREEN NOTE: largest free block grew by 352 bytes
+```
+
+Total free Chip RAM returned to its initial value; transient
+screen allocation accounted for 22960 bytes. The largest free
+block increased by 352 bytes in this run, as opposed to the
+22616-byte decrease observed in the earlier run. Memory layout
+varies between runs, and these snapshots alone do not establish
+either an accumulating memory leak or absence of fragmentation.
+Further consecutive runs in the same emulator session are useful.
+
+### M1.3 additional consecutive WinUAE screen runs (2026-11-17)
+
+On the same MC68000 / 512 KiB Chip / Kickstart 2.04 session,
+the tester supplied two further runs immediately following the previous
+screen test:
+
+```text
+SCREEN before chip=306512 largest=283880
+SCREEN opened chip=283552 largest=283448
+SCREEN closed chip=306512 largest=283280
+SCREEN PASS
+SCREEN WARN: largest free block shrank by 600 bytes
+
+SCREEN before chip=306512 largest=283280
+SCREEN opened chip=283552 largest=283280
+SCREEN closed chip=306512 largest=283448
+SCREEN PASS
+SCREEN NOTE: largest free block grew by 168 bytes
+```
+
+Together with the prior run (largest block 283528 -> 283880),
+the three-run sequence ends at 283448, a net change of -80 bytes.
+Each run returns total free Chip RAM to 306512 bytes, while
+the contiguous largest block fluctuates in both directions.
+No sustained loss of total free Chip RAM is observed in this
+short sequence. This does not establish long-run stability.
