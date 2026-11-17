@@ -1,4 +1,4 @@
-# Dolly GUI architecture — GadTools + optional backends
+# Dolly GUI architecture — MVP GadTools only; future optional backends
 
 **Status 2026-11-17:** architecture and portable layout/notification components are in the repository. There is **no native GadTools window, ReAction/MUI module loader, verified 68000 binary or WinUAE run** yet.
 
@@ -6,9 +6,11 @@
 
 | Backend | Delivery | Requirement |
 |---|---|---|
-| GadTools | Built in; **always available** | AmigaOS 2.04+, MC68000 |
-| ReAction | Optional external module | Only if its classes/libraries are installed; do not assume availability on OS 2.x |
-| MUI | Future independent optional module | Only if installed, never mandatory |
+| GadTools | **Only MVP GUI**, built in | AmigaOS 2.04+, MC68000 |
+| ReAction | **Post-MVP optional external module** | Developed and distributed later, only when its classes/libraries are installed |
+| MUI | **Post-MVP, later than the core GUI**, independent optional module | Only if installed, never mandatory |
+
+**MVP freeze (2026-11-17):** No ReAction/MUI implementation, runtime loading, compatibility testing or packaging is a condition for the MVP release. Their design contract may be retained to avoid future architectural coupling, but their delivery is an independent **post-MVP** milestone. All screens, dialogs, warnings and Sheep Inventory in MVP use GadTools. The standard executable has no link-time dependency on ReAction or MUI. Resource files and future plug-ins use the installation root `DOLLY:`; see [installation layout](INSTALLATION.md).
 
 The versioned toolkit-neutral contract lives in `include/dolly_gui_backend.h`. It defines a core-owned host interface and a backend table for events/main window/notice/window relayout. **It is a design contract, not an implemented dynamic loader**. We must verify actual AmigaOS shared-library/LoadSeg ABI, compiler calling conventions, symbol lifetime and packaging before describing modules as loadable plugins. Backend failure must show a brief message and revert to built-in GadTools, never fail to launch Dolly.
 
