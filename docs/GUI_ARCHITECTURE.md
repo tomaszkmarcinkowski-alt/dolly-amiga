@@ -985,3 +985,31 @@ risk new code path from the previously accepted M1.22 GUI.
 
 Test commands and expected observations are in docs/TEST_MATRIX.md.
 RTG tests and memory footprint profiling remain postponed.
+
+### M1.24 — labels alongside recessed picker fields
+
+At the 606x195 minimum, both Source and Destination now display
+their selection preview with a left-side label **in the same row**:
+"Selected device" for Physical/Logical, "Selected partition" for
+Partition, and "Selected file" for File. The preview textbox begins
+at x=180 (window relative) and expands to the right border.
+
+Physical and Partition keep two vertical preview rows. Their second
+row now comprises a "Device name" left label, a recessed name value,
+a separate "Size" label, and a **second recessed** size value at
+the far right. The capacity value is no longer embedded in the
+INQUIRY identity string. Geometry derives these widths from the
+live client border, expanding the name value with window width and
+anchoring the 102px size value to the right. The 3px vertical
+gaps and baseline action buttons remain unchanged.
+
+File Source keeps its metadata field with the inline "File info"
+caption, and File Destination retains its image format Cycle with
+inline "Image format" caption. Actual physical identities and sizes
+remain unavailable in the GUI until the independently gated M1.23
+probe is validated; synthetic Device/Unit choices do **not** trigger
+hardware queries. Read-only UI geometry only.
+
+Tests GUI-38..46 in docs/TEST_MATRIX.md. The code has not yet
+been cross-compiled or validated in WinUAE. RTG and RAM profiling
+are postponed at the user's request.
