@@ -13,6 +13,7 @@
 #include <graphics/rastport.h>
 #include <graphics/text.h>
 #include <libraries/gadtools.h>
+#include <utility/tagitem.h>
 #include <proto/exec.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
@@ -24,8 +25,8 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 
-#define COLS 20u
-#define ROWS 6u
+#define COLS 24u
+#define ROWS 8u
 #define TOTAL (COLS * ROWS)
 #define GID_HIDE 100u
 #define GID_BLOCKS 101u
@@ -82,10 +83,11 @@ static int calculate(Ui *u) {
     bottom=l->progress_y-12;
     grid_height=bottom-top;
     if(grid_height<(LONG)(ROWS*10u))return 0;
-    l->gx=l->left;
-    l->gy=top;
-    l->stepx=l->progress_w/(LONG)COLS;
-    l->stepy=grid_height/(LONG)ROWS;
+    /* Keep a small inset for the classic recessed GadTools bevel. */
+    l->gx=l->left+4;
+    l->gy=top+4;
+    l->stepx=(l->progress_w-8)/(LONG)COLS;
+    l->stepy=(grid_height-8)/(LONG)ROWS;
     if(l->stepx<10 || l->stepy<10)return 0;
     /* Commit only after full validation; a rejected resize keeps old state. */
     u->l=proposed;
@@ -119,6 +121,18 @@ static void draw_all(Ui *u) {
          l->progress_y-2);
     write_text(rp,u->text,l->left,u->win->BorderTop+16,
                "Surface scan (synthetic, read-only)");
+    {
+        struct TagItem frame_tags[3];
+        frame_tags[0].ti_Tag=GT_VisualInfo;
+        frame_tags[0].ti_Data=(ULONG)u->visual;
+        frame_tags[1].ti_Tag=GTBB_Recessed;
+        frame_tags[1].ti_Data=TRUE;
+        frame_tags[2].ti_Tag=TAG_DONE;
+        frame_tags[2].ti_Data=0;
+        DrawBevelBoxA(rp,l->gx-3,l->gy-3,
+                      (LONG)COLS*l->stepx+6,
+                      (LONG)ROWS*l->stepy+6,frame_tags);
+    }
     for(i=0;i<TOTAL;++i)draw_cell(u,i,i==u->done_blocks && i<TOTAL);
     rect(rp,u->shade,l->progress_x,l->progress_y,
          l->progress_x+l->progress_w-1,l->progress_y+8);
@@ -221,10 +235,11 @@ int main(void) {
     u.screen=LockPubScreen(NULL);
     if(!u.screen){puts("WINDOW SKIP: public screen unavailable");rc=20;goto cleanup;}
     if((ULONG)u.screen->Width<MIN_WIDTH ||
-       (ULONG)u.screen->Height<MIN_HEIGHT+(ULONG)u.screen->BarHeight) {
+       (ULONG)u.screen->Height<MIN_HEIGHT+(ULONG)u.screen->BarHeight+1ul) {
         puts("WINDOW SKIP: public screen too small");rc=20;goto cleanup;
     }
-    top=(ULONG)u.screen->BarHeight;
+    /* A 1-pixel gap keeps the Workbench screen bar bottom edge clear. */
+    top=(ULONG)u.screen->BarHeight+1ul;
     height=(ULONG)u.screen->Height-top;
     u.visual=GetVisualInfo(u.screen,TAG_DONE);
     u.di=GetScreenDrawInfo(u.screen);
