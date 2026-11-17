@@ -1473,3 +1473,19 @@ are not silently reused after selecting another source.
 The M1.45 window has a fixed 606x204 outer rectangle designed for the
 640x256 baseline. Its real hardware behavior and pixel-fit are pending
 WinUAE verification; no media writer is connected.
+
+### M1.46 — Sheep Inventory details beside partition list
+
+Keep the accepted main window exactly as in M1.41; update only the
+SHINEPEN build label to `Dolly M1.46`. In the separate Sheep Inventory
+view, the LISTVIEW is narrowed to the left column and the right panel
+shows details for the selected partition. Initial state prompts for a
+selection. LISTVIEW IDCMP_GADGETUP code is copied before GT_ReplyIMsg,
+bounds-checked against the validated partition count and used to refresh
+only the details rectangle; no read is triggered by selection.
+
+Metadata shown: hex DosType, signed BootPri, MaxTransfer, DMA Mask,
+filesystem block size, SectorPerBlock, cylinder interval, partition size.
+For MBR partitions display type and explicit RDB-field unavailability.
+The controls retain the fixed window height for 640x256. Real
+WinUAE/AmigaOS 2.04 visual verification remains pending.
