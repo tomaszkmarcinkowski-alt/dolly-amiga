@@ -421,3 +421,11 @@ add_test(NAME self_executable_crc32_check COMMAND test-selfcheck)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-selfcheck PRIVATE -UNDEBUG)
 endif()
+
+# Post-link executable CRC slot test; no runtime manifest/launcher required.
+if(Python3_Interpreter_FOUND)
+  add_test(NAME embedded_crc32_stamp
+    COMMAND ${Python3_EXECUTABLE}
+      ${PROJECT_SOURCE_DIR}/tests/test_stamp_selfcheck.py
+      ${PROJECT_SOURCE_DIR}/tools/stamp_selfcheck.py)
+endif()
