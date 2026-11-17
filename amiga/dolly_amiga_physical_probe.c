@@ -77,7 +77,7 @@ static int extract(const struct DosList *entry,ProbeCandidate *out) {
     const struct FileSysStartupMsg *f;
     const struct DosEnvec *env;
     if(!entry)return 0;
-    startup=(BPTR)entry->dol_Startup;
+    startup=(BPTR)entry->dol_misc.dol_handler.dol_Startup;
     if(!valid_bptr(startup,sizeof(*f)))return 0;
     f=(const struct FileSysStartupMsg *)BADDR(startup);
     if(!valid_bptr(f->fssm_Environ,sizeof(ULONG)*11u))return 0;
