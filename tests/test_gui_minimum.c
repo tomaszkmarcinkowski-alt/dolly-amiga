@@ -19,9 +19,18 @@ int main(void) {
     assert(a.outer_width>=2*(104+12)+6+8+8);
     assert(b.outer_width>=24*10+8+8+8);
     assert(b.outer_height>=140+4+12+4);
-    m.heading_width+=100;
+    /* A longer heading that still fits within the control-imposed
+     * 320px client minimum must not enlarge the window.
+     */
+    m.heading_width=290;
+    c=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_MAIN,m);
+    assert(c.valid && c.outer_width==a.outer_width);
+    /* Once measured text exceeds that minimum, the window must grow. */
+    m.heading_width=400;
     c=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_MAIN,m);
     assert(c.valid && c.outer_width>a.outer_width);
+    assert(c.outer_width>=400+2*m.padding_x+
+                          m.border_left+m.border_right);
     m.heading_width=190;
     m.padding_x=2;
     c=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_SHEEP,m);
