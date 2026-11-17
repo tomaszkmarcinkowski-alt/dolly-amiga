@@ -44,7 +44,7 @@ DollySelfCheckReport dolly_selfcheck_embedded_stream(
     unsigned field=0,mode=0,found=0;
     uint32_t embedded_crc=0;
     int valid=parse_record(loaded_record,&embedded_crc);
-    if(!reader || !loaded_record || !valid){
+    if(!reader || !loaded_record || valid!=1){
         result.result=valid<0?DOLLY_SELF_RECORD_UNSTAMPED:
                               DOLLY_SELF_RECORD_INVALID;
         return result;
