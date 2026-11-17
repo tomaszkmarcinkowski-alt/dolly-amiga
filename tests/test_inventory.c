@@ -12,6 +12,7 @@ typedef struct InventoryCheck {
     unsigned overflow_seen;
     unsigned dos_unavailable;
     unsigned mask_seen,mask_unavailable;
+    unsigned boot_seen,boot_unavailable;
 } InventoryCheck;
 static int collect(const DollyInventoryField *f,void *user){
     InventoryCheck *c=(InventoryCheck *)user;
@@ -26,6 +27,12 @@ static int collect(const DollyInventoryField *f,void *user){
     }
     if(!strcmp(f->key,"dos_type") &&
        f->availability==DOLLY_INV_UNAVAILABLE)c->dos_unavailable++;
+    if(!strcmp(f->key,"boot_priority")){
+        c->boot_seen++;
+        assert(f->kind==DOLLY_INV_I64);
+        if(f->availability==DOLLY_INV_UNAVAILABLE)c->boot_unavailable++;
+        else assert(f->signed_number==-5);
+    }
     if(!strcmp(f->key,"dma_mask")){
         c->mask_seen++;
         if(f->availability==DOLLY_INV_UNAVAILABLE)c->mask_unavailable++;
@@ -76,15 +83,17 @@ int main(void){
     p.dma_mask_present=1;p.dma_mask=0x00fffffeu;
     p.block_size_longwords=128;p.sectors_per_block=1;
     p.reserved_blocks=2;p.preallocated_blocks=0;
+    p.boot_priority_present=1;p.boot_priority=-5;
     assert(dolly_inventory_partition(&p,collect,&c)==0);
-    assert(c.received==16&&c.mask_seen==1&&c.max_seen==1&&c.name_seen==1&&c.derived_count==3);
+    assert(c.received==17&&c.boot_seen==1&&c.mask_seen==1&&c.max_seen==1&&c.name_seen==1&&c.derived_count==3);
     assert(c.max_unavailable==0&&c.overflow_seen==0);
     memset(&c,0,sizeof(c));p.max_transfer_present=0;
     p.dos_type_present=0;
     p.dma_mask_present=0;
+    p.boot_priority_present=0;
     p.start_bytes=UINT64_MAX;p.length_bytes=512;
     assert(dolly_inventory_partition(&p,collect,&c)==0);
-    assert(c.max_unavailable==1&&c.overflow_seen==1&&c.dos_unavailable==1&&c.mask_unavailable==1);
+    assert(c.max_unavailable==1&&c.overflow_seen==1&&c.dos_unavailable==1&&c.mask_unavailable==1&&c.boot_unavailable==1);
     assert(dolly_inventory_partition(&p,stop_early,&n)==7&&n==1);
     {
         DollyMbrPartition m;
