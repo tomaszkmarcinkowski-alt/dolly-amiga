@@ -1426,3 +1426,17 @@ automatic probing of absent media or write commands are introduced.
 This is only a correctness/safety gate around the existing native
 query path; device-presence verification, capacity validation and
 hardware compatibility require real WinUAE/device testing.
+
+### M1.43 — physical query geometry validation
+
+Keep all accepted M1.41 main-window dimensions. Explicit Query now
+validates that the physical sector size returned by either
+`TD_GETGEOMETRY` or SCSI `READ CAPACITY(10)` is a power of two between
+128 and 65536 bytes inclusive. A nonzero sector size alone is not
+adequate evidence of usable media. If TD geometry is invalid, attempt
+the existing SCSI capacity fallback. A verified geometry also records
+its origin (`TRACKDISK` or `SCSI_CAPACITY10`) for future Sheep Inventory
+and capacity audits. Where SCSI INQUIRY did not identify the model,
+the Device info field shows the sector size and evidence source.
+No writes, enumeration of arbitrary unit numbers or auto-probing have
+been added. Native compilation and WinUAE validation remain pending.
