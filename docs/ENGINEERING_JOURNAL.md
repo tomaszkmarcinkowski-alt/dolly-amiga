@@ -304,12 +304,31 @@
 **Test:** wcześniejszy strumieniowy test Inventory GCC/Clang PASS; pełny obecny zestaw CTest z nowymi fixture'ami nadal niepotwierdzony. Jest to **ostrzeżenie o niespójności**, a nie automatyczny wyrok o uszkodzeniu dysku.
 
 
+### DJ-0031 · 2026-11-17 · Sheep Inventory / metadane · WDROŻONO PROTOTYP, TESTY LOKALNE PASS
+**Temat:** Oddzielenie pochodzenia pola od jego *klasy wiarygodności*.
+
+**Problem:** informacja z zapisanej tablicy partycji może wyglądać jak aktualny parametr sterownika, chociaż jest tylko deklaracją. W szczególności `de_MaxTransfer` i `de_Mask` w RDB nie dowodzą, że sterownik rzeczywiście stosuje te wartości.
+
+**Działanie:** `DollyInventoryField.evidence` rozróżnia `DECLARED`, `OBSERVED`, `DERIVED` oraz `ESTIMATED`. Obecni dostawcy MBR/RDB emitują tylko `DECLARED` i `DERIVED`. `OBSERVED` pozostaje dla przyszłych odczytów Exec/DosList i urządzeń.
+
+**Test:** lokalne odtworzenie zmienionego modułu Inventory, GCC/Clang C99 z ostrymi ostrzeżeniami: PASS. Pełen bieżący build repozytorium nadal nie został niezależnie wykonany.
+
+### DJ-0032 · 2026-11-17 · Sheep Inventory / powtarzalność ostrzeżeń · WDROŻONO PROTOTYP, TESTY LOKALNE PASS
+**Temat:** Logika ostrzegania o MaxTransfer i kolizjach RDB nie powinna zależeć od konkretnego programu CLI.
+
+**Rozwiązanie:** dwa strumienie: `dolly_inventory_partition_notices()` i `dolly_inventory_rdb_notices()`, z kodem, kategorią i opisem każdego ostrzeżenia. Obsługują między innymi `MAXTRANSFER_ABOVE_REFERENCE`, `SECTORS_PER_BLOCK_NONSTANDARD`, `MEMORY_MASK_ZERO`, `RDB_PARTITIONS_OVERLAP` oraz kolizje `RDSK/PART`. `dolly-inventory` korzysta z tej warstwy zamiast duplikować algorytmy.
+
+**Test:** test jednostkowy reguł partycji GCC/Clang i GCC ASan/UBSan PASS. Po włączeniu audytu zakresów RDB test GCC/Clang PASS, w tym wczesne przerwanie callbacku. Pełny aktualny CTest/Actions pozostaje do weryfikacji.
+
+**Ciekawostka:** brak ostrzeżeń oznacza tylko, że *aktualnie rozpoznawane problemy* nie zostały zgłoszone. Nie oznacza, że wolumen, nośnik ani kontroler są zdrowe.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0031 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0033 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
