@@ -16,6 +16,9 @@ typedef struct InventoryCheck {
 static int collect(const DollyInventoryField *f,void *user){
     InventoryCheck *c=(InventoryCheck *)user;
     c->received++;
+    if(f->origin==DOLLY_INV_DERIVED)
+        assert(f->evidence==DOLLY_EVIDENCE_DERIVED);
+    else assert(f->evidence==DOLLY_EVIDENCE_DECLARED);
     if(f->origin==DOLLY_INV_DERIVED)c->derived_count++;
     if(!strcmp(f->key,"name")){
         assert(f->kind==DOLLY_INV_TEXT);
@@ -40,6 +43,7 @@ static int collect(const DollyInventoryField *f,void *user){
 static int count_mbr(const DollyInventoryField *f,void *user){
     unsigned *count=(unsigned *)user;
     assert(f->origin==DOLLY_INV_MBR);
+    assert(f->evidence==DOLLY_EVIDENCE_DECLARED);
     assert(f->kind==DOLLY_INV_U64);
     assert(f->availability==DOLLY_INV_PRESENT);
     if(!strcmp(f->key,"mbr_type"))assert(f->number==0x76u);
@@ -50,6 +54,8 @@ static int count_mbr(const DollyInventoryField *f,void *user){
 static int count_rdb(const DollyInventoryField *f,void *user){
     unsigned *n=(unsigned *)user;
     assert(f->availability==DOLLY_INV_PRESENT);
+    assert(f->evidence==(f->origin==DOLLY_INV_DERIVED?
+                          DOLLY_EVIDENCE_DERIVED:DOLLY_EVIDENCE_DECLARED));
     if(!strcmp(f->key,"rdb_block_bytes"))assert(f->number==512);
     if(!strcmp(f->key,"rdb_partition_count"))assert(f->number==2);
     ++*n;return 0;
@@ -104,6 +110,8 @@ int main(void){
         assert(fields==7);
         assert(dolly_inventory_rdb_header(&hdr,stop_early,&n)==7);
     }
+    assert(!strcmp(dolly_inventory_evidence_name(DOLLY_EVIDENCE_DECLARED),"declared"));
+    assert(!strcmp(dolly_inventory_evidence_name(DOLLY_EVIDENCE_OBSERVED),"observed"));
     assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_UNAVAILABLE),"not present"));
     assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_NOT_QUERIED),"not queried"));
     assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_UNSUPPORTED),"unsupported"));
