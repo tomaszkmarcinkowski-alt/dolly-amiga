@@ -260,12 +260,33 @@
 **Pozostałe ryzyko:** docelowo zastąpić `assert()` w procedurach inicjalizacji testów jawnymi makrami CHECK z diagnostyką także poza tym zestawem kompilatorów. Aktualny GitHub Actions po zmianach pozostaje do niezależnej weryfikacji.
 
 
+### DJ-0027 · 2026-11-17 · Sheep Inventory / architektura · PROTOTYP DZIAŁA LOKALNIE
+**Temat:** Rozdzielenie pozyskiwania pól inwentarza od interfejsu użytkownika.
+
+**Odkrycie:** budowanie całego raportu w jednej dużej strukturze jest niewskazane na Amidze 68000 z małym stosem i ograniczonym RAM. Informacje o partycji można generować jedna po drugiej, z polami `key`, `label`, `unit`, `origin`, `availability` i wartością typu `uint64_t`/tekst.
+
+**Implementacja:** `include/dolly_inventory.h`, `src/dolly_inventory.c`, `tests/test_inventory.c` i prototyp `dolly-inventory`. Callback nie kopiuje dużych buforów, dopuszcza wcześniejsze zatrzymanie i nie odczytuje dodatkowych sektorów.
+
+**Testy:** lokalna kompilacja GCC C99 z `-Wall -Wextra -Werror -pedantic`, Clang oraz GCC ASan/UBSan: wszystkie **PASS**; host CLI uruchomiony na syntetycznym MBR `0x76` z RDB na odtworzonym parserze. Nie jest to jeszcze weryfikacja pełnej bieżącej gałęzi GitHub ani kompilacja AmigaOS.
+
+**Ograniczenia:** obecnie tylko dziewięć pól `PART`; brak informacji z aktywnego DosList/urządzeń, pełnej geometrii i woluminów. Dane obrazu nie mogą być automatycznie uznawane za stan sterownika rzeczywistego dysku. Zob. [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13) i [projekt warstwy informacji](SHEEP_INVENTORY.md).
+
+### DJ-0028 · 2026-11-17 · DosEnvec / wiarygodność · POPRAWIONE, TEST JEDNOSTKOWY PASS
+**Temat:** Zero w polu `de_DosType` nie musi oznaczać tego samego co brak pola.
+
+**Problem:** przy skróconych historycznych tablicach `DosEnvec` parser nadawał nieobecnemu `de_DosType` wartość `0`, bez oddzielnego znacznika dostępności. Mogłoby to powodować mylący raport Sheep Inventory.
+
+**Działanie:** `DollyPartition` zawiera `dos_type_present`; ustawiane jest tylko, gdy `de_TableSize >= 16`. Warstwa Inventory przedstawia brak pola jako `UNAVAILABLE`, nie jako rzeczywisty DosType równy zero.
+
+**Weryfikacja:** dodano asercję w `tests/test_rdb.c` i skompilowano samodzielny test strumienia pól z poprawionym modelem pod GCC/Clang. Cały bieżący CTest repozytorium pozostaje do niezależnej weryfikacji.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0027 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0029 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
