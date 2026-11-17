@@ -117,3 +117,8 @@ target_link_libraries(test-rdb-audit PRIVATE dollyrdbaudit)
 add_test(NAME rdb_collision_audit COMMAND test-rdb-audit)
 target_link_libraries(dolly-layout PRIVATE dollyrdbaudit)
 target_link_libraries(dolly-rdb PRIVATE dollyrdbaudit)
+
+# Deterministic malformed-input stability test (synthetic images only).
+add_executable(test-rdb-mutations tests/test_rdb_mutations.c)
+target_link_libraries(test-rdb-mutations PRIVATE dollymap)
+add_test(NAME rdb_mutation_stability COMMAND test-rdb-mutations)
