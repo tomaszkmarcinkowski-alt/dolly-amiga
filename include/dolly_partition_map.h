@@ -21,7 +21,8 @@ typedef struct DollyPartitionMap {
  DollyMbrPartition primary[DOLLY_MBR_MAX];
  uint8_t has_whole_disk_rdb;
  uint8_t hybrid_mbr_rdb; /* Both MBR and disk-wide RDB found. */
- uint8_t hybrid_mbr_overlap; /* RDB data overlaps primary MBR partition. */
+ uint8_t hybrid_mbr_overlap;
+ uint8_t suspect_whole_disk_rdb; /* Corrupt disk-wide RDSK/PART candidate */ /* RDB data overlaps primary MBR partition. */
  DollyRdb whole_disk_rdb;
 } DollyPartitionMap;
 /* Read-only primary MBR scan; LBA units equal logical device block size.
