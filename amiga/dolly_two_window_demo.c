@@ -7,6 +7,7 @@
 #include "dolly_gui_minimum.h"
 #include "dolly_endpoint.h"
 #include "dolly_amiga_endpoint_picker.h"
+#include "dolly_amiga_inventory_view.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
@@ -52,7 +53,7 @@ struct Library *AslBase;
 #define MAIN_INVENTORY_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly M1.44"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly M1.45"
 #define MAIN_CONTROLS_OFFSET 87
 #define MAIN_PROGRESS_OFFSET 125
 #define MAIN_STATUS_OFFSET 147
@@ -94,6 +95,7 @@ static DollyDemoView main_view, sheep_view;
 /* SYNTHETIC device tree. This demo never opens physical media. */
 static DollyEndpoint selected_source,selected_target;
 static DollyEndpointPicker source_picker,target_picker;
+static DollyNativeInventoryView inventory_view;
 static STRPTR demo_operations[]={
     (STRPTR)"Surface Scan",
     (STRPTR)"Inventory",
@@ -219,6 +221,9 @@ static void update_main_status(void) {
     if(operation.state==DOLLY_OP_RUNNING)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Operation in progress...");
+    else if(selected_operation==DOLLY_DEMO_INVENTORY && can)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Ready for read-only Inventory.");
     else if(selected_operation==DOLLY_DEMO_DISK_VET)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Disk Vet planned; no repairs available yet.");
@@ -1006,7 +1011,11 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                       dolly_demo_can_start(
                         (DollyDemoOperation)selected_operation,
                         &selected_source,&selected_target)) {
-                if(dolly_operation_start(&operation,GRID_TOTAL)==DOLLY_OP_OK) {
+                if(selected_operation==DOLLY_DEMO_INVENTORY) {
+                    if(!dolly_inventory_view_open(&inventory_view,
+                                                   public_screen,&selected_source))
+                        puts("INVENTORY WARN: unable to open Inventory");
+                } else if(dolly_operation_start(&operation,GRID_TOTAL)==DOLLY_OP_OK) {
                     update_numbers(&main_view);
                     if(sheep_view.window) {
                         draw_full(&sheep_view,0);
@@ -1101,6 +1110,7 @@ int main(void) {
             refresh_main_selection();
         }
         if(sheep_view.window)process_view(&sheep_view,0,&quit);
+        dolly_inventory_view_pump(&inventory_view);
         if(++frames>=8u && operation.state==DOLLY_OP_RUNNING) {
             unsigned old;
             frames=0;
@@ -1122,6 +1132,7 @@ int main(void) {
            (unsigned)operation.sheep_counter_visible);
     rc=0;
 cleanup:
+    dolly_inventory_view_close(&inventory_view);
     dolly_picker_close(&source_picker);
     dolly_picker_close(&target_picker);
     hide_sheep();
