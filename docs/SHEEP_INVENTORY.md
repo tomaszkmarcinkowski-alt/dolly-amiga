@@ -76,3 +76,13 @@ Local standalone compiler checks: C99 GCC + Clang **PASS**, ASan/UBSan for parti
 The `PART` provider now reads `de_BootPri` (index 15), preserving its signed 32-bit interpretation. The field stream supports `DOLLY_INV_I64` with an explicit `signed_number` slot; it does not coerce a negative priority into a huge unsigned value. Absent fields remain marked as unavailable.
 
 Example test fixture: `de_BootPri=-5` appears as `-5 priority` in `dolly-inventory`. This value is **declared in RDB**, not proof of the current boot selection order. Host unit tests under GCC/Clang/ASan/UBSan passed locally.
+
+## Guided response to detected problems (2026-11-17)
+
+`DollyInventoryNotice` now carries `suggested_action` in addition to its stable code, severity and human-readable message. The host `dolly-inventory` CLI prints **Suggested check:** below each emitted notice. The current set covers MaxTransfer, unusual `DosEnvec` values and RDB range collisions, and is **strictly non-destructive**.
+
+For example, `MAXTRANSFER_ABOVE_REFERENCE` recommends identifying the actual controller and driver and verifying their documented transfer limit before changing the mount configuration. For `RDB_PARTITIONS_OVERLAP`, the user is directed to compare the byte/LBA ranges and leave the medium read-only until the layout is understood.
+
+The English text is provisional and must be replaced by locale catalog references for the final Polish/English GUI. Absence of suggested action or missing hardware information must never cause Dolly to invent a universal fix.
+
+The new CLI smoke assertion checks that the MaxTransfer warning has a visible suggested action. Full current GitHub CI and AmigaOS operation remain unverified.
