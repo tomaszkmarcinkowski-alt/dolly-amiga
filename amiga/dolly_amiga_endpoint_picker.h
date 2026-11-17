@@ -17,11 +17,15 @@ typedef struct DollyEndpointPicker {
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text,*query_button,*partition_info_text;
-    struct List devices,units,partitions,logical_devices;
+    struct List devices,units,logical_devices;
+    /* Query builds an inactive bank and then swaps the LISTVIEW
+     * pointer. Never modify the nodes/strings of its active bank.
+     */
+    struct List partition_lists[2];
     struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX];
-    struct Node partition_nodes[DOLLY_PART_MAX];
-    /* LISTVIEW display strings; on-disk RDB labels remain unmodified. */
-    char partition_list_labels[DOLLY_PART_MAX][48];
+    struct Node partition_nodes[2][DOLLY_PART_MAX];
+    char partition_list_labels[2][DOLLY_PART_MAX][48];
+    unsigned partition_bank;
     DollyNativePartitionMap partition_map;
     DollyMediaGeometry media_geometry;
     unsigned partition_count;

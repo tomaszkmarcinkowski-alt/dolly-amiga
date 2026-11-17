@@ -175,23 +175,45 @@ static void populate_units(DollyEndpointPicker *p) {
         ++p->unit_count;
     }
 }
-static void populate_partitions(DollyEndpointPicker *p) {
-    unsigned i;
-    init_list(&p->partitions);
+/* Prepare the OTHER bank, never touching LISTVIEW-owned nodes.
+ * Output labels are bounded by construction (max RDB label 31 bytes).
+ */
+static int populate_partitions(DollyEndpointPicker *p) {
+    unsigned i,bank=p->partition_bank^1u;
+    struct List *items=&p->partition_lists[bank];
+    if(p->partition_count>DOLLY_PART_MAX)return 0;
+    init_list(items);
     for(i=0;i<p->partition_count;++i) {
-        char volume[40];
-        /* On-disk PART chain order is already preserved by scan_rdb.
-         * Copy the original name outside the picker-owned structure
-         * before formatting, avoiding GCC -Wrestrict alias warnings.
-         * Prefix only the displayed LISTVIEW string; the volume
-         * name retained in the partition map is never modified.
+        const char *name=p->partition_map.parts[i].label;
+        char *dst=p->partition_list_labels[bank][i];
+        struct Node *node=&p->partition_nodes[bank][i];
+        unsigned n=0,j=0;
+        /* Emit "1: " through "16: " without varargs or any
+         * possible sprintf source/destination alias.
          */
-        strcpy(volume,p->partition_map.parts[i].label);
-        sprintf(p->partition_list_labels[i],"%u: %s",i+1u,volume);
-        memset(&p->partition_nodes[i],0,sizeof(p->partition_nodes[i]));
-        p->partition_nodes[i].ln_Name=p->partition_list_labels[i];
-        AddTail(&p->partitions,&p->partition_nodes[i]);
+        if(i+1u>=10u)dst[n++]=(char)('0'+(i+1u)/10u);
+        dst[n++]=(char)('0'+(i+1u)%10u);
+        dst[n++]=':';
+        dst[n++]=' ';
+        while(j<sizeof(p->partition_map.parts[i].label) &&
+              name[j] && n+1u<48u)
+            dst[n++]=name[j++];
+        dst[n]='\0';
+        memset(node,0,sizeof(*node));
+        node->ln_Name=dst;
+        /* Keep each stage separately visible in AmigaShell; a last
+         * marker here localizes corruption to list-link manipulation.
+         */
+        printf("DOLLY M1.33 %s row=%u text=%s before AddTail\n",
+               p->role?"DEST":"SOURCE",i,dst);
+        fflush(stdout);
+        AddTail(items,node);
+        printf("DOLLY M1.33 %s row=%u linked\n",
+               p->role?"DEST":"SOURCE",i);
+        fflush(stdout);
     }
+    p->partition_bank=bank;
+    return 1;
 }
 static int physical_choice(const DollyEndpointPicker *p) {
     return p->has_device && p->device<p->device_count &&
@@ -206,7 +228,7 @@ static void invalidate_query(DollyEndpointPicker *p) {
     memset(&p->media_geometry,0,sizeof(p->media_geometry));
     memset(&p->partition_map,0,sizeof(p->partition_map));
     p->partition_info_display[0]='\0';
-    populate_partitions(p);
+    (void)populate_partitions(p);
 }
 static void make_logical_list(DollyEndpointPicker *p) {
     struct List *l=&p->logical_devices;
@@ -763,7 +785,8 @@ static int rebuild(DollyEndpointPicker *p) {
         if(columns==3u) {
             column_geometry(p,columns,2u,&x,&w);
             last=list(last,p,PICK_PARTITION,x,g.list_y,w,
-                      &p->partitions,!p->partition_count);
+                      &p->partition_lists[p->partition_bank],
+                      !p->partition_count);
             if(!last)return 0;
             p->partition_list=last;
         }
@@ -891,7 +914,7 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     dolly_physical_catalog_snapshot(&p->physical_catalog);
     populate_devices(p);
     populate_units(p);
-    populate_partitions(p);
+    (void)populate_partitions(p);
     dolly_amiga_discover_dos_devices(&p->dos_devices);
     p->logical_count=p->dos_devices.count;
     make_logical_list(p);
@@ -1174,18 +1197,29 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                 strcpy(p->partition_map.status,
                        "Capacity unavailable; no partition scan");
             }
-            populate_partitions(p);
+            picker_trace(p,"Query: before partition list build");
+            printf("DOLLY M1.33 %s count=%u limit=%u bank=%u\n",
+                   p->role?"DEST":"SOURCE",p->partition_count,
+                   (unsigned)DOLLY_PART_MAX,p->partition_bank);
+            fflush(stdout);
+            if(!populate_partitions(p)) {
+                p->partition_count=0;
+                p->partition_scanned=0;
+                strcpy(p->partition_map.status,"Too many partitions");
+                (void)populate_partitions(p);
+            }
+            picker_trace(p,"Query: partition list built");
             for(i=0;i<p->partition_count;++i) {
                 printf("DOLLY M1.32 %s PART %u name=%s label=%s\n",
                        p->role?"DEST":"SOURCE",i,
                        p->partition_map.parts[i].label,
-                       p->partition_list_labels[i]);
+                       p->partition_list_labels[p->partition_bank][i]);
                 fflush(stdout);
             }
             picker_trace(p,"Query: reattach partition labels");
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
-                                  GTLV_Labels,(ULONG)&p->partitions,
+                                  GTLV_Labels,(ULONG)&p->partition_lists[p->partition_bank],
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             refresh_disk_info(p);
             refresh_selection_preview(p);
