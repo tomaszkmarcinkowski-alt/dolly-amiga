@@ -21,10 +21,15 @@ DOLLY:
     Docs/
     Icons/
     Presets/
-    Plugins/       ; optional, POST-MVP ReAction/MUI backends
+    Plugins/
+        GUI/          ; post-MVP ReAction/MUI GUI adapters
+        Filesystems/  ; optional filesystem support
+        Devices/      ; known controller/device profiles
+        Formats/      ; future disk image formats
+        Compression/  ; future codecs
 ```
 
-All resource references use the assign as an absolute **logical** root; e.g. `DOLLY:Docs/Help.guide`, `DOLLY:Catalogs/dolly.catalog` and, post-MVP, `DOLLY:Plugins/ReAction.gui`. **No dependence on the Shell's current directory.** The system `LIBS:`, `FONTS:`, `LOCALE:` and `DEVS:` are not redirected or replaced.
+All resource references use the assign as an absolute **logical** root; e.g. `DOLLY:Docs/Help.guide`, `DOLLY:Catalogs/dolly.catalog` and, post-MVP, `DOLLY:Plugins/GUI/ReAction.module`. **No dependence on the Shell's current directory.** The system `LIBS:`, `FONTS:`, `LOCALE:` and `DEVS:` are not redirected or replaced.
 
 For a portable program launched before installation, use an explicit bootstrap in the *program's installation directory* to establish the assign after checking it. Do not silently assign `DOLLY:` to an arbitrary working directory. If the assign is absent or points somewhere else, show a precise, helpful error and provide installation/bootstrap steps rather than guess.
 
@@ -58,3 +63,29 @@ For drives not mounted during startup, the classic `DEFER` option exists, but th
 **Source:** [AmigaOS Assign command reference](https://wiki.amigaos.net/wiki/AmigaOS_Manual%3A_AmigaDOS_Command_Reference), [classic Installer tutorial](https://www.ppa.pl/programy/kurs-installera.html), [Installer 43.3 distribution reference](https://www.amigaforever.com/classic/download/).
 
 **Progress tracking:** [Issue #16](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/16).
+
+## File-version and compatibility policy (DOL-068)
+
+**Every optional file must be an exact match for the running Dolly release**, and must also pass its own format/API compatibility and integrity checks. Version information cannot be inferred from the name alone, and a sidecar manifest that is not bound to the actual file is insufficient. Release packaging must generate and embed a single authoritative **release/build identifier** in the main executable and in every owned asset, and record the expected per-resource format version. The native loader must verify the actual content (embedded header or trusted manifest with verified file digest) before attempting to load or interpret it.
+
+If an optional file is absent, inaccessible, from another release, from another API/format, or cannot be verified:
+1. Do not use it at all; disable only the dependent optional feature.
+2. Show the **exact `DOLLY:` path**, the required and detected release/format when available, the disabled feature and practical reinstatement/update steps.
+3. Continue running the core CLI and GadTools with built-in functionality; do not display missing-plugin warnings for features the user has not selected.
+4. Keep all DMA safety gates enabled when a controller profile database cannot be loaded. Missing data must not trigger guessed Mask/MaxTransfer values.
+
+The C99 module `dolly_resources_scan_optional()` now makes the deterministic compatibility decision; its `DollyResourceInspect` callback is only a **contract for future AmigaDOS file inspection**. Actual cryptographic/integrity verification, version-bearing package generation and native resource loading **are not implemented or hardware-tested yet**.
+
+Example contextual error text:
+
+> **Plik z innego stada — wersja nie pasuje do Dolly!**
+>
+> Plik: `DOLLY:Plugins/Devices/ClassicIDE.profile` (illustrative)
+>
+> Wymagana wersja: aktualne wydanie Dolly. Znaleziona: starsze wydanie.
+>
+> Skutek: brak automatycznych wskazówek konfiguracji tego kontrolera. Podstawowe funkcje Dolly nadal działają; niepotwierdzone DMA pozostaje zablokowane.
+>
+> Rozwiązanie: zainstaluj pakiet profili przeznaczony dla tego samego wydania Dolly.
+
+The details must be paged or wrapped to fit the mandatory 640×256 Topaz/8 GadTools layout.
