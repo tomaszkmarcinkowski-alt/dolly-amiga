@@ -7,7 +7,7 @@ static int numeric(DollyInventoryEmit emit,void *user,const char *key,
     f.key=key;f.label=label;f.unit=unit;f.kind=DOLLY_INV_U64;
     f.availability=available;f.origin=origin;
     f.evidence=origin==DOLLY_INV_DERIVED?DOLLY_EVIDENCE_DERIVED:DOLLY_EVIDENCE_DECLARED;
-    f.number=value;f.text=0;
+    f.number=value;f.signed_number=0;f.text=0;
     return emit(&f,user);
 }
 static int string(DollyInventoryEmit emit,void *user,const char *key,
@@ -16,7 +16,17 @@ static int string(DollyInventoryEmit emit,void *user,const char *key,
     f.key=key;f.label=label;f.unit="";f.kind=DOLLY_INV_TEXT;
     f.availability=DOLLY_INV_PRESENT;f.origin=DOLLY_INV_RDB_PART;
     f.evidence=DOLLY_EVIDENCE_DECLARED;
-    f.number=0;f.text=value;
+    f.number=0;f.signed_number=0;f.text=value;
+    return emit(&f,user);
+}
+static int signed_numeric(DollyInventoryEmit emit,void *user,
+                          const char *key,const char *label,const char *unit,
+                          int64_t value,DollyInventoryAvailability available){
+    DollyInventoryField f;
+    f.key=key;f.label=label;f.unit=unit;f.kind=DOLLY_INV_I64;
+    f.availability=available;f.origin=DOLLY_INV_RDB_PART;
+    f.evidence=DOLLY_EVIDENCE_DECLARED;f.number=0;
+    f.signed_number=value;f.text=0;
     return emit(&f,user);
 }
 int dolly_inventory_partition(const DollyPartition *p,
@@ -64,6 +74,10 @@ int dolly_inventory_partition(const DollyPartition *p,
     EMIT_NUMBER("dma_mask","Memory address mask","hex32",
                 p->dma_mask,DOLLY_INV_RDB_PART,
                 p->dma_mask_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
+    r=signed_numeric(emit,user,"boot_priority","Boot priority","priority",
+                     p->boot_priority,
+                     p->boot_priority_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
+    if(r)return r;
     EMIT_NUMBER("max_transfer","MaxTransfer (filesystem)","bytes",
                 p->max_transfer_bytes,DOLLY_INV_RDB_PART,
                 p->max_transfer_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
