@@ -187,9 +187,14 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
             if(v->geometry.block_bytes==512ul &&
                dolly_amiga_partition_scan(driver,unit,
                                           &v->geometry,&v->map)) {
+                printf("INVENTORY: scanner=%s count=%lu\\n",
+                       v->map.status,(unsigned long)v->map.count);
                 for(i=0;i<v->map.count && i<DOLLY_PART_MAX;++i) {
                     const DollyNativePartition *p=&v->map.parts[i];
-                    sprintf(line,"%u: %s",i+1u,p->label);
+                    sprintf(line,"%lu: %s",
+                            (unsigned long)(i+1u),p->label);
+                    printf("INVENTORY: PART %lu label=\'%s\'\\n",
+                           (unsigned long)(i+1u),p->label);
                     add_row(v,line);
                 }
                 {
@@ -198,7 +203,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                     copy_text(v->status,sizeof(v->status),v->map.status);
                     used=(unsigned)strlen(v->status);
                     /* Short numeric suffix; bounded append of both parts. */
-                    sprintf(suffix,": %u partition(s) declared",v->map.count);
+                    sprintf(suffix,": %lu partition(s) declared",
+                            (unsigned long)v->map.count);
                     copy_text(v->status+used,
                               (unsigned)sizeof(v->status)-used,suffix);
                 }
