@@ -383,3 +383,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyprofileconfig PRIVATE -Wall -Wextra -Wpedantic -Werror)
   target_compile_options(test-profile-config PRIVATE -UNDEBUG)
 endif()
+
+# Release staging tool verifies both executable and optional asset checksums.
+if(Python3_Interpreter_FOUND)
+  add_test(NAME release_crc32_manifest
+    COMMAND ${Python3_EXECUTABLE}
+      ${PROJECT_SOURCE_DIR}/tests/test_release_manifest.py
+      ${PROJECT_SOURCE_DIR}/tools/make_release_manifest.py)
+endif()
