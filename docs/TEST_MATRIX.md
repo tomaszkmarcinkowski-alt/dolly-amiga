@@ -915,3 +915,14 @@ semantics must be specified and tested in a later task.
 | GUI-163 | Main window on OS2.04 / alternate font | Status bezel remains visible, no clipped gadgets; check actual border metrics |
 
 M1.39 is not yet cross-compiled or WinUAE-tested.
+
+## AH. M1.40 — measured minimum and compact version
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-164 | Open main after M1.39 failure | No `WINDOW FAIL: measured minimum does not fit` at default 640×256/Topaz configuration |
+| GUI-165 | Progress row at default and measured minimum width | Full `Dolly M1.40` label visible between percent well and Stop |
+| GUI-166 | Short main window | Measured min-height matches bottommost status/control geometry and real borders |
+| GUI-167 | Resize and reopen main | No overlap or clipped status box; Quit and disabled Stop unchanged |
+
+M1.40 has not been cross-compiled or checked in WinUAE.
