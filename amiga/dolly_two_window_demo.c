@@ -26,20 +26,20 @@ struct Library *GadToolsBase;
 #define MAIN_QUIT_ID 202u
 #define SHEEP_HIDE_ID 203u
 
-typedef struct View {
+typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *list;
     struct Gadget *show;
     struct Gadget *quit;
     struct Gadget *hide;
     APTR visual;
-} View;
+} DollyDemoView;
 static struct Screen *public_screen;
 static struct DrawInfo *draw_info;
 static DollyOperationSession operation;
-static View main_view, sheep_view;
+static DollyDemoView main_view, sheep_view;
 
-static int add_buttons(View *v, int main_window) {
+static int add_buttons(DollyDemoView *v, int main_window) {
     struct NewGadget ng;
     struct Gadget *last;
     memset(&ng,0,sizeof(ng));
@@ -77,7 +77,7 @@ static int add_buttons(View *v, int main_window) {
     }
     return 1;
 }
-static void destroy_view(View *v) {
+static void destroy_view(DollyDemoView *v) {
     if(v->window) {
         CloseWindow(v->window);
         v->window=NULL;
@@ -86,7 +86,7 @@ static void destroy_view(View *v) {
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
     v->show=NULL;v->quit=NULL;v->hide=NULL;
 }
-static struct Window *open_window(View *v, const char *title,
+static struct Window *open_window(DollyDemoView *v, const char *title,
                                   ULONG left,ULONG top,
                                   ULONG width,ULONG height) {
     struct Window *w=OpenWindowTags(NULL,
@@ -174,7 +174,7 @@ static void hide_sheep(void) {
     destroy_view(&sheep_view);
     dolly_operation_hide_sheep_counter(&operation);
 }
-static int process_view(View *v,int is_main,int *quit) {
+static int process_view(DollyDemoView *v,int is_main,int *quit) {
     struct IntuiMessage *msg;
     if(!v->window)return 0;
     while((msg=GT_GetIMsg(v->window->UserPort))!=NULL) {
