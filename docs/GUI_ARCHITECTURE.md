@@ -415,3 +415,7 @@ the shared OperationSession; the main window remains open.
 
 This is source code in a draft PR and has not yet passed the user's
 Docker m68k build or WinUAE runtime test.
+
+### M1.13 GadTools TEXT_KIND compile correction
+
+The first Docker m68k build reported `GTST_Border` undeclared. The source accidentally used STRING_KIND (`GTST_*`) tags for read-only TEXT_KIND controls. Updated all affected creation and runtime attributes to `GTTX_Text` and `GTTX_Border` according to AmigaOS V36 GadTools documentation. Percent and `current / total` remain TEXT_KIND, with view-owned buffers; Errors remains NUMBER_KIND. Native rebuild and WinUAE verification are still outstanding.
