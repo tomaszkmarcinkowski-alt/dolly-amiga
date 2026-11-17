@@ -1,6 +1,7 @@
 /* Read-only host CLI for primary MBR and nested Amiga RDB inspection. */
 #include "dolly_partition_map.h"
 #include "dolly_rdb_audit.h"
+#include "dolly_capacity_audit.h"
 #include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdint.h>
@@ -19,6 +20,26 @@ static void show_rdb(const DollyRdb *r,const char *indent,
  unsigned i;
  printf("%sRDB block %u, %u B/block, %u partition(s)\n",
         indent,r->header_block,r->block_bytes,r->partition_count);
+ {
+  DollyCapacityAudit cap=dolly_capacity_audit(r,container_start,container_length);
+  if(cap.flags&DOLLY_CAPACITY_GEOMETRY_SMALLER)
+    printf("%sNOTICE: RDB geometry describes %" PRIu64
+           " bytes fewer than the observed container; tail is NOT certified free.\n",
+           indent,cap.extra_bytes);
+  if(cap.flags&DOLLY_CAPACITY_GEOMETRY_LARGER)
+    printf("%sWARNING: RDB geometry exceeds observed container by %" PRIu64
+           " bytes; inspect before any write.\n",indent,cap.shortfall_bytes);
+  if(cap.flags&DOLLY_CAPACITY_PART_OUTSIDE)
+    printf("%sWARNING: PART #%u extends beyond observed container; disk writes unsafe.\n",
+           indent,cap.first_outside_partition+1u);
+  if(cap.flags&DOLLY_CAPACITY_META_OUTSIDE)
+    printf("%sWARNING: RDB header or PART descriptor lies beyond container.\n",indent);
+  if(cap.flags&DOLLY_CAPACITY_PART_PAST_GEOM)
+    printf("%sWARNING: partition extends beyond RDB-declared geometry.\n",indent);
+  if(cap.flags&(DOLLY_CAPACITY_GEOMETRY_UNKNOWN|DOLLY_CAPACITY_OVERFLOW|
+                DOLLY_CAPACITY_INVALID))
+    printf("%sWARNING: cannot determine trustworthy RDB geometry/capacity comparison.\n",indent);
+ }
  {
   DollyRdbAudit audit=dolly_rdb_audit(r,container_start,container_length);
   if(audit.flags)
