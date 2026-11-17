@@ -554,3 +554,63 @@ validation on MC68000, 512 KiB Chip RAM, Kickstart 2.04. Important
 checks: only the main window at launch, Sheep Counter disabled before
 Start demo, correct behavior after Start, Hide/reopen while the synthetic
 session continues, both minimum window sizes, and cleanup on Quit.
+
+### M1.17 — separate source and destination pickers (unverified)
+
+Per user feedback on the validated M1.16 prototype, source/target selection
+must **not** use CYCLE_KIND. The native main window now has distinct
+`Source...` and `Destination...` GadTools BUTTON_KIND controls.
+Each opens its own identical Intuition chooser window, driven by the same
+`DollyEndpointPicker` implementation and independent selection state.
+Destination is enabled only for operation kinds requiring a source and
+a destination (synthetic Copy and Restore), not for Scan or Inventory.
+
+Each chooser presents a hierarchical three-step selection with native
+GadTools LISTVIEW_KIND controls: device first, then unit, then partition.
+Unit and partition lists remain disabled until their parent is selected.
+Explicit `Whole unit` and `Partition` actions commit the desired scope.
+A separate `File...` action uses the standard asl.library FileRequester:
+load mode for source, **V37-compatible ASL_FuncFlags/FILF_SAVE** mode for
+destination (the newer ASLFR_DoSaveMode tag requires V38). The model
+stores the selected full path, not a file handle. Both picker interfaces
+currently contain **synthetic** devices, units and partitions. There
+is no OpenDevice(), disk scan, partition write, or transfer in M1.17.
+The ASL requester naturally enumerates filesystem directories when
+the user explicitly requests a file; its Save variant may offer
+filesystem directory creation, so avoid claiming that the requester
+itself makes zero filesystem accesses.
+
+`dolly_endpoint` is a portable C99 state model distinguishing a whole
+unit, partition and file, keeping source and destination independent.
+`dolly_demo_can_start` requires a source, requires a destination only
+for two-sided operations, and rejects obviously identical source/target
+paths or overlapping unit scopes. A portable CTest regression test
+covers these boundaries. Selection views do not acquire device handles.
+To conserve memory on a 512 KiB Chip-only system, opening one picker
+closes the other; each role has a separate window and preserved selection.
+The main Start gadget is disabled during an unfinished selection, and
+controls become unavailable during a running operation.
+
+The operation selector still intentionally uses CYCLE_KIND and now
+offers Scan, Inventory, Copy and Restore **synthetic demonstrations**.
+A separate TEXT_KIND line explains the selected operation. Status
+moves to the bottom of the window, in a native GadTools recessed bevel.
+The main window is **horizontally resizable only**: WindowLimits()
+fixes its vertical outer dimension to the initial size. The Blocks
+line sits at a fixed y-offset independent of window width; it no
+longer moves toward the Start button when resizing. The established
+4x2px (non-square) or 2x2px (square) client padding remains.
+TEXT_KIND displays pre-clip their visible labels using the real
+RastPort TextLength() to avoid relying on V39+ clipping behavior.
+
+The separate Sheep Counter starts closed and becomes available only
+during a RUNNING/PAUSED operation, as accepted in M1.16. Its native
+resizable 24x8 GUI, recessed grid, progress bar and percent readout
+remain unchanged. Hide does not cancel the shared OperationSession.
+
+**M1.17 is source-only until verified**: needs host
+`test-endpoint` and `test-gui-minimum`, native Docker m68k build,
+and WinUAE tests for source unit/partition/file, destination
+availability, changing operation kind, no overlap on narrow main
+window, no vertical main resize, chooser cancel/reopen, and Sheep
+Counter hide/reopen on MC68000, 512 KiB Chip RAM and Kickstart 2.04.
