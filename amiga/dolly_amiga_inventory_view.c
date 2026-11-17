@@ -337,7 +337,7 @@ void dolly_inventory_view_pump(DollyNativeInventoryView *v) {
     if(!v || !v->window)return;
     while((msg=GT_GetIMsg(v->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
-        UWORD id=0;
+        UWORD id=0,code=msg->Code;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
         if(cls==IDCMP_REFRESHWINDOW){
@@ -349,8 +349,8 @@ void dolly_inventory_view_pump(DollyNativeInventoryView *v) {
             dolly_inventory_view_close(v);return;
         }
         if(id==INV_PART_ID && cls==IDCMP_GADGETUP &&
-           (unsigned)msg->Code<v->count) {
-            v->selected_partition=(unsigned)msg->Code;
+           (unsigned)code<v->count) {
+            v->selected_partition=(unsigned)code;
             draw_partition_details(v,v->window->WScreen);
         }
         if(cls==IDCMP_REFRESHWINDOW)
