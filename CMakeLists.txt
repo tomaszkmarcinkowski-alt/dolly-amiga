@@ -103,6 +103,16 @@ if(DOLLY_NATIVE_ONLY)
     target_compile_options(dollyselfcheck PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(test-selfcheck PRIVATE -UNDEBUG)
   endif()
+  # Read-only RDB vs independently observed media/container capacity.
+  add_library(dollycapacity STATIC src/dolly_capacity_audit.c)
+  target_include_directories(dollycapacity PUBLIC ${PROJECT_SOURCE_DIR}/include)
+  add_executable(test-capacity-audit tests/test_capacity_audit.c)
+  target_link_libraries(test-capacity-audit PRIVATE dollycapacity)
+  add_test(NAME rdb_media_capacity_audit COMMAND test-capacity-audit)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(dollycapacity PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(test-capacity-audit PRIVATE -UNDEBUG)
+  endif()
   # This also allows a host smoke build; host success is not Amiga validation.
   enable_testing()
   add_test(NAME native_memory_smoke COMMAND dolly-native-smoke --selftest)
@@ -428,4 +438,18 @@ if(Python3_Interpreter_FOUND)
     COMMAND ${Python3_EXECUTABLE}
       ${PROJECT_SOURCE_DIR}/tests/test_stamp_selfcheck.py
       ${PROJECT_SOURCE_DIR}/tools/stamp_selfcheck.py)
+endif()
+
+# M0 read-only comparison of RDB-declared geometry against actual media
+# or MBR 0x76 container size, obtained independently by the caller.
+add_library(dollycapacity STATIC src/dolly_capacity_audit.c)
+target_include_directories(dollycapacity PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollycapacity PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-capacity-audit tests/test_capacity_audit.c)
+target_link_libraries(test-capacity-audit PRIVATE dollycapacity)
+add_test(NAME rdb_media_capacity_audit COMMAND test-capacity-audit)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-capacity-audit PRIVATE -UNDEBUG)
 endif()
