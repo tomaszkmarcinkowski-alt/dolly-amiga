@@ -1,7 +1,8 @@
 #ifndef DOLLY_GUI_BACKEND_H
 #define DOLLY_GUI_BACKEND_H
-/* Design contract only: shared interface for built-in GadTools and future
- * independently loadable ReAction/MUI modules. Plugin loader not written.
+/* Design contract only: MVP uses builtin GadTools exclusively;
+ * ReAction and MUI are strictly post-MVP external options.
+ * No dynamic plugin loader has been implemented.
  * No Intuition/GadTools/ReAction/MUI headers are allowed here. */
 #include <stdint.h>
 #define DOLLY_GUI_BACKEND_ABI 1u
