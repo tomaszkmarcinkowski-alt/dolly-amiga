@@ -129,13 +129,21 @@ static void sanitize(char *dest,ULONG cap,const UBYTE *src,ULONG len) {
     while(len && dest[len-1u]==' ')--len;
     dest[len]='\0';
 }
+/* Model and capacity are independent fields. A driver can support
+ * TD_GETGEOMETRY but not HD_SCSICMD, or the other way round.
+ * Keep status explicit and never derive bytes from SCSI INQUIRY.
+ */
 static void probe(const ProbeCandidate *c) {
     struct MsgPort *port=NULL;
     struct IOStdReq *io=NULL;
     struct DriveGeometry geom;
     struct SCSICmd sc;
     UBYTE *data=NULL;
-     LONG status;
+    char name[64],size[40];
+    LONG status;
+    int opened=0;
+    strcpy(name,"Unavailable");
+    strcpy(size,"Unavailable");
     port=CreateMsgPort();
     if(!port)goto done;
     io=(struct IOStdReq *)CreateIORequest(port,sizeof(*io));
@@ -146,6 +154,7 @@ static void probe(const ProbeCandidate *c) {
         printf("  OpenDevice failed: %ld\n",status);
         goto done;
     }
+    opened=1;
     memset(&geom,0,sizeof(geom));
     io->io_Command=TD_GETGEOMETRY;
     io->io_Data=&geom;
@@ -155,18 +164,17 @@ static void probe(const ProbeCandidate *c) {
        geom.dg_SectorSize && geom.dg_TotalSectors) {
         uint64_t bytes=(uint64_t)geom.dg_TotalSectors*
                        (uint64_t)geom.dg_SectorSize;
-        printf("  Geometry: %lu sectors x %lu bytes",
-               (unsigned long)geom.dg_TotalSectors,
-               (unsigned long)geom.dg_SectorSize);
-        printf(" = %lu MiB\n",(unsigned long)(bytes/1048576u));
-    } else puts("  Geometry: unavailable");
-    /* Legacy DMA engines may require Chip RAM. Skip INQUIRY if none. */
+        unsigned long mib=(unsigned long)(bytes/1048576u);
+        snprintf(size,sizeof(size),"%lu MiB",mib);
+    }
+    /* Both the SCSI CDB and data buffer are in Chip RAM for old DMA
+     * controllers. No physical sectors are read or changed.
+     */
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
     if(data) {
-        char vendor[9],product[17],revision[5];
+        char vendor[9],product[17];
         memset(&sc,0,sizeof(sc));
-        /* CDB and reply both in Chip RAM for legacy DMA drivers. */
-        data[40]=0x12u;
+        data[40]=0x12u; /* SCSI INQUIRY */
         data[44]=36u;
         sc.scsi_Data=(UWORD *)data;
         sc.scsi_Length=36;
@@ -181,15 +189,21 @@ static void probe(const ProbeCandidate *c) {
            sc.scsi_Status==0 && sc.scsi_Actual>=36) {
             sanitize(vendor,sizeof(vendor),data+8,8);
             sanitize(product,sizeof(product),data+16,16);
-            sanitize(revision,sizeof(revision),data+32,4);
-            printf("  INQUIRY: %s %s %s\n",vendor,product,revision);
-        } else puts("  INQUIRY: unsupported / unavailable");
-    } else puts("  INQUIRY: unavailable (no Chip RAM)");
-    CloseDevice((struct IORequest *)io);
+            if(vendor[0] && product[0])
+                snprintf(name,sizeof(name),"%s %s",vendor,product);
+            else if(product[0])
+                snprintf(name,sizeof(name),"%s",product);
+            else if(vendor[0])
+                snprintf(name,sizeof(name),"%s",vendor);
+        }
+    }
 done:
+    if(opened)CloseDevice((struct IORequest *)io);
     if(data)FreeMem(data,64);
     if(io)DeleteIORequest((struct IORequest *)io);
     if(port)DeleteMsgPort(port);
+    printf("  Device name: %s\n",name);
+    printf("  Size: %s\n",size);
 }
 int main(int argc,char **argv) {
     unsigned i,selected=MAX_CANDIDATES;
