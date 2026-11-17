@@ -32,6 +32,9 @@ static void show_rdb(const DollyRdb *r,const char *indent,
   printf("%s  %-12s start=%" PRIu64 " bytes, length=%" PRIu64
          " bytes, DOS type=%08" PRIX32 "\n",indent,p->name,p->start_bytes,
          p->length_bytes,p->dos_type);
+  if(p->sectors_per_block!=1)
+   printf("%s    WARNING: unexpected de_SectorPerBlock=%" PRIu32
+          " (expected 1); review geometry\n",indent,p->sectors_per_block);
   {
    DollyMaxTransferClass level=
        dolly_maxtransfer_classify(p->max_transfer_bytes,p->max_transfer_present);
