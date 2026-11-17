@@ -74,3 +74,34 @@ Example planned Polish warning:
 Message categories: missing/invalid controller profile, memory outside DMA mask, buffer misalignment, address-range overflow and inability to allocate compatible memory. Messages must not assert that the disk is damaged or that a real transfer failed if Dolly refused to start it.
 
 **Local verification:** a reconstructed adapter/fake-Exec subset was compiled and tested with GCC and Clang (PASS). Callback delivery was verified for rejected profile, alignment and address mask, with no spurious warnings on accepted profiles. Full repository CI, AmigaOS SDK build, actual visible UI and real-controller tests remain open. See [Engineering Journal DJ-0041](ENGINEERING_JOURNAL.md).
+
+## Guided DMA troubleshooting — implemented prototype (2026-11-17)
+
+The new `DollyDmaAdvice` model separates **stable code, title, explanation, 1–3 suggested checks and blocked-operation status**. It is small, uses static strings and avoids dynamic allocations. A stable enum lets the AmigaOS adapter's `report_dma_problem` callback select the same advice that a future GadTools window or a CLI prints.
+
+### Portable CLI example
+
+```
+dolly-dma-advice DMA_ADDRESS_MASK pl
+```
+
+Sample output (temporary 7-bit PL fallback):
+
+```text
+[DMA_ADDRESS_MASK] Bufor poza obszarem DMA
+Bufor nie miesci sie w obszarze adresowym dostepnym dla kontrolera.
+Operacja zatrzymana. Brak automatycznych zmian ustawien.
+1. Sprawdz obslugiwane rodzaje RAM i zakres adresow kontrolera.
+2. Ustal, czy wymagany jest RAM zgodny z 24-bitowym DMA.
+3. Nie poszerzaj maski tylko po to, aby ominac ostrzezenie.
+```
+
+Values are **not** universal repair recipes. Dolly cannot safely tell the user to change `Mask` to `0xFFFFFFFF` or enlarge `MaxTransfer` merely to silence a warning. The appropriate fix depends on the controller model, driver, DMA-visible memory and actual mounted configuration.
+
+### Architecture, build and limitations
+
+- `include/dolly_dma_advice.h` + `src/dolly_dma_advice.c`: read-only catalog, EN and 7-bit ASCII Polish fallback, stable identifiers, three optional safe actions, no heap allocation.
+- `src/dolly_dma_advice_cli.c`: standalone command, also included in `DOLLY_NATIVE_ONLY=ON` for future m68k builds; prints a blocked status and exits nonzero for genuine DMA errors.
+- `tests/test_dma_advice.c` + `tests/test_dma_advice_cli.py`: tests added for every known status in both languages and CLI exit codes.
+- **Actual AmigaOS 2.04/68000 build, GadTools UI, proper Polish locale encoding, full current GitHub CTest and CI are not yet verified.** Do not mark these as complete.
+- Existing `dolly_dma_user_message()` is a basic compatibility string; callers use `dolly_dma_get_advice(status,language)` for detailed steps.
