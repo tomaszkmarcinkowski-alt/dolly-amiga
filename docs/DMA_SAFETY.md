@@ -105,3 +105,15 @@ Values are **not** universal repair recipes. Dolly cannot safely tell the user t
 - `tests/test_dma_advice.c` + `tests/test_dma_advice_cli.py`: tests added for every known status in both languages and CLI exit codes.
 - **Actual AmigaOS 2.04/68000 build, GadTools UI, proper Polish locale encoding, full current GitHub CTest and CI are not yet verified.** Do not mark these as complete.
 - Existing `dolly_dma_user_message()` is a basic compatibility string; callers use `dolly_dma_get_advice(status,language)` for detailed steps.
+
+## Source-grounded controller guidance (DOL-069)
+
+When Dolly reports a DMA problem, it first displays generic safe checks. An optional profile package under `DOLLY:Plugins/Devices/` may add **controller-specific information** only when all gates pass:
+
+1. The actual database file's integrity is verified and its **release/build identity matches the running Dolly exactly**, including the database format version.
+2. The detected **controller model, driver name/version and hardware revision** match one unique profile. An ambiguous or incomplete match does not become advice.
+3. The record includes a **source reference and documented known behavior**, not an invented universal DMA Mask or MaxTransfer.
+
+`dolly_dma_diagnostic_build()` combines the generic `DollyDmaAdvice` with the optional sourced device note. For an absent/mismatched/corrupt database, Dolly simply omits the specific note, informs the user about the disabled database, and retains the ordinary troubleshooting path. It **never** sets `dma_profile_verified` or authorizes device reads based solely on the database.
+
+M0 implementation includes only matching/composition interfaces with **synthetic example controller records**. No real hardware profiles, production native database loader or auto-tuning are implemented yet. Before collecting actual entries, every claim needs a vendor manual, driver documentation or reproducible physical test, plus scope limitations (revision, firmware, OS, driver). External corrections must be versioned and auditable; no silent global values.
