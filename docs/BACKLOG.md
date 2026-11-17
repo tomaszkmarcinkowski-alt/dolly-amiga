@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**67 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**69 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -606,3 +606,28 @@
 **User story:** Jako uzytkownik posiadajacy MUI chce w przyszlosci osobno zainstalowac backend GUI dla Dolly, przy niezmienionym silniku oraz pelnej dostepnosci GadTools.
 
 **Akceptacja:** niezalezny modul i zaleznosci, jawne wykrywanie instalacji MUI, bezpieczny fallback do GadTools, brak narzutu w standardowym MVP, mozliwosc uzycia `DOLLY:Plugins/`. Nastepny etap po podstawowym wydaniu.
+
+
+## Epic: Optional resources and verified device knowledge
+
+### DOL-068 — Missing, unreadable or incompatible DOLLY: files never block other features
+
+**Priority:** P0 (safety, predictable startup) · **Stage:** M0 contract; MVP integration · [Issue #17](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/17)
+
+**User story:** Dolly identifies each missing or invalid optional file, gives its complete `DOLLY:` path, names the feature that is disabled and suggests how to restore it. Other features and the GadTools MVP can still start.
+
+**Mandatory version gate:** Every optional resource must match the exact **current Dolly release/build ID** **and its expected format/API version**, and its own integrity / binding to its version metadata must be verified. An absent, unreadable, corrupted, unversioned, older or newer file is **never loaded**, even if the file name is correct; only its dependent feature is disabled. Messages distinguish these failure types (for example, "Plik z innego stada — wersja nie pasuje!"). A future native provider must inspect the actual resource bytes, not just a neighboring sidecar or a file name.
+
+**Acceptance:** No message for an optional add-on which was not requested; concise dialog at 640×256 with details/pagination, exact affected path, required and found version when known, affected capability and safe reinstallation/update guidance. Existing core operations remain available; any physical DMA path remains blocked if the only profile was rejected. Do not automatically download, replace or force-load incompatible data.
+
+**Status:** a pure C99 optional-resource manifest and strict version/format/integrity decision path are in source and tests; native file probing and the real startup/GadTools integration remain open.
+
+### DOL-069 — Versioned, sourced controller databases for DMA help and later auto-configuration
+
+**Priority:** P1 for read-only help; P2 for optional automatic configuration · **Stage:** M0 design, MVP diagnosis if validated, advanced changes post-MVP · [Issue #18](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/18)
+
+**User story:** If a device has a DMA or transfer problem, Dolly searches a compatible database in `DOLLY:Plugins/Devices/` and shows the **known problem description, original evidence/reference, matched controller, driver and revision**, then suggests safe diagnostic steps without guessing values.
+
+**Acceptance:** device/vendor documentation or carefully documented real hardware tests, database release/build ID, format/schema version, integrity checks, detailed hardware and driver matching, provenance/confidence, contradiction handling. Unmatched/ambiguous/unverified versions fall back to generic DMA help, not to universal unverified parameters. A verified database match never enables raw DMA operations by itself. Automatic profile selection requires independent runtime verification and explicit safety rules; no user-visible "safe" guarantee based solely on plugin text.
+
+**Status:** initial profile matcher and sourced DMA advice composition are in source, with example synthetic profiles and tests; real curated hardware entries, native loader, versioned database package and GUI integration remain open.
