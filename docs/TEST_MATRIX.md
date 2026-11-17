@@ -731,3 +731,42 @@ corrupt, next isolate the GadTools attribute update / gadget context.
 If Shell labels are wrong, investigate parser/map overwrites before
 further GUI work. Cross-compilation and WinUAE testing are pending;
 do not use against real hardware yet.
+
+## Z. M1.33 — Query returns from RDB scan then hangs before first row trace
+
+User's last observed M1.32 message: \`DEST Query: partition scan returned\`.
+No subsequent \`DOLLY M1.32 DEST PART ...\` lines appeared.
+This narrows the fault to reading \`partition_map.count\` and preparing
+the third LISTVIEW's node/label storage, although hidden memory
+corruption during the completed scan remains possible. The old fix
+which rebuilt all GadTools after Query caused display garbage; the
+in-place-label update of M1.32 could still be touching LISTVIEW data
+by reusing the same \`struct List\` and \`struct Node\` memory.
+
+M1.33 is an **unverified isolation patch**, not a confirmed fix:
+- Keep two complete, persistent banks of partition List, Nodes, and
+  display strings within each Source/Destination picker.
+- Build only the **inactive** bank; never mutate the active
+  LISTVIEW-owned nodes or their text, even across repeated Queries.
+- Limit to DOLLY_PART_MAX=16; fail closed on an inconsistent count.
+- Build numbered display strings explicitly without \`sprintf\`
+  or shared source/destination buffers.
+- After \`GTLV_Labels=~0\`, attach the fully prepared bank by its
+  independent List pointer; only then allow selection again.
+- Emit flushed Shell trace of the count/bank, and before/after
+  each individual AddTail call. If the emulator crashes, the exact
+  last line will show whether failure happens at a specific node.
+- Original names and descriptive fields in partition_map remain
+  unchanged. No read/write behavior changes.
+
+| ID | Regression sequence | Expected |
+|---|---|---|
+| GUI-104 | Destination Partition Query on A1200 OS3.1 | No HALT3; RDB labels correctly numbered |
+| GUI-105 | Before/after per-row trace | Four rows linked, names WB_1.3 / WB_2.x / OS / GRY |
+| GUI-106 | Repeat Query | Alternate banks safely; no stale or corrupted strings |
+| GUI-107 | Source then Destination; reverse | Independent lists and queries; no cross-window corruption |
+| GUI-108 | Query no map/unsupported | Empty third LISTVIEW, Use disabled |
+| GUI-109 | Use selection after choosing RDB partition | Stable original partition identity, not list number |
+
+Only test with a disposable WinUAE image. Do not use real media until
+the crash is resolved. RTG and memory profiling remain deferred.
