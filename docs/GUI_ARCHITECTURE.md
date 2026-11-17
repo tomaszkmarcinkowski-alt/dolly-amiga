@@ -761,3 +761,27 @@ format metadata attached to the committed file endpoint.
 
 **Awaiting Docker/WinUAE verification.** Memory profiling remains
 deferred per the user's earlier request.
+
+### M1.18 startup regression — alert 0x8000000B
+
+User WinUAE report after adding DOS-backed source file metadata:
+`Software Failure / Program failed (error #8000000B)` before
+a usable main window. This is the MC68000 Line-F exception code,
+but the alert alone does not identify the instruction or root cause.
+
+The latest experimental patch avoids defining, manually opening,
+or manually closing a separate global `DOSBase` in the executable.
+The Amiga C runtime startup is expected to initialize the base used
+by `proto/dos.h`; the metadata reader still guards its DOS usage
+with `if(DOSBase)`. The original working demo did not manually
+manage this global. This is a **testable hypothesis**, not a proven
+diagnosis, until a rebuilt binary runs in WinUAE.
+
+Three startup breadcrumbs were added to Shell output:
+`M1.18 BOOT: entered main`, `public screen ready`, and
+`main window ready`. If an exception remains, record the last
+visible line and the WinUAE CPU debugger PC/opcode. Do not
+interpret this alert as proof of FPU code or hardware damage.
+
+**Do not mark M1.18 validated** until MC68000 / 512 KiB Chip /
+Kickstart 2.04 boot and both selectors pass.
