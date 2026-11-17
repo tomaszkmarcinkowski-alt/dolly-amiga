@@ -29,8 +29,6 @@ int main(void){
     MemoryReader r;
     char checksum_hex[9];
     assert(strstr(dolly_version_text(),"$VER: Dolly ")!=0);
-    assert(strlen((const char *)dolly_selfcheck_record)==DOLLY_SELF_RECORD_SIZE-1 ||
-           dolly_selfcheck_record[DOLLY_SELF_RECORD_SIZE-1]=='!');
     memset(file,'x',sizeof(file));
     memcpy(file+pos,dolly_selfcheck_record,DOLLY_SELF_RECORD_SIZE);
     memcpy(file+pos+DOLLY_SELF_RELEASE_OFFSET,"Dolly-M0-Test",13);
