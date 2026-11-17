@@ -75,6 +75,8 @@ int main(int argc,char **argv){
    if(p->contains_rdb)show_rdb(&p->nested_rdb,"    ",p->start_bytes,p->length_bytes);
   }
  }
+ if(map->suspect_whole_disk_rdb)
+  puts("WARNING: invalid disk-wide RDB candidate detected alongside MBR; inspect metadata before changing disk.");
  if(map->hybrid_mbr_rdb){
   puts("WARNING: both MBR and disk-wide RDB are present; this is an ambiguous hybrid layout.");
   if(map->hybrid_mbr_overlap)
