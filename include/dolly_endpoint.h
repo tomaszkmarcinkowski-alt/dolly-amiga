@@ -34,8 +34,17 @@ typedef enum DollyDemoOperation {
     DOLLY_DEMO_INVENTORY=1,
     DOLLY_DEMO_COPY=2,
     DOLLY_DEMO_RESTORE=3,
-    DOLLY_DEMO_CREATE_IMAGE=4
+    DOLLY_DEMO_CREATE_IMAGE=4,
+    DOLLY_DEMO_DISK_VET=5 /* DiskDoctor placeholder, source only */
 } DollyDemoOperation;
+/* A mode mask is indexed by the stable DollyEndpointMode enum.
+ * Berserk relaxes nonsensical combinations, never safety checks.
+ * A zero mask means that role cannot be selected yet.
+ */
+#define DOLLY_MODE_BIT(mode) (1u << (unsigned)(mode))
+unsigned dolly_allowed_modes(DollyDemoOperation operation,unsigned role,
+                             DollyEndpointKind source_kind,unsigned berserk);
+int dolly_mode_allowed(unsigned mask,DollyEndpointMode mode);
 void dolly_endpoint_clear(DollyEndpoint *e);
 int dolly_endpoint_set_unit(DollyEndpoint *e,unsigned device,unsigned unit);
 int dolly_endpoint_set_partition(DollyEndpoint *e,unsigned device,
