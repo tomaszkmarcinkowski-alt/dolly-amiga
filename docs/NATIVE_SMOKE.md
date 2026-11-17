@@ -140,3 +140,34 @@ The 13604-byte RDB structure is not the full process memory footprint.
 
 The provisional WinUAE compatibility baseline remains MC68000,
 512 KiB Chip, Kickstart 2.04, without Fast RAM.
+
+## M1.2 synthetic 320x256 Chip RAM feasibility probe
+
+After validating the smoke checkpoints, native m68k builds provide
+`dolly-native-smoke --chip-budget`. This **does not** open a screen,
+install bitplanes or access any drive. It attempts three independent,
+sequential allocations with `AllocMem(MEMF_CHIP)`, touching the first
+and last byte, then freeing each allocation:
+
+| Depth | Colours | Bitplane bytes |
+| --- | ---: | ---: |
+| 2 bitplanes | 4 | 20480 |
+| 3 bitplanes | 8 | 30720 |
+| 4 bitplanes | 16 | 40960 |
+
+The probe skips a candidate unless at least 64 KiB would remain free,
+including within the largest contiguous allocation, **before** allocating.
+It prints PASS/FAIL/SKIP, free memory before/during/after, and returns 10
+on allocation or cleanup failure. SKIP does not indicate a successful
+allocation, and no test result is claimed until it is run in WinUAE.
+The sizes cover raw planar buffers only: not copperlists, screens, sprites,
+GUI, audio, filesystem buffers or system overhead. The sample beep remains
+optional and is deliberately excluded from this initial probe.
+
+To test on the validated MC68000 + 512 KiB Chip + Kickstart 2.04 setup:
+
+```text
+Stack 16384
+DOLLYTEST:dolly-memory --chip-budget
+Echo $RC
+```
