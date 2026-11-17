@@ -136,7 +136,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 last=read_be32(data);
                 block=read_be32(data+4);
                 if(last!=0xfffffffful &&
-                   block>=128ul && block<=65536ul)
+                   block>=128ul && block<=65536ul) {
                     capacity_string(size,size_capacity,
                        ((uint64_t)last+1u)*(uint64_t)block);
                     have_capacity=1;
@@ -145,6 +145,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                         geometry->block_bytes=block;
                         geometry->capacity_valid=1;
                     }
+                }
             }
         }
     }
