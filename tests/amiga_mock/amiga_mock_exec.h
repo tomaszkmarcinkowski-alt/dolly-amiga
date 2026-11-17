@@ -25,4 +25,7 @@ int dolly_mock_last_read64(void);
 uint64_t dolly_mock_dma_address(void);
 void dolly_mock_set_dma_address(uint64_t address);
 ULONG dolly_mock_last_alloc_flags(void);
+/* Fault injection: fail read operation number N (1-based).
+ * mode: 0 disabled, 1 short transfer, 2 I/O error. */
+void dolly_mock_read_fault(int operation_number,int mode);
 #endif
