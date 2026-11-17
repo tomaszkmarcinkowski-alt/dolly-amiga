@@ -343,21 +343,35 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
     if(main_window) {
-        LONG cycle_x=d->left+77;
-        LONG cycle_w=d->right-cycle_x+1;
+        LONG detail_x=d->left+120;
+        LONG detail_w=d->right-detail_x+1;
+        LONG operation_x=d->left+88;
         update_main_status();
-        last=make_cycle(last,v,MAIN_DEVICE_ID,cycle_x,d->main_device_y,
-                        cycle_w,demo_devices,selected_device);
+        last=make_button(last,v,MAIN_SOURCE_ID,d->left,d->main_device_y,
+                         114,"Source...");
         if(!last)return 0;
         v->device=last;
-        last=make_cycle(last,v,MAIN_OPERATION_ID,cycle_x,d->main_operation_y,
-                        cycle_w,demo_operations,selected_operation);
+        last=make_text(last,v,MAIN_SOURCE_TEXT_ID,detail_x,d->main_device_y,
+                       detail_w,v->source_label,TRUE);
+        if(!last)return 0;
+        v->source_text=last;
+        last=make_button(last,v,MAIN_TARGET_ID,d->left,d->main_target_y,
+                         114,"Destination...");
+        if(!last)return 0;
+        v->target_button=last;
+        last=make_text(last,v,MAIN_TARGET_TEXT_ID,detail_x,d->main_target_y,
+                       detail_w,v->target_label,TRUE);
+        if(!last)return 0;
+        v->target_text=last;
+        last=make_cycle(last,v,MAIN_OPERATION_ID,operation_x,
+                        d->main_operation_y,d->right-operation_x+1,
+                        demo_operations,selected_operation);
         if(!last)return 0;
         v->op_selector=last;
-        last=make_text(last,v,MAIN_STATUS_ID,cycle_x,d->main_status_y,
-                       cycle_w,v->status_label,FALSE);
+        last=make_text(last,v,MAIN_DESC_ID,operation_x,d->main_desc_y,
+                       d->right-operation_x+1,v->desc_label,FALSE);
         if(!last)return 0;
-        v->status=last;
+        v->description=last;
         button_w=(d->right-d->left-6)/2;
         last=make_button(last,v,MAIN_SHOW_ID,d->left,d->controls_y,
                          button_w,"Sheep Counter");
@@ -371,10 +385,14 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->controls_y+19,d->right-d->left+1,"Start demo");
         if(!last)return 0;
         v->start=last;
-        last=make_text(last,v,MAIN_COUNT_ID,d->left,d->bottom-15,
+        last=make_text(last,v,MAIN_COUNT_ID,d->left+68,d->main_count_y,
                        d->number_w,v->block_label,TRUE);
         if(!last)return 0;
         v->count=last;
+        last=make_text(last,v,MAIN_STATUS_ID,d->left+3,d->main_status_y,
+                       d->right-d->left-5,v->status_label,FALSE);
+        if(!last)return 0;
+        v->status=last;
     } else {
         last=make_text(last,v,SHEEP_COUNT_ID,d->left,d->controls_y,
                        d->number_w,v->block_label,TRUE);
@@ -438,11 +456,13 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
         {
-            ULONG heading=(ULONG)TextLength(rp,
-                (STRPTR)"Dolly / Device & operation (demo)",33);
-            ULONG choice=(ULONG)TextLength(rp,
-                (STRPTR)"Read only / inventory preview",29);
-            m.heading_width=heading>choice+96ul?heading:choice+96ul;
+            static const char heading[]="Dolly / Device & operation";
+            static const char choice[]="Restore a file image to a destination.";
+            ULONG a=(ULONG)TextLength(rp,(STRPTR)heading,
+                                       (ULONG)strlen(heading));
+            ULONG b=(ULONG)TextLength(rp,(STRPTR)choice,
+                                       (ULONG)strlen(choice));
+            m.heading_width=a>b+88ul?a:b+88ul;
         }
         m.show_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Sheep Counter",13);
@@ -458,8 +478,11 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         main_window?DOLLY_GUI_WINDOW_MAIN:DOLLY_GUI_WINDOW_SHEEP,m);
     if(!minimum.valid || minimum.outer_width>(ULONG)w->Width ||
        minimum.outer_height>(ULONG)w->Height)return 0;
+    if(main_window)
+        return WindowLimits(w,(LONG)minimum.outer_width,
+                            (LONG)w->Height,0,(LONG)w->Height)!=FALSE;
     return WindowLimits(w,(LONG)minimum.outer_width,
-                        (LONG)minimum.outer_height,0,0) != FALSE;
+                        (LONG)minimum.outer_height,0,0)!=FALSE;
 }
 static int open_view(DollyDemoView *v,int main_window,const char *title,
                      ULONG left,ULONG top,ULONG width,ULONG height) {
@@ -510,17 +533,21 @@ static void update_numbers(DollyDemoView *v) {
 }
 static void draw_main_static(void) {
     DemoLayout *d=&main_view.l;
+    struct TagItem tags[3];
     if(!main_view.window)return;
-    /* Labels are not painted over system GadTools images. */
-    label(main_view.window,d->left,d->top+10,"Dolly / Device & operation (demo)");
-    label(main_view.window,d->left,d->main_device_y+11,"Device:");
+    label(main_view.window,d->left,d->top+10,"Dolly / Device & operation");
     label(main_view.window,d->left,d->main_operation_y+11,"Operation:");
-    label(main_view.window,d->left,d->main_status_y+11,"Status:");
-    /* This descriptive sentence is optional and may be suppressed at
-     * narrow widths; required controls set the minimum geometry.
-     */
-    /* All explanation text lives in a GadTools TEXT_KIND status field. */
-    label(main_view.window,d->left,d->bottom-20,"Blocks:");
+    label(main_view.window,d->left,d->main_desc_y+11,"Info:");
+    label(main_view.window,d->left,d->main_count_y+11,"Blocks:");
+    tags[0].ti_Tag=GT_VisualInfo;
+    tags[0].ti_Data=(ULONG)main_view.visual;
+    tags[1].ti_Tag=GTBB_Recessed;
+    tags[1].ti_Data=TRUE;
+    tags[2].ti_Tag=TAG_DONE;
+    tags[2].ti_Data=0;
+    DrawBevelBoxA(main_view.window->RPort,
+                  d->left,d->main_status_y-2,
+                  d->right-d->left+1,19,tags);
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
                         LONG width,LONG height) {
@@ -769,7 +796,7 @@ int main(void) {
     screen_info=GetScreenDrawInfo(public_screen);
     if(!screen_info)goto cleanup;
     if(!open_view(&main_view,1,"Dolly - Main window (demo)",
-                  14,(ULONG)public_screen->BarHeight+14ul,390,190))
+                  12,(ULONG)public_screen->BarHeight+1ul,600,213))
         goto cleanup;
     draw_full(&main_view,1);
     update_main_actions();
