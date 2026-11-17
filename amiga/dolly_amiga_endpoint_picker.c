@@ -135,6 +135,26 @@ static void change_enabled(DollyEndpointPicker *p) {
                           GA_Disabled,(ULONG)!ready,TAG_DONE);
     }
 }
+/* Removing GadTools gadgets does not erase their rendered pixels.
+ * Clear only the actual window client area, respecting Intuition chrome,
+ * BEFORE attaching the new mode's gadgets. No extra backing bitmap.
+ */
+static void clear_picker_client(DollyEndpointPicker *p) {
+    struct DrawInfo *info;
+    struct Window *w=p->window;
+    LONG x1,y1,x2,y2;
+    if(!w)return;
+    x1=(LONG)w->BorderLeft;
+    y1=(LONG)w->BorderTop;
+    x2=(LONG)w->Width-(LONG)w->BorderRight-1;
+    y2=(LONG)w->Height-(LONG)w->BorderBottom-1;
+    if(x2<x1 || y2<y1)return;
+    info=GetScreenDrawInfo(p->screen);
+    SetDrMd(w->RPort,JAM1);
+    SetAPen(w->RPort,info?info->dri_Pens[BACKGROUNDPEN]:0u);
+    RectFill(w->RPort,x1,y1,x2,y2);
+    if(info)FreeScreenDrawInfo(p->screen,info);
+}
 static int rebuild(DollyEndpointPicker *p) {
     struct Gadget *last;
     if(!p->window)return 0;
@@ -143,6 +163,10 @@ static int rebuild(DollyEndpointPicker *p) {
         FreeGadgets(p->gadgets);
         p->gadgets=NULL;
     }
+    /* The previous LISTVIEW_KIND images remain in the RastPort until
+     * explicitly cleared. Do this after removing all old gadgets.
+     */
+    clear_picker_client(p);
     p->device_list=NULL;p->unit_list=NULL;
     p->partition_list=NULL;p->logical_list=NULL;
     p->choose_button=NULL;p->mode_cycle=NULL;
