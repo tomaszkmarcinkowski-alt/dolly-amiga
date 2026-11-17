@@ -21,6 +21,12 @@ int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;
  assert(run(path,base,&r)==DOLLY_RDB_OK);
  assert(r.partitions[0].max_transfer_present);
  assert(r.partitions[0].max_transfer_bytes==0x7fffffffu);
+ /* Historical shorter DosEnvec: fields 13+ absent but geometry readable. */
+ make_part(part,DOLLY_RDB_END);wr32(part+128,12);finish_sum(part,64);
+ store(f,base+2*BS,part);fflush(f);
+ assert(run(path,base,&r)==DOLLY_RDB_OK);
+ assert(!r.partitions[0].max_transfer_present);
+ assert(r.partitions[0].dos_type==0);
  make_part(part,DOLLY_RDB_END);store(f,base+2*BS,part);fflush(f);
 
  /* 256 longwords per filesystem block = 1024 bytes, RDB device blocks 512. */
