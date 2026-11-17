@@ -43,6 +43,7 @@ def image_file(path):
     put_be32(part, 164, 2)
     put_be32(part, 168, 4)
     put_be32(part, 192, 0x444F5301)
+    put_be32(part, 128 + 13 * 4, 0x7FFFFFFF)  # de_MaxTransfer
     checksum(part)
     with path.open('wb') as out:
         out.write(mbr)
@@ -60,6 +61,8 @@ def main(layout, iff):
         assert result.returncode == 0, (result.stdout, result.stderr)
         assert 'type=76' in result.stdout and 'DH0' in result.stdout
         assert 'type=0C' in result.stdout and 'RDB block' in result.stdout
+        assert 'MaxTransfer 0x7FFFFFFF' in result.stdout
+        assert 'ABOVE_REFERENCE' in result.stdout
         anno = b'abc'
         archive.write_bytes(b'FORM' + struct.pack('>I', 16) + b'DOLY' +
                             b'ANNO' + struct.pack('>I', 3) + anno + b'\x00')
