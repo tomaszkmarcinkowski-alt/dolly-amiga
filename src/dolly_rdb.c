@@ -38,7 +38,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
  unsigned seen=0;
  while(current!=DOLLY_RDB_END){
   DollyRdbStatus s; uint32_t next,low,high,surfaces,bpt,dos,size_block;
-  uint64_t cyl_bytes,start,length,end,relative;
+  uint64_t cyl_bytes,start,length,end,relative,fs_block_bytes;
   unsigned i;unsigned char name_len;
   if(seen>=DOLLY_RDB_MAX_PARTITIONS)return DOLLY_RDB_TOO_MANY;
   for(i=0;i<seen;i++)if(visited[i]==current)return DOLLY_RDB_CYCLE;
@@ -55,7 +55,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
   high=be32(buf+128+10*4);
   dos=be32(buf+128+16*4);
   if(!surfaces||!bpt||!size_block||high<low)return DOLLY_RDB_BAD_BLOCK;
-  if(!mul_u64(surfaces,bpt,&cyl_bytes) || !mul_u64(cyl_bytes,out->block_bytes,&cyl_bytes))return DOLLY_RDB_OUT_OF_RANGE;
+  /* de_SizeBlock is in 32-bit longwords and may differ from the RDB\n   * device block size. Account for it when calculating byte positions. */\n  if(!mul_u64(size_block,4u,&fs_block_bytes) || fs_block_bytes < out->block_bytes ||\n     fs_block_bytes % out->block_bytes != 0) return DOLLY_RDB_BAD_BLOCK;\n  if(!mul_u64(surfaces,bpt,&cyl_bytes) || !mul_u64(cyl_bytes,fs_block_bytes,&cyl_bytes))return DOLLY_RDB_OUT_OF_RANGE;
   if(!mul_u64(low,cyl_bytes,&relative) || !add_u64(out->base_offset,relative,&start))return DOLLY_RDB_OUT_OF_RANGE;
   if(!mul_u64((uint64_t)high-low+1,cyl_bytes,&length) || !add_u64(start,length,&end))return DOLLY_RDB_OUT_OF_RANGE;
   if(end>dolly_block_size(src))return DOLLY_RDB_OUT_OF_RANGE;
