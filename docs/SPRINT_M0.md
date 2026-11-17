@@ -116,3 +116,13 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] Build and validate the **classic Amiga Installer** script, session/persistent Assign and safe reinstallation (Issue #16). This does not gate M0.
 - [ ] Build entire current `main` and validate the changed m68k smoke source with an actual AmigaOS SDK.
 
+
+## Optional asset and sourced DMA-help milestone (2026-11-17)
+
+- [x] Add compatibility gate for optional resources: exact current Dolly release/build, per-resource format version and verified integrity result.
+- [x] Distinct missing, unreadable, unverified, wrong-release and wrong-format notices, with path and disabled capability; core may continue.
+- [x] Implement in-memory profile matcher and sourced DMA advice composition, requiring a verified compatible database and unique controller/driver/hardware match.
+- [x] Unit tests for compatible/outdated/unversioned/corrupt/ABI-mismatched resources and verified/unverified controller advice written.
+- [ ] Compile/test current entire repository and validate these additions on an m68k AmigaOS build.
+- [ ] Implement file-bound version verification in actual AmigaDOS loader and wire notices into the GadTools 640×256 UI.
+- [ ] Build real source-cited controller profile datasets; independent controller/DMA verification is still required.
