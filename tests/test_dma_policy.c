@@ -18,6 +18,30 @@ int main(void){
      * traverses a forbidden address region in between them. */
     assert(dolly_dma_check_buffer(0x00000ff0u,0x1020u,
                                   0x00002ffeu,2)==DOLLY_DMA_OUTSIDE_MASK);
+    /* Deterministic point-wise oracle for randomized small intervals.
+     * Every byte address is checked against the mask independently. */
+    {
+        uint32_t seed=0xd011a600u;
+        unsigned i;
+        for(i=0;i<6000;i++){
+            uint32_t address,bytes,mask,k;
+            int valid=1;
+            DollyDmaStatus got;
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+            address=(seed&4094u);
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+            bytes=(seed%128u)+1u;
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+            mask=(seed&0x3ffeu);
+            if(!mask)mask=2;
+            if(address&~mask)valid=0;
+            for(k=0;k<bytes;k++){
+                if((address+k)&~(mask|1u))valid=0;
+            }
+            got=dolly_dma_check_buffer(address,bytes,mask,2);
+            assert((got==DOLLY_DMA_OK)==valid);
+        }
+    }
     puts("DMA profile range/alignment tests passed");
     return 0;
 }
