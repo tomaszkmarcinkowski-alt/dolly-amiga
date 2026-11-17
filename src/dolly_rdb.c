@@ -73,6 +73,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
 }
 DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,uint32_t scan_blocks,DollyRdb *out){
  unsigned char *buf;uint32_t n;DollyRdbStatus found=DOLLY_RDB_NOT_FOUND;
+ int saw_corrupt_checksum=0, saw_invalid_size=0;
  if(!src||!out||!valid_block_size(bs)||scan_blocks==0||scan_blocks>4096)return DOLLY_RDB_BAD_ARGUMENT;
  memset(out,0,sizeof(*out));out->base_offset=base;out->block_bytes=bs;
  buf=(unsigned char*)malloc(bs);if(!buf)return DOLLY_RDB_READ_ERROR;
@@ -81,12 +82,18 @@ DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,ui
   if(s==DOLLY_RDB_OUT_OF_RANGE)break;
   if(s!=DOLLY_RDB_OK){found=s;break;}
   if(memcmp(buf,"RDSK",4)!=0)continue;
-  if(!checksum(buf,bs) || be32(buf+16)!=bs)continue;
+  if(!checksum(buf,bs)){saw_corrupt_checksum=1;continue;}
+  if(be32(buf+16)!=bs){saw_invalid_size=1;continue;}
   out->header_block=n;out->partition_head=be32(buf+28);
   out->cylinders=be32(buf+64);out->sectors=be32(buf+68);out->heads=be32(buf+72);
   found=parse_partitions(src,out,buf);break;
  }
- free(buf);return found;
+ free(buf);
+ if(found==DOLLY_RDB_NOT_FOUND){
+  if(saw_corrupt_checksum)return DOLLY_RDB_BAD_CHECKSUM;
+  if(saw_invalid_size)return DOLLY_RDB_BAD_BLOCK;
+ }
+ return found;
 }
 const char *dolly_rdb_status_name(DollyRdbStatus s){
  switch(s){
