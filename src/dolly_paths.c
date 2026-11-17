@@ -12,7 +12,7 @@ DollyPathStatus dolly_path_resource(const char *relative,char *out,
     component=relative;
     for(p=relative;;++p){
         unsigned char ch=(unsigned char)*p;
-        if(ch==':'||ch=='\\'||ch<32||ch==127)return error;
+        if(ch!=0 && (ch==':'||ch=='\\'||ch<32||ch==127))return error;
         if(ch=='/'||ch=='\0'){
             size_t n=(size_t)(p-component);
             if(n==0 || (n==1&&component[0]=='.') ||
