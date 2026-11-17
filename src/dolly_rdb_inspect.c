@@ -1,6 +1,7 @@
 /* Host-only read-only RDB inspector. */
 #include "dolly_rdb.h"
 #include "dolly_rdb_audit.h"
+#include "dolly_capacity_audit.h"
 #include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -31,6 +32,30 @@ int main(int argc,char **argv){
         base,r.block_bytes,r.header_block);
  printf("Geometry: %u cylinders, %u heads, %u sectors\n",r.cylinders,r.heads,r.sectors);
  printf("Partitions: %u\n",r.partition_count);
+ {
+  uint64_t source_bytes=dolly_block_size(source);
+  if(base>=source_bytes){
+   fprintf(stderr,"WARNING: RDB base outside the image.\n");
+  }else{
+   DollyCapacityAudit capacity=dolly_capacity_audit(&r,base,source_bytes-base);
+   if(capacity.flags&DOLLY_CAPACITY_GEOMETRY_SMALLER)
+    fprintf(stderr,"NOTICE: observed image is %" PRIu64
+            " bytes larger than RDB geometry; tail is not certified free.\n",
+            capacity.extra_bytes);
+   if(capacity.flags&DOLLY_CAPACITY_GEOMETRY_LARGER)
+    fprintf(stderr,"WARNING: RDB geometry exceeds observed image region by %" PRIu64
+            " bytes.\n",capacity.shortfall_bytes);
+   if(capacity.flags&DOLLY_CAPACITY_PART_OUTSIDE)
+    fprintf(stderr,"WARNING: PART #%u exceeds observed image region.\n",
+            capacity.first_outside_partition+1u);
+   if(capacity.flags&(DOLLY_CAPACITY_META_OUTSIDE|
+                       DOLLY_CAPACITY_PART_PAST_GEOM|
+                       DOLLY_CAPACITY_GEOMETRY_UNKNOWN|
+                       DOLLY_CAPACITY_OVERFLOW|DOLLY_CAPACITY_INVALID))
+    fprintf(stderr,"WARNING: additional RDB geometry/capacity flags 0x%08" PRIX32
+            "; see full layout inspector.\n",capacity.flags);
+  }
+ }
  {
   DollyRdbAudit audit=dolly_rdb_audit(&r,base,dolly_block_size(source)-base);
   if(audit.flags)
