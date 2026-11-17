@@ -1399,3 +1399,12 @@ Version text is now `Dolly M1.40`. It is required in the Progress row:
 minimum width reserves the text's actual TextLength plus safe gaps and
 both 90px action buttons, preventing truncation even on minimum-width
 resizes. Cross-compile and visual regression remain to be done.
+
+### M1.41 — horizontal-only resize and SHINEPEN build label
+
+Main `WindowLimits` now fixes both minimum and maximum outer height
+to the already opened window height while retaining the measured minimum
+outer width and unrestricted maximum width. The compact `Dolly M1.41`
+label is rendered using the active screen's `SHINEPEN` (DrawInfo pen),
+not a hardcoded palette index. Other labels remain on `TEXTPEN`.
+Cross-build and WinUAE verification remain pending.
