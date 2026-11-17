@@ -133,3 +133,81 @@ remain future work. The Cancel button stops only synthetic progress.
 The first native test should inspect correct GadTools creation,
 legibility and reduced flicker on actual WinUAE hardware emulation,
 and confirm `WINDOW PASS` and exit code zero.
+
+## M1.7 — resizable public-screen Sheep Counter (unverified)
+
+The previous screenshot showed the "Blocks" gadget's auto-placed label
+clipping past the left edge. M1.7 removes the externally positioned
+GadTools label and draws "Blocks:" and "Errors:" explicitly **above**
+the native number gadgets, within the client area.
+
+The prototype window starts maximized **below the system screen title
+bar**, but is now resizable with the standard Intuition size gadget.
+It sets a minimum outer size of 420x205. Layout is recalculated from
+current window border sizes, available width and height:
+
+- 20 columns x 6 rows; individual grid cells grow/shrink in both axes
+- progress bar width follows the grid width
+- count gadgets grow/shrink and remain inside the client area
+- Cancel button follows the right edge, control row follows bottom edge
+- current cell retains the ASCII `*` marker
+
+A resize triggers IDCMP_NEWSIZE, detaches and rebuilds **the complete**
+GadTools gadget list (not selective refresh), then redraws the
+grid at its new cell dimensions. Normal scan progress still touches
+only the previous/new cell, progress-bar delta and number gadget.
+Exposed-window refresh uses the GadTools-aware refresh calls.
+This is intentionally a source-level test until the Docker m68k build
+and WinUAE test confirm it on MC68000 / 512 KiB Chip / Kickstart 2.04.
+
+Known limitations: fixed 20x6 logical grid, no true device I/O or
+non-synthetic progress; font/geometry edge cases and repeated resize
+memory behavior need testing. When an actual operation is in progress,
+state must be preserved across all layout changes.
+
+## Sheep Counter Hide semantics (M1.7 decision)
+
+Sheep Counter is an **auxiliary progress view**, not the owner of the
+running imaging/recovery operation. Its action button is labelled **Hide**,
+not Cancel or Exit. The window close gadget has the same meaning.
+
+- **Hide/close** dismisses only the Sheep Counter view and returns focus
+  to the main Dolly window. The core-owned operation continues unchanged,
+  including progress, errors and retries.
+- The main window will offer a way to reopen Sheep Counter and show the
+  current operation state. Closing the view is not an operation cancellation.
+- Pausing, stopping, or canceling a running operation requires an explicit
+  control in the operation-management UI with its own confirmation/safety
+  rules, not the Sheep Counter Hide action.
+- Current `dolly-sheep-window` is a **standalone synthetic executable**;
+  hiding its sole window necessarily ends that demo process because there
+  is no main window or independent core task yet. This is **not** a tested
+  implementation of background continuation or view reopening.
+
+The user confirmed the earlier M1.7 WinUAE build and that the resizable
+GadTools appearance is an acceptable minimum on MC68000, 512 KiB Chip,
+Kickstart 2.04. The subsequent Hide-label change is not yet retested.
+
+### M1.7 minimum-width resize regression (2026-11-17)
+
+User-reported WinUAE failure at the horizontal minimum:
+
+```text
+WINDOW before chip=302520
+WINDOW open chip=270288
+WINDOW FAIL: resize reflow
+```
+
+The window did not survive the attempted minimum-width reflow. Source
+inspection identified an inconsistent minimum: Intuition allowed an
+outer window width of 420 pixels while `calculate()` required an
+**inner** width of at least 400 pixels, excluding the OS borders.
+The check was relaxed to 360 pixels inner width, consistent with a
+420-pixel outer minimum on the tested classic border geometry.
+
+Furthermore, geometry is now validated before detaching existing
+GadTools, and the proposed layout is not committed unless validation
+succeeds. A rejected transient geometry with a still-valid previous
+gadget list now reports a warning rather than closing the viewer.
+This fix must be cross-compiled and independently retested on MC68000,
+512 KiB Chip, Kickstart 2.04. No test success is claimed yet.
