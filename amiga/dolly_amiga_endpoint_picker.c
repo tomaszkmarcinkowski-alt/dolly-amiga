@@ -53,6 +53,42 @@ static STRPTR logical_names[]={
     (STRPTR)"DH0: mounted (demo)",
     (STRPTR)"DH1: mounted (demo)"
 };
+/* All coordinates are window-relative. At the 606x195 baseline this
+ * matches the accepted layout; on larger public screens the LISTVIEWs
+ * grow vertically and each row grows horizontally. The bottom actions
+ * stay accessible, regardless of how large the chooser becomes.
+ */
+typedef struct PickerGeometry {
+    WORD left,right,full_width;
+    WORD mode_x,mode_w;
+    WORD list_y,list_h,action_y;
+    WORD browse_y,path_y,detail_y;
+    WORD format_x,format_w;
+} PickerGeometry;
+static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
+    PickerGeometry g;
+    const struct Window *w=p->window;
+    LONG left=20;
+    LONG right=(LONG)w->Width-(LONG)w->BorderRight-20;
+    LONG action=(LONG)w->Height-(LONG)w->BorderBottom-31;
+    LONG height=action-66-11;
+    if(right<left+320)right=left+320;
+    if(height<83)height=83;
+    g.left=(WORD)left;
+    g.right=(WORD)right;
+    g.full_width=(WORD)(right-left);
+    g.mode_x=122;
+    g.mode_w=(WORD)(right-122);
+    g.list_y=66;
+    g.list_h=(WORD)height;
+    g.action_y=(WORD)action;
+    g.browse_y=66;
+    g.path_y=105;
+    g.detail_y=132;
+    g.format_x=159;
+    g.format_w=(WORD)(right-159);
+    return g;
+}
 static void make_list(struct List *l,struct Node *nodes,STRPTR *names) {
     unsigned i;
     l->lh_Head=(struct Node *)&l->lh_Tail;
@@ -87,7 +123,8 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
     ng.ng_LeftEdge=x;ng.ng_TopEdge=y;
-    ng.ng_Width=w;ng.ng_Height=83;
+    ng.ng_Width=w;
+    ng.ng_Height=picker_geometry(p).list_h;
     ng.ng_GadgetID=id;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(LISTVIEW_KIND,last,&ng,
                         GTLV_Labels,(ULONG)items,
@@ -113,7 +150,8 @@ static void preview_file(DollyEndpointPicker *p) {
     rp=p->window->RPort;
     len=(ULONG)strlen(p->file_display);
     while(len>3u &&
-          (LONG)TextLength(rp,(STRPTR)p->file_display,len)>552) {
+          (LONG)TextLength(rp,(STRPTR)p->file_display,len)>
+          (LONG)picker_geometry(p).full_width-16) {
         p->file_display[--len]='\0';
     }
     if(len<(ULONG)strlen(p->pending_file.path) && len>=3u) {
@@ -127,8 +165,9 @@ static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=20;ng.ng_TopEdge=105;
-    ng.ng_Width=566;ng.ng_Height=17;
+    ng.ng_LeftEdge=picker_geometry(p).left;
+    ng.ng_TopEdge=picker_geometry(p).path_y;
+    ng.ng_Width=picker_geometry(p).full_width;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_FILE_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -140,8 +179,9 @@ static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=20;ng.ng_TopEdge=132;
-    ng.ng_Width=566;ng.ng_Height=16;
+    ng.ng_LeftEdge=picker_geometry(p).left;
+    ng.ng_TopEdge=picker_geometry(p).detail_y;
+    ng.ng_Width=picker_geometry(p).full_width;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_FILE_INFO;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->file_details,
@@ -152,8 +192,9 @@ static struct Gadget *format_choice(struct Gadget *last,DollyEndpointPicker *p) 
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=159;ng.ng_TopEdge=130;
-    ng.ng_Width=427;ng.ng_Height=17;
+    ng.ng_LeftEdge=picker_geometry(p).format_x;
+    ng.ng_TopEdge=130;
+    ng.ng_Width=picker_geometry(p).format_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_IMAGE_FORMAT;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
                         GTCY_Labels,(ULONG)image_formats,
@@ -203,10 +244,11 @@ static void file_details(DollyEndpointPicker *p) {
     }
     /* Clip only the display string, not the stored filename/path. */
     if(p->window) {
+        LONG available=(LONG)picker_geometry(p).full_width-16;
         len=(ULONG)strlen(p->file_details);
         while(len>3u &&
               (LONG)TextLength(p->window->RPort,
-                               (STRPTR)p->file_details,len)>550)
+                               (STRPTR)p->file_details,len)>available)
             p->file_details[--len]='\0';
     }
 }
@@ -215,8 +257,9 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=122;ng.ng_TopEdge=24;
-    ng.ng_Width=255;ng.ng_Height=17;
+    ng.ng_LeftEdge=picker_geometry(p).mode_x;
+    ng.ng_TopEdge=24;
+    ng.ng_Width=picker_geometry(p).mode_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_MODE;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
                         GTCY_Labels,(ULONG)mode_names,
@@ -228,16 +271,10 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
  */
 static void column_geometry(DollyEndpointPicker *p,unsigned count,
                             unsigned index,WORD *left,WORD *width) {
-    struct Window *w=p->window;
-    LONG start=(LONG)w->BorderLeft+4;
-    LONG end=(LONG)w->Width-(LONG)w->BorderRight-4;
-    LONG available=end-start;
-    LONG gap=0;
-    LONG span=available-gap*(LONG)(count-1u);
-    LONG x=start+(span*(LONG)index)/(LONG)count+
-           gap*(LONG)index;
-    LONG next=start+(span*(LONG)(index+1u))/(LONG)count+
-              gap*(LONG)index;
+    PickerGeometry g=picker_geometry(p);
+    LONG total=(LONG)g.full_width;
+    LONG x=(LONG)g.left+(total*(LONG)index)/(LONG)count;
+    LONG next=(LONG)g.left+(total*(LONG)(index+1u))/(LONG)count;
     *left=(WORD)x;
     *width=(WORD)(next-x);
 }
@@ -315,11 +352,14 @@ static void clear_picker_client(DollyEndpointPicker *p) {
 }
 static int rebuild(DollyEndpointPicker *p) {
     struct Gadget *last;
+    PickerGeometry g;
     if(!p->window)return 0;
+    g=picker_geometry(p);
     preview_file(p);
     file_details(p);
     if(p->gadgets) {
-        RemoveGList(p->window,p->gadgets,-1);
+        if(!p->gadgets_detached)
+            RemoveGList(p->window,p->gadgets,-1);
         FreeGadgets(p->gadgets);
         p->gadgets=NULL;
     }
@@ -340,28 +380,30 @@ static int rebuild(DollyEndpointPicker *p) {
         WORD x,w;
         unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
         column_geometry(p,columns,0u,&x,&w);
-        last=list(last,p,PICK_DEVICE,x,66,w,&p->devices,0);
+        last=list(last,p,PICK_DEVICE,x,g.list_y,w,&p->devices,0);
         if(!last)return 0;
         p->device_list=last;
         column_geometry(p,columns,1u,&x,&w);
-        last=list(last,p,PICK_UNIT,x,66,w,&p->units,!p->has_device);
+        last=list(last,p,PICK_UNIT,x,g.list_y,w,&p->units,!p->has_device);
         if(!last)return 0;
         p->unit_list=last;
         if(columns==3u) {
             column_geometry(p,columns,2u,&x,&w);
-            last=list(last,p,PICK_PARTITION,x,66,w,
+            last=list(last,p,PICK_PARTITION,x,g.list_y,w,
                       &p->partitions,!p->has_unit);
             if(!last)return 0;
             p->partition_list=last;
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
-        last=list(last,p,PICK_LOGICAL,20,66,566,&p->logical_devices,0);
+        last=list(last,p,PICK_LOGICAL,g.left,g.list_y,
+                  g.full_width,&p->logical_devices,0);
         if(!last)return 0;
         p->logical_list=last;
     }
     if(p->mode==DOLLY_MODE_FILE) {
         /* Reuse the otherwise empty LISTVIEW area. Full client width. */
-        last=button(last,p,PICK_FILE,20,66,566,"Browse file...",0);
+        last=button(last,p,PICK_FILE,g.left,g.browse_y,
+                    g.full_width,"Browse file...",0);
         if(!last)return 0;
         last=file_text(last,p);
         if(!last)return 0;
@@ -377,12 +419,15 @@ static int rebuild(DollyEndpointPicker *p) {
         }
     }
     /* File mode now commits exactly like every other mode. */
-    last=button(last,p,PICK_SELECT,20,160,172,"Use selection",1);
+    last=button(last,p,PICK_SELECT,g.left,g.action_y,
+                172,"Use selection",1);
     if(!last)return 0;
     p->choose_button=last;
-    last=button(last,p,PICK_CANCEL,410,160,176,"Cancel",0);
+    last=button(last,p,PICK_CANCEL,
+                (WORD)(g.right-176),g.action_y,176,"Cancel",0);
     if(!last)return 0;
     AddGList(p->window,p->gadgets,(ULONG)-1,-1,NULL);
+    p->gadgets_detached=0;
     RefreshGList(p->gadgets,p->window,NULL,-1);
     GT_RefreshWindow(p->window,NULL);
     change_enabled(p);
@@ -454,9 +499,14 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
           WA_Title,(ULONG)(role?"Dolly - Destination":"Dolly - Source"),
           WA_Left,12,WA_Top,(ULONG)top,
           WA_Width,606,WA_Height,195,
+          WA_MinWidth,606,WA_MinHeight,195,
+          WA_MaxWidth,(ULONG)screen->Width,
+          WA_MaxHeight,(ULONG)screen->Height-(ULONG)top,
+          WA_SizeGadget,TRUE,
           WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,
           WA_Activate,TRUE,WA_SmartRefresh,TRUE,
-          WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW,
+          WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|
+                   IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
           TAG_DONE);
     if(!p->window)return 0;
     return rebuild(p);
@@ -464,6 +514,7 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
 void dolly_picker_close(DollyEndpointPicker *p) {
     if(!p)return;
     if(p->window){CloseWindow(p->window);p->window=NULL;}
+    p->gadgets_detached=0;
     if(p->gadgets){FreeGadgets(p->gadgets);p->gadgets=NULL;}
     if(p->visual){FreeVisualInfo(p->visual);p->visual=NULL;}
 }
