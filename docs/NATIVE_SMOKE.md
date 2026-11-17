@@ -74,3 +74,7 @@ dolly-dma-advice DMA_ALIGNMENT pl
 ```
 
 The `pl` catalog currently uses Polish written with 7-bit ASCII characters as a compatibility fallback; proper Polish locale catalogs and the final GadTools warning window remain future work. This helper accesses no disk, and has not yet been executed in WinUAE or on physical AmigaOS.
+
+## Optional native ScreenMode/Screen Font watcher build
+
+For NDK-enabled native cross-build validation, add `-DDOLLY_NATIVE_GUI_WATCH=ON` alongside the existing AmigaOS toolchain file. This requests compilation of an **experimental** `dolly-native-gui-watch` static library containing `amiga/dolly_amiga_pref_notify.c` and `src/dolly_screen_watch.c`. It does **not** create a running GUI nor prove DOS/Intuition integration. Do not enable it for the plain host-only `DOLLY_NATIVE_ONLY` smoke test, as that host lacks AmigaOS NDK headers.
