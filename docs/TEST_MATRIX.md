@@ -903,3 +903,15 @@ M1.37 source changes are not yet cross-compiled or exercised in WinUAE.
 Not yet built or tested in AmigaOS/WinUAE. No operation is currently
 classified as safely stoppable; capability and actual cancellation
 semantics must be specified and tested in a later task.
+
+## AG. M1.39 — shorter footer and build identity
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-159 | Main window at default 600px width | Outer height 190px; reduced empty space below recessed status |
+| GUI-160 | Progress row | Centered `Dolly build M1.39` between percentage well and Stop |
+| GUI-161 | Resize to minimum usable width | Build label disappears when it cannot fully fit; no overlap with Stop or percentage |
+| GUI-162 | Stop and Quit | Both remain functional/disabled as in M1.38; same alignment |
+| GUI-163 | Main window on OS2.04 / alternate font | Status bezel remains visible, no clipped gadgets; check actual border metrics |
+
+M1.39 is not yet cross-compiled or WinUAE-tested.
