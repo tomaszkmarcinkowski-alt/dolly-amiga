@@ -238,12 +238,34 @@
 **Test:** odtworzony lokalny projekt GCC/CTest 5/5 PASS, ale środowisko jest 64-bitowe. Właściwy regresyjny build i odczyt >4 GiB na 32-bitowym Linuxie nadal pozostają do wykonania.
 
 
+
+### DJ-0025 · 2026-11-17 · Testy parserów / odporność · TEST LOKALNY PASS
+**Temat:** Deterministyczne mutowanie syntetycznych rekordów MBR/RDB.
+
+**Działanie:** dodano `tests/test_rdb_mutations.c`: 600 powtarzalnych wariantów (ustalony seed), 1–6 zmian pojedynczych bitów w MBR, RDSK, PART lub danych obrazu. Każda iteracja korzysta z pliku tymczasowego i wyłącznie odczytowego parsera. Test jest deterministyczny, więc błędne przypadki można odtworzyć.
+
+**Weryfikacja:** w lokalnie odtworzonym zestawie z nowymi zmianami `GCC/CTest` **6/6 PASS**. To test stabilności określonego zestawu mutacji, nie pełny fuzzing, nie dowód poprawności formatu i nie test na fizycznych urządzeniach.
+
+**Dalszy plan:** niezależny libFuzzer/AFL, seed corpus z legalnymi wariantami RDB, testy pod sanitizatorami i rzeczywiste, zanonimizowane obrazy.
+
+### DJ-0026 · 2026-11-17 · QA / CMake Release · POPRAWIONE I ZWERYFIKOWANE LOKALNIE
+**Temat:** `assert()` w testach C może być całkowicie usuwany przez `-DNDEBUG` w Release.
+
+**Problem:** część testów Dolly wykorzystuje `assert()` nie tylko do porównań, ale również do wykonywania operacji inicjalizujących. W konfiguracji Release takie wyrażenia są usuwane, co może dawać fałszywy wynik lub uszkodzić przebieg testu.
+
+**Działanie:** konfiguracja CMake dla testowych programów GNU/Clang dodaje `-UNDEBUG` bez wpływu na biblioteki produkcyjne.
+
+**Test:** lokalny odtworzony zestaw GCC Release: **6/6 PASS** przy wymuszonych aktywnych asercjach.
+
+**Pozostałe ryzyko:** docelowo zastąpić `assert()` w procedurach inicjalizacji testów jawnymi makrami CHECK z diagnostyką także poza tym zestawem kompilatorów. Aktualny GitHub Actions po zmianach pozostaje do niezależnej weryfikacji.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0025 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0027 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
