@@ -421,7 +421,7 @@ static void update_disk_info(DollyEndpointPicker *p) {
         strcpy(p->disk_info_display,"Select unit...");
         strcpy(p->disk_size_display,"Unknown");
     } else if(!p->query_attempted) {
-        strcpy(p->disk_info_display,"Registered; press Query");
+        strcpy(p->disk_info_display,"Press Query to read device info");
         strcpy(p->disk_size_display,"Not verified");
     } else if(!p->media_geometry.capacity_valid) {
         /* Do not mistake a successful INQUIRY for proof of media. */
