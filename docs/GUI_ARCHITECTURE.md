@@ -133,3 +133,34 @@ remain future work. The Cancel button stops only synthetic progress.
 The first native test should inspect correct GadTools creation,
 legibility and reduced flicker on actual WinUAE hardware emulation,
 and confirm `WINDOW PASS` and exit code zero.
+
+## M1.7 — resizable public-screen Sheep Counter (unverified)
+
+The previous screenshot showed the "Blocks" gadget's auto-placed label
+clipping past the left edge. M1.7 removes the externally positioned
+GadTools label and draws "Blocks:" and "Errors:" explicitly **above**
+the native number gadgets, within the client area.
+
+The prototype window starts maximized **below the system screen title
+bar**, but is now resizable with the standard Intuition size gadget.
+It sets a minimum outer size of 420x205. Layout is recalculated from
+current window border sizes, available width and height:
+
+- 20 columns x 6 rows; individual grid cells grow/shrink in both axes
+- progress bar width follows the grid width
+- count gadgets grow/shrink and remain inside the client area
+- Cancel button follows the right edge, control row follows bottom edge
+- current cell retains the ASCII `*` marker
+
+A resize triggers IDCMP_NEWSIZE, detaches and rebuilds **the complete**
+GadTools gadget list (not selective refresh), then redraws the
+grid at its new cell dimensions. Normal scan progress still touches
+only the previous/new cell, progress-bar delta and number gadget.
+Exposed-window refresh uses the GadTools-aware refresh calls.
+This is intentionally a source-level test until the Docker m68k build
+and WinUAE test confirm it on MC68000 / 512 KiB Chip / Kickstart 2.04.
+
+Known limitations: fixed 20x6 logical grid, no true device I/O or
+non-synthetic progress; font/geometry edge cases and repeated resize
+memory behavior need testing. When an actual operation is in progress,
+state must be preserved across all layout changes.
