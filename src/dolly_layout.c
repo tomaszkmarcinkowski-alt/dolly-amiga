@@ -1,5 +1,6 @@
 /* Read-only host CLI for primary MBR and nested Amiga RDB inspection. */
 #include "dolly_partition_map.h"
+#include "dolly_rdb_audit.h"
 #include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdint.h>
@@ -13,10 +14,19 @@ static int parse_sector(const char *s,uint32_t *result){
  if(errno||*end!='\0'||n>UINT32_MAX)return 0;
  *result=(uint32_t)n;return 1;
 }
-static void show_rdb(const DollyRdb *r,const char *indent){
+static void show_rdb(const DollyRdb *r,const char *indent,
+                     uint64_t container_start,uint64_t container_length){
  unsigned i;
  printf("%sRDB block %u, %u B/block, %u partition(s)\n",
         indent,r->header_block,r->block_bytes,r->partition_count);
+ {
+  DollyRdbAudit audit=dolly_rdb_audit(r,container_start,container_length);
+  if(audit.flags)
+   printf("%sWARNING: RDB overlaps/invalid bounds (flags 0x%08" PRIX32
+          "; partition indices %u/%u); do not modify\n",
+          indent,audit.flags,audit.first_partition,audit.second_partition);
+ }
+
  for(i=0;i<r->partition_count;i++){
   const DollyPartition *p=&r->partitions[i];
   printf("%s  %-12s start=%" PRIu64 " bytes, length=%" PRIu64
@@ -62,10 +72,10 @@ int main(int argc,char **argv){
    const DollyMbrPartition *p=&map->primary[i];
    printf("  type=%02" PRIX8 " LBA=%" PRIu32 " count=%" PRIu32 " start=%" PRIu64 " length=%" PRIu64 "\n",
           p->type,p->first_lba,p->sector_count,p->start_bytes,p->length_bytes);
-   if(p->contains_rdb)show_rdb(&p->nested_rdb,"    ");
+   if(p->contains_rdb)show_rdb(&p->nested_rdb,"    ",p->start_bytes,p->length_bytes);
   }
  }
- if(map->has_whole_disk_rdb)show_rdb(&map->whole_disk_rdb,"  ");
+ if(map->has_whole_disk_rdb)show_rdb(&map->whole_disk_rdb,"  ",0,dolly_block_size(src));
  free(map);dolly_block_close(src);
  puts("NOTE: not a complete disk-integrity or bootability check.");return 0;
 }
