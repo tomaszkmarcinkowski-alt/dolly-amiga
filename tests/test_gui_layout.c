@@ -89,6 +89,41 @@ int main(void){
            result.layout.fit==DOLLY_GUI_BAD_INPUT);
     assert(!strcmp(dolly_gui_font_source_name(DOLLY_GUI_FONT_SYSTEM_SCREEN),
                    "System Screen Font"));
+    /* Deterministic geometries include irregular screen areas and borders.
+     * Each returned window must fit; otherwise the API must reject it. */
+    {
+        uint32_t seed=0xD011A600u;
+        unsigned n;
+        for(n=0;n<5000;n++){
+            DollyGuiScreen v={0};
+            DollyGuiFont sys;
+            DollyGuiFontSettings cfg={0};
+            DollyGuiFontPlan planned;
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+            v.screen_width=240u+(seed%900u);
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+            v.screen_height=110u+(seed%500u);
+            v.reserved_top=8u+(seed%45u);
+            v.border_left=2u+(seed%10u);
+            v.border_right=2u+(seed%10u);
+            v.border_top=8u+(seed%25u);
+            v.border_bottom=2u+(seed%10u);
+            seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+            sys=f(5u+(seed%19u),7u+(seed%19u));
+            cfg.custom_enabled=(uint8_t)(seed&1u);
+            cfg.custom=f(5u+((seed>>5)%21u),7u+((seed>>7)%21u));
+            planned=dolly_gui_plan_with_fonts(
+                (DollyGuiView)(seed%DOLLY_GUI_VIEW_COUNT),v,sys,cfg,topaz);
+            if(planned.layout.fit==DOLLY_GUI_BAD_INPUT ||
+               planned.layout.fit==DOLLY_GUI_NO_FIT)continue;
+            fits(planned.layout,v);
+        }
+    }
+    screen=classic();screen.reserved_top=UINT32_MAX;
+    screen.reserved_bottom=1;
+    result=dolly_gui_plan_with_fonts(DOLLY_GUI_MAIN,screen,
+                                     screenfont,settings,topaz);
+    assert(result.layout.fit==DOLLY_GUI_BAD_INPUT);
     puts("GadTools layout and font fallback tests passed");
     return 0;
 }
