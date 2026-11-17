@@ -79,3 +79,7 @@ target_link_libraries(test-iff PRIVATE dollyiff)
 add_test(NAME iff_form_doly COMMAND test-iff)
 add_executable(dolly-iff src/dolly_iff_inspect.c)
 target_link_libraries(dolly-iff PRIVATE dollyiff)
+
+# Read-only host CLI for both MBR and nested RDB.
+add_executable(dolly-layout src/dolly_layout.c)
+target_link_libraries(dolly-layout PRIVATE dollymap)
