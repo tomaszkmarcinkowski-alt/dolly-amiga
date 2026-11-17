@@ -10,9 +10,11 @@
 static int emit_field(const DollyInventoryField *f,void *ctx){
     FILE *out=(FILE *)ctx;
     const char *source=f->origin==DOLLY_INV_DERIVED?"computed":
-        f->origin==DOLLY_INV_MBR?"MBR":"RDB PART";
-    if(f->availability==DOLLY_INV_UNAVAILABLE){
-        fprintf(out,"  %-23s unavailable (source: %s)\n",f->label,source);
+        f->origin==DOLLY_INV_MBR?"MBR":
+        f->origin==DOLLY_INV_RDB_HEADER?"RDSK":"RDB PART";
+    if(f->availability!=DOLLY_INV_PRESENT){
+        fprintf(out,"  %-23s %s (source: %s)\n",f->label,
+                dolly_inventory_availability_name(f->availability),source);
         return 0;
     }
     if(f->kind==DOLLY_INV_TEXT){
@@ -35,6 +37,8 @@ static int emit_field(const DollyInventoryField *f,void *ctx){
 static void show_rdb(const DollyRdb *r,const char *type){
     unsigned i;
     printf("%s: RDSK block %u, partitions %u\n",type,r->header_block,r->partition_count);
+    if(dolly_inventory_rdb_header(r,emit_field,stdout)!=0)
+        fprintf(stderr,"RDSK inventory rendering stopped\n");
     for(i=0;i<r->partition_count;i++){
         printf("PART #%u\n",i+1);
         if(dolly_inventory_partition(&r->partitions[i],emit_field,stdout)!=0)
