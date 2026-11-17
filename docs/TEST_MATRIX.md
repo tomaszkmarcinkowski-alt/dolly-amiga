@@ -265,3 +265,24 @@ probe and does not issue any new device commands.
 
 **Pending:** Docker m68k compile and WinUAE confirmation. RTG remains
 deferred.
+
+## J. M1.24 bridge: independent Device name and Size diagnostics
+
+The approved M1.24 GUI already has two separate recessed fields:
+Device name and Size. The independently launched diagnostic now prints
+exactly those two keys; it still does **not** populate the GUI directly.
+
+| ID | Scenario | Expected |
+|---|---|---|
+| PHYS-11 | No-argument physical candidate listing | No physical device opened; no geometry or SCSI queries |
+| PHYS-12 | Explicit probe of supported SCSI-direct device | Device name contains sanitized INQUIRY vendor/product |
+| PHYS-13 | Geometry supported | Size is independently reported in MiB |
+| PHYS-14 | SCSI-direct unsupported, geometry available | Device name: Unavailable, Size: measured value |
+| PHYS-15 | Geometry unsupported, SCSI INQUIRY available | Device name: product, Size: Unavailable |
+| PHYS-16 | OpenDevice failure | Both labeled fields Unavailable; device not CloseDevice'd |
+| PHYS-17 | GUI Source/Destination Physical/Partition | Keeps the two inset fields unchanged, still displays demo placeholders |
+
+**Integration gate:** do not wire physical probe results to the
+selection dialog until real driver/unit candidates and read-only query
+results have been verified in WinUAE. Do not map hardware to the
+synthetic Device/Unit indices.
