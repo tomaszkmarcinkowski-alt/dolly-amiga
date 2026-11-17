@@ -10,4 +10,4 @@ Do **not** ship equipment without first contacting the project maintainer and ag
 
 A thank-you donation is not a product purchase, a license obligation, or a guarantee of service, features or support. The program is intended to remain usable without any gift.
 
-**Code licensing is a separate decision and is not yet finalized.**
+**Dolly source code uses the [MIT License](LICENSE).** Gifts are never a condition of the license.
