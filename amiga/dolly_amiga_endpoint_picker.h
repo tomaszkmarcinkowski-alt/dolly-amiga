@@ -10,19 +10,28 @@ typedef struct DollyEndpointPicker {
     struct Window *window;
     APTR visual;
     struct Gadget *gadgets;
-    struct Gadget *device_list, *unit_list, *partition_list;
-    struct List devices,units,partitions;
+    struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
+    struct Gadget *logical_list,*choose_button,*file_text;
+    struct Gadget *format_cycle,*file_info;
+    struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[2],unit_nodes[2],partition_nodes[2];
+    struct Node logical_nodes[2];
     DollyEndpoint result;
-    unsigned device,unit,partition;
-    unsigned has_device,has_unit,has_partition;
+    DollyEndpoint pending_file;
+    char file_display[256];
+    char file_details[160];
+    DollyImageFormat output_format;
+    unsigned device,unit,partition,logical;
+    DollyEndpointMode mode;
+    unsigned has_device,has_unit,has_partition,has_logical;
     unsigned role;
     unsigned char changed;
     char message[64];
 } DollyEndpointPicker;
 /* role: 0 source, 1 target. Two distinct, identical selectors. */
 int dolly_picker_open(DollyEndpointPicker *picker,struct Screen *screen,
-                      unsigned role,const DollyEndpoint *initial);
+                      unsigned role,const DollyEndpoint *initial,
+                      DollyEndpointMode preferred_mode);
 void dolly_picker_pump(DollyEndpointPicker *picker);
 void dolly_picker_close(DollyEndpointPicker *picker);
 #endif

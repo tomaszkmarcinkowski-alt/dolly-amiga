@@ -614,3 +614,174 @@ and WinUAE tests for source unit/partition/file, destination
 availability, changing operation kind, no overlap on narrow main
 window, no vertical main resize, chooser cancel/reopen, and Sheep
 Counter hide/reopen on MC68000, 512 KiB Chip RAM and Kickstart 2.04.
+
+### M1.18 — endpoint type first, with four GadTools picker modes
+
+User requested that detailed memory measurement be deferred until
+the end of visual/functional GUI work. The priority here is interaction
+and appearance, not profiling.
+
+The shared Source and Destination picker now begins with a native
+`CYCLE_KIND` offering four **endpoint types**. This is explicitly
+different from the rejected old device-choice Cycle:
+
+- **Physical device:** select `device`, then `unit`; choosing the
+  unit means the **entire disk/unit** rather than an arbitrary partition
+- **Logical device:** select a device/volume **mounted by AmigaDOS**,
+  represented in this prototype by synthetic `DH0:` and `DH1:` entries
+- **Partition:** select `device`, then `unit`, then a partition from
+  RDB/MBR; current entries are explicitly synthetic examples, **not**
+  actual RDB/MBR parsing
+- **File:** use the native ASL file requester (load for source, save
+  for destination); no disk image file is created by the demo
+
+The selector uses only the controls needed in its selected mode and
+rebuilds its GadTools gadget list when Cycle changes. Parent-dependent
+lists stay disabled until a parent selection exists, with a final
+`Use selection` confirmation. Source and destination use the same
+implementation but have distinct selected endpoint state.
+
+The main operation Cycle adds **Create image**. Its input is a selected
+device/unit, logical device, partition, or file; its **destination must
+be a file**. For convenience, the unselected destination picker opens
+in File mode when Create image is selected; the unselected source
+picker opens in File mode for Restore. The operation description is
+still displayed below the main operation Cycle. Target selection
+remains disabled for single-ended Scan and Inventory operations.
+Nothing reads a physical unit, parses RDB/MBR or writes image data
+in this prototype.
+
+`dolly_endpoint` now models logical devices separately from
+physical units, partition references and filenames. Host tests
+cover mode mapping, logical-vs-logical identical endpoint prevention,
+file-only Create image destinations, and the existing Copy/Restore
+constraints. Alias detection between an AmigaDOS logical device and
+a physical partition is **not yet possible** without actual device
+discovery; the model cannot authorize physical writes.
+
+**Unverified:** M1.18 requires a fresh host endpoint regression test,
+m68k cross-build using the NDK in Docker, and WinUAE interaction tests.
+Do not claim that the user has already tested this version.
+
+### M1.18 repaint fix — changing endpoint type
+
+Confirmed user regression: switching the mode Cycle in Source or
+Destination removed the previous LISTVIEW_KIND gadgets from the
+Intuition gadget list, but **left their old pixels in the window
+RastPort**, causing overlapping graphical remnants. Removing a
+GadTools gadget does not automatically clear its last-drawn area.
+
+Before creating or attaching the next mode's gadgets, the picker now
+clears the actual client rectangle (bounded by the live
+`Window.BorderLeft/Right/Top/Bottom`) with the public screen
+`BACKGROUNDPEN`. The window's native title bar/borders are untouched.
+Afterwards it attaches and refreshes GadTools, re-evaluates enabled
+controls, and redraws mode labels. This happens only on initial view
+creation and type transitions, **not** on every progress tick. The same
+function handles both source and destination picker windows.
+
+Pending Docker m68k compilation and WinUAE runtime confirmation.
+
+### M1.18 — File mode: preview before commit
+
+Following WinUAE feedback, the File mode no longer puts `Browse file...`
+in the bottom `Use selection` position. Instead it renders a
+full-client-width GadTools `BUTTON_KIND` above a full-width recessed
+`TEXT_KIND` path field in the area used by the other modes' lists.
+The bottom action row **always** retains separate `Use selection`
+and `Cancel` controls.
+
+ASL now selects a **pending** file endpoint, updates the read-only text
+field and enables `Use selection`; the parent Source/Destination
+selection is not changed until that button is clicked. Closing or
+cancelling the dialog leaves the previous committed endpoint intact.
+The path displayed in the text field is measured with the active font's
+`TextLength()` and clipped with an ellipsis to avoid crossing borders;
+the full unmodified path remains in `pending_file` and is committed
+on confirmation. An initially selected file is preloaded when revisiting
+the chooser.
+
+Same behavior applies to Source File and Destination File modes,
+including Create image. No actual image I/O is performed. This GUI fix
+still requires Docker m68k compile and WinUAE validation.
+
+### M1.18 — ASL current-directory and proportional list columns (WinUAE feedback)
+
+When selecting a file in the current directory, the ASL file requester
+may return a valid filename but an empty or NULL drawer string. The
+previous picker incorrectly required a **non-empty drawer** and silently
+rejected this case, leaving Selected file blank and Use selection
+disabled. The picker now accepts `fr_File` by itself as a valid relative
+AmigaDOS pathname, or combines drawer + filename when a drawer is
+provided. The pending-file preview and explicit Use selection behavior
+remain unchanged. As with other relative DOS paths, any eventual real
+I/O implementation must resolve or preserve the correct directory
+context; this prototype does not open the file.
+
+Physical device now uses **two equal-width LISTVIEW_KIND columns**,
+Device and Unit, filling the available client width. Partition uses
+**three equal-width columns**, Device, Unit and Partition. Both the
+column list gadgets and their captions use the same geometry function
+based on the actual Intuition window borders and a constant 8-pixel
+gutter. Previously the first two lists had fixed narrow widths even
+when the third column was absent.
+
+This revision is committed but needs m68k Docker compilation and WinUAE
+confirmation in both Source and Destination pickers.
+
+### M1.18 — touching columns, image format and source-file inspection
+
+Per user instruction, Physical device's two LISTVIEW_KIND columns and
+Partition's three columns now have **zero intentional inter-column
+gutter**, sharing the full client width, with proportional widths
+derived from the actual Intuition window border sizes.
+
+File-mode behavior differs by endpoint role:
+
+- **Destination**: beneath Browse file and its recessed path preview,
+  a native `CYCLE_KIND` now chooses **RAW / HDF / ADF / IFF DOLY**.
+  The selected format is stored in `DollyEndpoint.image_format` and
+  preserved when the selection is committed. RAW is the prototype
+  default. This is a *parameter only*: no output file encoding or IFF
+  DOLY format serializer exists yet.
+- **Source**: beneath Browse file and the recessed filename/path preview,
+  another recessed `TEXT_KIND` shows basic file metadata. The size
+  is obtained from AmigaDOS `Lock` + `Examine` (`fib_Size`), using
+  read-only directory metadata, with a clear 'unavailable' fallback.
+  The type label is a **filename-extension hint only** (ADF, HDF,
+  RAW/IMG, possible IFF), *not* content sniffing or format validation.
+  On filename selection, `GT_SetGadgetAttrs` updates this field.
+  File paths that are relative to the current AmigaDOS directory remain
+  valid inputs, and no physical disk block access is introduced.
+
+The two views reuse the same picker window and native GadTools
+rendering; the output-format control is specific to the Destination
+File mode. A new portable endpoint regression assertion checks
+format metadata attached to the committed file endpoint.
+
+**Awaiting Docker/WinUAE verification.** Memory profiling remains
+deferred per the user's earlier request.
+
+### M1.18 startup regression — alert 0x8000000B
+
+User WinUAE report after adding DOS-backed source file metadata:
+`Software Failure / Program failed (error #8000000B)` before
+a usable main window. This is the MC68000 Line-F exception code,
+but the alert alone does not identify the instruction or root cause.
+
+The latest experimental patch avoids defining, manually opening,
+or manually closing a separate global `DOSBase` in the executable.
+The Amiga C runtime startup is expected to initialize the base used
+by `proto/dos.h`; the metadata reader still guards its DOS usage
+with `if(DOSBase)`. The original working demo did not manually
+manage this global. This is a **testable hypothesis**, not a proven
+diagnosis, until a rebuilt binary runs in WinUAE.
+
+Three startup breadcrumbs were added to Shell output:
+`M1.18 BOOT: entered main`, `public screen ready`, and
+`main window ready`. If an exception remains, record the last
+visible line and the WinUAE CPU debugger PC/opcode. Do not
+interpret this alert as proof of FPU code or hardware damage.
+
+**Do not mark M1.18 validated** until MC68000 / 512 KiB Chip /
+Kickstart 2.04 boot and both selectors pass.

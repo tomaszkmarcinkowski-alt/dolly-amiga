@@ -14,6 +14,7 @@
 #include <graphics/gfxbase.h>
 #include <graphics/rastport.h>
 #include <graphics/text.h>
+#include <dos/dosextens.h>
 #include <libraries/gadtools.h>
 #include <utility/tagitem.h>
 #include <proto/exec.h>
@@ -27,6 +28,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *AslBase;
+/* dos.library base is initialized by the C runtime; do not replace it. */
 
 #define GRID_COLS 24u
 #define GRID_ROWS 8u
@@ -85,13 +87,15 @@ static STRPTR demo_operations[]={
     (STRPTR)"Surface scan demo",
     (STRPTR)"Inventory preview",
     (STRPTR)"Copy disk/file demo",
-    (STRPTR)"Restore image demo",NULL
+    (STRPTR)"Restore image demo",
+    (STRPTR)"Create image demo",NULL
 };
 static const char *demo_descriptions[]={
     "Read-only scan of source blocks.",
     "Inspect device and partition layout.",
     "Copy blocks from source to destination.",
-    "Restore a file image to a destination."
+    "Restore a file image to a destination.",
+    "Create an image file from a selected source."
 };
 static UWORD selected_operation=0;
 static void text_copy(char *dst,size_t cap,const char *src) {
@@ -107,6 +111,11 @@ static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
     }
     if(e->kind==DOLLY_ENDPOINT_FILE){
         text_copy(out,cap,e->path);return;
+    }
+    if(e->kind==DOLLY_ENDPOINT_LOGICAL) {
+        text_copy(out,cap,e->logical==0 ? "DH0: (mounted demo)" :
+                   "DH1: (mounted demo)");
+        return;
     }
     sprintf(tmp,"Demo device %u / unit %u",
             (unsigned)e->device,(unsigned)e->unit);
@@ -143,6 +152,10 @@ static void update_main_status(void) {
     else if(need && !selected_target.kind)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Choose destination.");
+    else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+            selected_target.kind!=DOLLY_ENDPOINT_FILE)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Create image needs a destination file.");
     else if(!can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Source and destination overlap.");
@@ -778,7 +791,9 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             else if(id==MAIN_SOURCE_ID) {
                 dolly_picker_close(&target_picker);
                 if(!dolly_picker_open(&source_picker,public_screen,0,
-                                      &selected_source))
+                                      &selected_source,
+                                      selected_operation==DOLLY_DEMO_RESTORE ?
+                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL))
                     dolly_picker_close(&source_picker);
                 update_main_actions();
             } else if(id==MAIN_TARGET_ID &&
@@ -786,10 +801,12 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                         (DollyDemoOperation)selected_operation)) {
                 dolly_picker_close(&source_picker);
                 if(!dolly_picker_open(&target_picker,public_screen,1,
-                                      &selected_target))
+                                      &selected_target,
+                                      selected_operation==DOLLY_DEMO_CREATE_IMAGE ?
+                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
-            } else if(id==MAIN_OPERATION_ID && code<4u) {
+            } else if(id==MAIN_OPERATION_ID && code<5u) {
                 selected_operation=code;
                 refresh_main_selection();
             } else if(id==MAIN_START_ID &&
@@ -845,12 +862,14 @@ int main(void) {
         (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
     };
     dolly_operation_init(&operation);
+    puts("M1.18 BOOT: entered main");
     /* Open the main UI idle. Starting a synthetic operation is explicit. */
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
     if(!IntuitionBase)return 10;
     GfxBase=(struct GfxBase *)OpenLibrary("graphics.library",36);
     GadToolsBase=OpenLibrary("gadtools.library",36);
     AslBase=OpenLibrary("asl.library",36); /* Optional file selector. */
+    /* libnix startup already owns DOSBase; no extra OpenLibrary. */
     if(!GfxBase || !GadToolsBase)goto cleanup;
     marker_font=OpenFont(&marker_attr);
     if(!marker_font)goto cleanup;
@@ -860,11 +879,13 @@ int main(void) {
        (ULONG)public_screen->Height<256ul)goto cleanup;
     screen_info=GetScreenDrawInfo(public_screen);
     if(!screen_info)goto cleanup;
+    puts("M1.18 BOOT: public screen ready");
     if(!open_view(&main_view,1,"Dolly - Main window (demo)",
                   12,(ULONG)public_screen->BarHeight+1ul,600,213))
         goto cleanup;
     draw_full(&main_view,1);
     refresh_main_selection();
+    puts("M1.18 BOOT: main window ready");
     /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
         WaitTOF();
@@ -917,7 +938,7 @@ cleanup:
         FreeScreenDrawInfo(public_screen,screen_info);
     if(public_screen)UnlockPubScreen(NULL,public_screen);
     if(marker_font)CloseFont(marker_font);
-    if(AslBase)CloseLibrary(AslBase);
+     if(AslBase)CloseLibrary(AslBase);
     if(GadToolsBase)CloseLibrary(GadToolsBase);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);
     if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);
