@@ -8,7 +8,7 @@ Prove that the portable read-only core can run as an AmigaOS CLI program on a Mo
 
 The executable `dolly-native-smoke` supports:
 - `--version` — print the tool identity;
-- `--selftest` — build a tiny synthetic RDSK/PART inside an in-memory buffer, parse it, verify checksums, inspect byte ranges, execute the RDB collision audit, stream the PART's Sheep Inventory fields, evaluate MaxTransfer and check NSD64 command planning;
+- `--selftest` — build a tiny synthetic RDSK/PART inside an in-memory buffer, parse it, verify checksums, inspect byte ranges, execute the RDB collision audit, stream the PART's Sheep Inventory fields, evaluate MaxTransfer, verify DMA mask/address boundaries and check NSD64 command planning;
 - `--help` / no arguments — show instructions.
 
 **This tool does NOT open any device.** It cannot write to any disk. A successful smoke test proves only a small portable code path, not the correctness of AmigaOS I/O drivers, NSD/TD64, DMA or bootability.
@@ -53,3 +53,11 @@ The self-test prints a **stage number** if it fails and the size of the heap-all
 5. Expand the test plan to classic 68020+, PiStorm/Emu68, NSD and TD64 drivers once basic 68000 behavior is known.
 
 See also [AmigaOS I/O limitations](AMIGA_IO.md), [Issue #3](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/3) and [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8).
+
+## Host regression update (2026-11-17)
+
+The native-only source path also exercises `dolly_dma_check_buffer()`: a valid aligned lower-16-MiB range and a deliberately overflowing 24-bit DMA aperture. A locally reconstructed source subset compiled with GCC and Clang (`-std=c99 -Wall -Wextra -Wpedantic -Werror`) and ran `--selftest` successfully. GCC ASan/UBSan with leak checking also passed.
+
+On this **64-bit host**, the heap-allocated `DollyRdb` result reports **14376 bytes**. Do not project this number onto m68k without actually compiling the target; sizes may differ with alignment/ABI.
+
+The reconstructed host source subset is not a complete checkout of current `main`. GitHub Actions, the real m68k cross build and WinUAE are not yet independently validated.
