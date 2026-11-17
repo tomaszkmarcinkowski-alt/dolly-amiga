@@ -20,6 +20,8 @@ typedef struct DollyEndpointPicker {
     struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX];
     struct Node partition_nodes[DOLLY_PART_MAX];
+    /* LISTVIEW display strings; on-disk RDB labels remain unmodified. */
+    char partition_list_labels[DOLLY_PART_MAX][48];
     DollyNativePartitionMap partition_map;
     DollyMediaGeometry media_geometry;
     unsigned partition_count;
