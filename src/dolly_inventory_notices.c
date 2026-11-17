@@ -1,11 +1,42 @@
 #include "dolly_inventory_notices.h"
 #include "dolly_maxtransfer.h"
 #include "dolly_rdb_audit.h"
+#include <string.h>
+/* A bounded, allocation-free lookup; the advice is deliberately
+ * non-destructive and never recommends guessing storage parameters. */
+static const char *suggestion_for(const char *code){
+    if(!strcmp(code,"MAXTRANSFER_MISSING"))
+        return "Check the active MountList/DosList value before drawing conclusions.";
+    if(!strcmp(code,"MAXTRANSFER_ZERO"))
+        return "Compare this PART entry with active mount settings and controller documentation.";
+    if(!strcmp(code,"MAXTRANSFER_ABOVE_REFERENCE"))
+        return "Identify the controller and driver; verify their documented transfer limit before making changes.";
+    if(!strcmp(code,"MAXTRANSFER_BELOW_REFERENCE"))
+        return "Check controller requirements; a smaller value may be intentional, do not raise it automatically.";
+    if(!strcmp(code,"SECTORS_PER_BLOCK_NONSTANDARD"))
+        return "Verify the original RDB and filesystem geometry; do not rewrite metadata based on this warning alone.";
+    if(!strcmp(code,"MEMORY_MASK_ZERO"))
+        return "Compare the PART mask with the active mount settings and controller DMA requirements.";
+    if(!strcmp(code,"DOSTYPE_MISSING"))
+        return "Inspect the original partition format and active mount configuration without modifying the disk.";
+    if(!strcmp(code,"RDB_PARTITIONS_OVERLAP"))
+        return "Review both byte/LBA ranges and keep the drive read-only until the layout is understood.";
+    if(!strcmp(code,"RDB_HEADER_COLLISION"))
+        return "Inspect the RDSK location and partition extent; do not attempt a repair without a verified backup.";
+    if(!strcmp(code,"RDB_PART_DESCRIPTOR_COLLISION"))
+        return "Compare the PART descriptor addresses and data ranges before any write.";
+    if(!strcmp(code,"RDB_OUTSIDE_CONTAINER"))
+        return "Check the parent MBR partition boundaries and RDB relative offsets in read-only mode.";
+    if(!strcmp(code,"RDB_AUDIT_INVALID"))
+        return "Check recorded geometry and metadata validity; current results cannot certify the layout.";
+    return "Inspect this warning and the underlying source before changing any disk settings.";
+}
 static int notice(DollyInventoryNoticeEmit emit,void *user,
                   const char *code,const char *message,
                   DollyInventoryNoticeSeverity severity){
     DollyInventoryNotice n;
     n.code=code;n.message=message;n.severity=severity;
+    n.suggested_action=suggestion_for(code);
     return emit(&n,user);
 }
 int dolly_inventory_partition_notices(const DollyPartition *p,
