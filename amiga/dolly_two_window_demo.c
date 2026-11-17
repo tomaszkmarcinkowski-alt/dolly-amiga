@@ -100,21 +100,27 @@ static int create_gadgets(DollyDemoView *v,int main_window) {
     if(!last)return 0;
     if(main_window) {
         last=button(last,v,MAIN_SHOW_ID,16,28,118,"Sheep Counter");
-        if(!last)return 0; v->show=last;
+        if(!last)return 0;
+        v->show=last;
         last=button(last,v,MAIN_QUIT_ID,150,28,118,"Quit demo");
-        if(!last)return 0; v->quit=last;
+        if(!last)return 0;
+        v->quit=last;
         last=number(last,v,MAIN_COUNT_ID,20,111,110,
                     (ULONG)operation.completed_blocks);
-        if(!last)return 0; v->count=last;
+        if(!last)return 0;
+        v->count=last;
     } else {
         last=number(last,v,SHEEP_COUNT_ID,20,156,100,
                     (ULONG)operation.completed_blocks);
-        if(!last)return 0; v->count=last;
+        if(!last)return 0;
+        v->count=last;
         last=number(last,v,SHEEP_ERRORS_ID,153,156,100,
                     (ULONG)operation.errors);
-        if(!last)return 0; v->errors=last;
+        if(!last)return 0;
+        v->errors=last;
         last=button(last,v,SHEEP_HIDE_ID,278,155,88,"Hide");
-        if(!last)return 0; v->hide=last;
+        if(!last)return 0;
+        v->hide=last;
     }
     return 1;
 }
@@ -164,8 +170,8 @@ static void update_numbers(DollyDemoView *v) {
 }
 static void draw_main_labels(void) {
     if(!main_view.window)return;
-    label(main_view.window,20,82,"Main window stays open.");
-    label(main_view.window,20,96,"Hide Sheep Counter without stopping scan.");
+    label(main_view.window,20,82,"Main window remains open.");
+    label(main_view.window,20,96,"Hide keeps the scan running.");
     label(main_view.window,20,108,"Blocks:");
     label(main_view.window,138,124,"/ 192 (synthetic)");
 }
