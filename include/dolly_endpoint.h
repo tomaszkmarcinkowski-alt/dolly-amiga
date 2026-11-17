@@ -14,12 +14,19 @@ typedef enum DollyEndpointMode {
     DOLLY_MODE_PARTITION=2,
     DOLLY_MODE_FILE=3
 } DollyEndpointMode;
+typedef enum DollyImageFormat {
+    DOLLY_IMAGE_RAW=0,
+    DOLLY_IMAGE_HDF=1,
+    DOLLY_IMAGE_ADF=2,
+    DOLLY_IMAGE_IFF_DOLY=3
+} DollyImageFormat;
 typedef struct DollyEndpoint {
     DollyEndpointKind kind;
     uint8_t device;
     uint8_t unit;
     uint8_t partition;
     uint8_t logical;
+    DollyImageFormat image_format; /* Selected output format; no writer yet. */
     char path[256];
 } DollyEndpoint;
 typedef enum DollyDemoOperation {
