@@ -47,6 +47,13 @@ static int count_mbr(const DollyInventoryField *f,void *user){
     if(!strcmp(f->key,"mbr_contains_rdb"))assert(f->number==1);
     ++*count;return 0;
 }
+static int count_rdb(const DollyInventoryField *f,void *user){
+    unsigned *n=(unsigned *)user;
+    assert(f->availability==DOLLY_INV_PRESENT);
+    if(!strcmp(f->key,"rdb_block_bytes"))assert(f->number==512);
+    if(!strcmp(f->key,"rdb_partition_count"))assert(f->number==2);
+    ++*n;return 0;
+}
 static int stop_early(const DollyInventoryField *f,void *user){
     unsigned *count=(unsigned *)user;(void)f;(*count)++;return 7;
 }
@@ -85,6 +92,20 @@ int main(void){
         assert(fields==7);
         assert(dolly_inventory_mbr_partition(NULL,count_mbr,&fields)==-1);
     }
+    {
+        DollyRdb hdr;
+        unsigned fields=0;
+        memset(&hdr,0,sizeof(hdr));
+        hdr.block_bytes=512;hdr.partition_count=2;
+        hdr.cylinders=100;hdr.heads=4;hdr.sectors=16;
+        assert(dolly_inventory_rdb_header(&hdr,count_rdb,&fields)==0);
+        assert(fields==7);
+        assert(dolly_inventory_rdb_header(&hdr,stop_early,&n)==7);
+    }
+    assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_UNAVAILABLE),"not present"));
+    assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_NOT_QUERIED),"not queried"));
+    assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_UNSUPPORTED),"unsupported"));
+    assert(!strcmp(dolly_inventory_availability_name(DOLLY_INV_INCONSISTENT),"inconsistent"));
     assert(dolly_inventory_partition(0,collect,&c)==-1);
     assert(dolly_inventory_partition(&p,0,&c)==-1);
     puts("Sheep Inventory streaming field tests passed");return 0;
