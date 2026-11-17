@@ -18,6 +18,9 @@
 - [x] First RDB de_MaxTransfer classification and CLI warning, with 0x1FE00 as conservative reference
 - [x] Standalone MaxTransfer classifier tested locally with GCC/ASan/UBSan; full integration build remains to be confirmed
 
+- [x] Preliminary whole-device RDB/MBR coexistence warnings and overlap flags
+- [x] Additional RDB/PART collision auditing and minimum checksum coverage validation (partial local regression tests)
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
