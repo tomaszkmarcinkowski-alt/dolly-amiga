@@ -15,7 +15,8 @@ int main(void) {
     a=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_MAIN,m);
     b=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_SHEEP,m);
     assert(a.valid && b.valid);
-    assert(a.outer_width>=104+12+80+12+6+8+8);
+    /* Equal-width buttons must each fit the longer 104px caption. */
+    assert(a.outer_width>=2*(104+12)+6+8+8);
     assert(b.outer_width>=24*10+8+8+8);
     assert(b.outer_height>=140+4+12+4);
     m.heading_width+=100;
