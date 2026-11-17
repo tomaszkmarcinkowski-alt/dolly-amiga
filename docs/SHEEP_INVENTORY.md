@@ -111,3 +111,20 @@ The window is implemented in `amiga/dolly_amiga_inventory_view.c` and is
 built with the native demo; it is **not yet cross-compiled or WinUAE
 verified**. Hardware access must be tested on disposable images before
 relying on any device-specific results.
+
+## M1.46 — partition selection details
+
+The native Sheep Inventory list is still interactive, but occupies the
+left side of the existing window. Its right side displays attributes of the
+currently selected PART record without issuing another device query.
+The scanner retains explicit presence flags for DosType (DosEnvec index 16),
+BootPri (15), DMA Mask (14), and MaxTransfer (13). An absent field is
+shown as `unavailable`; a valid zero remains zero. BootPri is signed.
+
+RDB records expose DosType as a raw hexadecimal value, signed BootPri,
+MaxTransfer, Mask, filesystem block size, SectorPerBlock, cylinder range
+and partition size. For MBR entries, type and size are displayed and
+RDB-only fields are stated not to exist in that format. These values are
+read from the on-disk partition metadata and do not certify mounted
+configuration or DMA safety. The source list and main Dolly layout stay
+otherwise unchanged. Compile and WinUAE validation are pending.
