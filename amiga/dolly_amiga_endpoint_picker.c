@@ -1196,7 +1196,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         } else if(deferred==3) {
             invalidate_query(p);
         }
-        if(!rebuild(p)) {
+        if(!rebuild(p))
             dolly_picker_close(p);
     }
 }
