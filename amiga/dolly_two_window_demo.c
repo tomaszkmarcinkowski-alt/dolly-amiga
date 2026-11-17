@@ -261,8 +261,14 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
                            operation.state!=DOLLY_OP_RUNNING &&
                            operation.state!=DOLLY_OP_PAUSED) ||
                           (id==MAIN_START_ID &&
-                           (operation.state==DOLLY_OP_RUNNING ||
-                            operation.state==DOLLY_OP_PAUSED))),
+                           ((operation.state==DOLLY_OP_RUNNING ||
+                             operation.state==DOLLY_OP_PAUSED) ||
+                            !dolly_demo_can_start(
+                             (DollyDemoOperation)selected_operation,
+                             &selected_source,&selected_target))) ||
+                          (id==MAIN_TARGET_ID &&
+                           !dolly_demo_needs_target(
+                             (DollyDemoOperation)selected_operation))),
                         TAG_DONE);
 }
 static struct Gadget *make_number(struct Gadget *last,DollyDemoView *v,
@@ -670,13 +676,38 @@ static void update_main_actions(void) {
                           GA_Disabled,(ULONG)!active,TAG_DONE);
     if(main_view.start)
         GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
-                          GA_Disabled,(ULONG)active,TAG_DONE);
+                          GA_Disabled,(ULONG)(active ||
+                          !dolly_demo_can_start(
+                            (DollyDemoOperation)selected_operation,
+                            &selected_source,&selected_target)),TAG_DONE);
     if(main_view.device)
         GT_SetGadgetAttrs(main_view.device,main_view.window,NULL,
                           GA_Disabled,(ULONG)active,TAG_DONE);
+    if(main_view.target_button)
+        GT_SetGadgetAttrs(main_view.target_button,main_view.window,NULL,
+                          GA_Disabled,(ULONG)(active ||
+                          !dolly_demo_needs_target(
+                            (DollyDemoOperation)selected_operation)),TAG_DONE);
     if(main_view.op_selector)
         GT_SetGadgetAttrs(main_view.op_selector,main_view.window,NULL,
                           GA_Disabled,(ULONG)active,TAG_DONE);
+}
+static void refresh_main_selection(void) {
+    if(!main_view.window)return;
+    update_main_status();
+    if(main_view.source_text)
+        GT_SetGadgetAttrs(main_view.source_text,main_view.window,NULL,
+                          GTTX_Text,(ULONG)main_view.source_label,TAG_DONE);
+    if(main_view.target_text)
+        GT_SetGadgetAttrs(main_view.target_text,main_view.window,NULL,
+                          GTTX_Text,(ULONG)main_view.target_label,TAG_DONE);
+    if(main_view.description)
+        GT_SetGadgetAttrs(main_view.description,main_view.window,NULL,
+                          GTTX_Text,(ULONG)main_view.desc_label,TAG_DONE);
+    if(main_view.status)
+        GT_SetGadgetAttrs(main_view.status,main_view.window,NULL,
+                          GTTX_Text,(ULONG)main_view.status_label,TAG_DONE);
+    update_main_actions();
 }
 static void progress_view_update(unsigned old) {
     DemoLayout *d=&sheep_view.l;
@@ -723,23 +754,30 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         }
         if(main_window) {
             if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID)*quit=1;
-            else if(id==MAIN_DEVICE_ID) {
-                selected_device=(UWORD)(code<2 ? code : 0);
-            } else if(id==MAIN_OPERATION_ID) {
-                selected_operation=(UWORD)(code<2 ? code : 0);
-                update_main_status();
-                if(main_view.status)
-                    GT_SetGadgetAttrs(main_view.status,main_view.window,NULL,
-                                      GTTX_Text,(ULONG)main_view.status_label,
-                                      TAG_DONE);
-            } else if(id==MAIN_START_ID) {
+            else if(id==MAIN_SOURCE_ID) {
+                if(!dolly_picker_open(&source_picker,public_screen,0,
+                                      &selected_source))
+                    dolly_picker_close(&source_picker);
+            } else if(id==MAIN_TARGET_ID &&
+                      dolly_demo_needs_target(
+                        (DollyDemoOperation)selected_operation)) {
+                if(!dolly_picker_open(&target_picker,public_screen,1,
+                                      &selected_target))
+                    dolly_picker_close(&target_picker);
+            } else if(id==MAIN_OPERATION_ID && code<4u) {
+                selected_operation=code;
+                refresh_main_selection();
+            } else if(id==MAIN_START_ID &&
+                      dolly_demo_can_start(
+                        (DollyDemoOperation)selected_operation,
+                        &selected_source,&selected_target)) {
                 if(dolly_operation_start(&operation,GRID_TOTAL)==DOLLY_OP_OK) {
                     update_numbers(&main_view);
                     if(sheep_view.window) {
                         draw_full(&sheep_view,0);
                         update_numbers(&sheep_view);
                     }
-                    update_main_actions();
+                    refresh_main_selection();
                 }
             } else if(id==MAIN_SHOW_ID &&
                       (operation.state==DOLLY_OP_RUNNING ||
@@ -786,6 +824,7 @@ int main(void) {
     if(!IntuitionBase)return 10;
     GfxBase=(struct GfxBase *)OpenLibrary("graphics.library",36);
     GadToolsBase=OpenLibrary("gadtools.library",36);
+    AslBase=OpenLibrary("asl.library",36); /* Optional file selector. */
     if(!GfxBase || !GadToolsBase)goto cleanup;
     marker_font=OpenFont(&marker_attr);
     if(!marker_font)goto cleanup;
@@ -799,11 +838,23 @@ int main(void) {
                   12,(ULONG)public_screen->BarHeight+1ul,600,213))
         goto cleanup;
     draw_full(&main_view,1);
-    update_main_actions();
+    refresh_main_selection();
     /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
         WaitTOF();
         process_view(&main_view,1,&quit);
+        dolly_picker_pump(&source_picker);
+        dolly_picker_pump(&target_picker);
+        if(source_picker.changed) {
+            selected_source=source_picker.result;
+            source_picker.changed=0;
+            refresh_main_selection();
+        }
+        if(target_picker.changed) {
+            selected_target=target_picker.result;
+            target_picker.changed=0;
+            refresh_main_selection();
+        }
         if(sheep_view.window)process_view(&sheep_view,0,&quit);
         if(++frames>=8u && operation.state==DOLLY_OP_RUNNING) {
             unsigned old;
@@ -816,7 +867,7 @@ int main(void) {
                     progress_view_update(old);
             } else {
                 (void)dolly_operation_finish(&operation,1);
-                update_main_actions();
+                refresh_main_selection();
             }
         }
     }
@@ -826,12 +877,15 @@ int main(void) {
            (unsigned)operation.sheep_counter_visible);
     rc=0;
 cleanup:
+    dolly_picker_close(&source_picker);
+    dolly_picker_close(&target_picker);
     hide_sheep();
     destroy_view(&main_view);
     if(screen_info && public_screen)
         FreeScreenDrawInfo(public_screen,screen_info);
     if(public_screen)UnlockPubScreen(NULL,public_screen);
     if(marker_font)CloseFont(marker_font);
+    if(AslBase)CloseLibrary(AslBase);
     if(GadToolsBase)CloseLibrary(GadToolsBase);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);
     if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);
