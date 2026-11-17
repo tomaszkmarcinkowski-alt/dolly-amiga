@@ -220,6 +220,11 @@ target_link_libraries(test-dma-advice PRIVATE dollydma)
 add_test(NAME dma_troubleshooting_catalog COMMAND test-dma-advice)
 add_executable(dolly-dma-advice src/dolly_dma_advice_cli.c)
 target_link_libraries(dolly-dma-advice PRIVATE dollydma)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME dma_advice_cli_smoke
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_dma_advice_cli.py
+      $<TARGET_FILE:dolly-dma-advice>)
+endif()
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-dma-advice PRIVATE -UNDEBUG)
   target_compile_options(dolly-dma-advice PRIVATE -Wall -Wextra -Wpedantic -Werror)
