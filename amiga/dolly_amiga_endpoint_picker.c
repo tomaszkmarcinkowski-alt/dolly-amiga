@@ -12,9 +12,14 @@
 #include <proto/graphics.h>
 #include <proto/asl.h>
 #include <graphics/rastport.h>
+#include <dos/dos.h>
+#include <dos/dosextens.h>
+#include <proto/dos.h>
+#include <stdio.h>
 #include <string.h>
 
 extern struct Library *AslBase;
+extern struct DosLibrary *DOSBase;
 #define PICK_MODE 500u
 #define PICK_DEVICE 501u
 #define PICK_UNIT 502u
@@ -24,7 +29,12 @@ extern struct Library *AslBase;
 #define PICK_CANCEL 507u
 #define PICK_LOGICAL 508u
 #define PICK_FILE_TEXT 509u
+#define PICK_IMAGE_FORMAT 510u
+#define PICK_FILE_INFO 511u
 
+static STRPTR image_formats[]={
+    (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",NULL
+};
 static STRPTR mode_names[]={
     (STRPTR)"Physical device",
     (STRPTR)"Logical device",
@@ -125,6 +135,81 @@ static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
                         GTTX_Text,(ULONG)p->file_display,
                         GTTX_Border,TRUE,TAG_DONE);
 }
+static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=20;ng.ng_TopEdge=132;
+    ng.ng_Width=566;ng.ng_Height=16;
+    ng.ng_GadgetID=PICK_FILE_INFO;ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTTX_Text,(ULONG)p->file_details,
+                        GTTX_Border,TRUE,TAG_DONE);
+}
+static struct Gadget *format_choice(struct Gadget *last,DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=159;ng.ng_TopEdge=130;
+    ng.ng_Width=427;ng.ng_Height=17;
+    ng.ng_GadgetID=PICK_IMAGE_FORMAT;ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(CYCLE_KIND,last,&ng,
+                        GTCY_Labels,(ULONG)image_formats,
+                        GTCY_Active,(ULONG)p->output_format,TAG_DONE);
+}
+/* The extension is only a hint; never assert that bytes are valid. */
+static int suffix_is(const char *name,const char *ext) {
+    size_t n=strlen(name),m=strlen(ext),i;
+    if(n<m)return 0;
+    for(i=0;i<m;++i) {
+        char a=name[n-m+i],b=ext[i];
+        if(a>='A' && a<='Z')a=(char)(a+('a'-'A'));
+        if(b>='A' && b<='Z')b=(char)(b+('a'-'A'));
+        if(a!=b)return 0;
+    }
+    return 1;
+}
+static void file_details(DollyEndpointPicker *p) {
+    const char *hint="unknown";
+    struct FileInfoBlock fib;
+    BPTR lock;
+    ULONG len;
+    if(p->pending_file.kind!=DOLLY_ENDPOINT_FILE) {
+        strcpy(p->file_details,p->role ?
+               "Output file not created yet." : "No source file selected.");
+        return;
+    }
+    if(p->role)return; /* Destination shows image format Cycle instead. */
+    if(suffix_is(p->pending_file.path,".adf"))hint="ADF (name only)";
+    else if(suffix_is(p->pending_file.path,".hdf"))hint="HDF (name only)";
+    else if(suffix_is(p->pending_file.path,".raw") ||
+            suffix_is(p->pending_file.path,".img"))hint="RAW (name only)";
+    else if(suffix_is(p->pending_file.path,".doly") ||
+            suffix_is(p->pending_file.path,".iff"))hint="IFF? (name only)";
+    sprintf(p->file_details,"Size: unavailable | Type: %s",hint);
+    if(DOSBase) {
+        lock=Lock((STRPTR)p->pending_file.path,ACCESS_READ);
+        if(lock) {
+            memset(&fib,0,sizeof(fib));
+            if(Examine(lock,&fib) && fib.fib_DirEntryType<0 &&
+               fib.fib_Size>=0) {
+                sprintf(p->file_details,"Size: %lu bytes | Type: %s",
+                        (unsigned long)fib.fib_Size,hint);
+            }
+            UnLock(lock);
+        }
+    }
+    /* Clip only the display string, not the stored filename/path. */
+    if(p->window) {
+        len=(ULONG)strlen(p->file_details);
+        while(len>3u &&
+              (LONG)TextLength(p->window->RPort,
+                               (STRPTR)p->file_details,len)>550)
+            p->file_details[--len]='\0';
+    }
+}
 static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
@@ -147,7 +232,7 @@ static void column_geometry(DollyEndpointPicker *p,unsigned count,
     LONG start=(LONG)w->BorderLeft+4;
     LONG end=(LONG)w->Width-(LONG)w->BorderRight-4;
     LONG available=end-start;
-    LONG gap=8;
+    LONG gap=0;
     LONG span=available-gap*(LONG)(count-1u);
     LONG x=start+(span*(LONG)index)/(LONG)count+
            gap*(LONG)index;
@@ -183,6 +268,10 @@ static void captions(DollyEndpointPicker *p) {
     } else {
         Move(rp,20,99);
         Text(rp,(STRPTR)"Selected file:",14);
+        if(p->role) {
+            Move(rp,20,143);
+            Text(rp,(STRPTR)"Image format:",13);
+        }
     }
     if(info)FreeScreenDrawInfo(p->screen,info);
 }
@@ -228,6 +317,7 @@ static int rebuild(DollyEndpointPicker *p) {
     struct Gadget *last;
     if(!p->window)return 0;
     preview_file(p);
+    file_details(p);
     if(p->gadgets) {
         RemoveGList(p->window,p->gadgets,-1);
         FreeGadgets(p->gadgets);
@@ -240,6 +330,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->device_list=NULL;p->unit_list=NULL;
     p->partition_list=NULL;p->logical_list=NULL;
     p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
+    p->format_cycle=NULL;p->file_info=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -275,6 +366,15 @@ static int rebuild(DollyEndpointPicker *p) {
         last=file_text(last,p);
         if(!last)return 0;
         p->file_text=last;
+        if(p->role) {
+            last=format_choice(last,p);
+            if(!last)return 0;
+            p->format_cycle=last;
+        } else {
+            last=details_text(last,p);
+            if(!last)return 0;
+            p->file_info=last;
+        }
     }
     /* File mode now commits exactly like every other mode. */
     last=button(last,p,PICK_SELECT,20,160,172,"Use selection",1);
@@ -337,6 +437,9 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                    sizeof(p->file_display));
         }
     }
+    if(initial && initial->kind==DOLLY_ENDPOINT_FILE &&
+       (unsigned)initial->image_format<=3u)
+        p->output_format=initial->image_format;
     p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE) ?
             dolly_endpoint_mode(initial) : preferred_mode;
     make_list(&p->devices,p->device_nodes,device_names);
@@ -420,14 +523,22 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             else if(p->mode==DOLLY_MODE_FILE &&
                     p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
                 p->result=p->pending_file;
+                if(p->role)p->result.image_format=p->output_format;
                 ok=1;
             }
             if(ok){p->changed=1;close=1;}
+        } else if(id==PICK_IMAGE_FORMAT && p->role && code<4u) {
+            p->output_format=(DollyImageFormat)code;
         } else if(id==PICK_FILE && p->mode==DOLLY_MODE_FILE) {
             DollyEndpoint selected={0};
             if(pick_file(&selected,p->role)) {
                 p->pending_file=selected;
                 preview_file(p);
+                file_details(p);
+                if(p->file_info)
+                    GT_SetGadgetAttrs(p->file_info,p->window,NULL,
+                                      GTTX_Text,(ULONG)p->file_details,
+                                      TAG_DONE);
                 if(p->file_text)
                     GT_SetGadgetAttrs(p->file_text,p->window,NULL,
                                       GTTX_Text,(ULONG)p->file_display,
