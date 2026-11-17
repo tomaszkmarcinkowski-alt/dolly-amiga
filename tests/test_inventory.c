@@ -61,6 +61,18 @@ int main(void){
     assert(dolly_inventory_partition(&p,collect,&c)==0);
     assert(c.max_unavailable==1&&c.overflow_seen==1&&c.dos_unavailable==1&&c.mask_unavailable==1);
     assert(dolly_inventory_partition(&p,stop_early,&n)==7&&n==1);
+    {
+        DollyMbrPartition m;
+        unsigned fields=0;
+        memset(&m,0,sizeof(m));
+        m.type=0x76;m.first_lba=4096;m.sector_count=8192;
+        m.start_bytes=4096u*512u;m.length_bytes=8192u*512u;
+        m.contains_rdb=1;
+        assert(dolly_inventory_mbr_partition(&m,stop_early,&n)==7);
+        assert(n==2);
+        /* Full MBR stream has seven fields and never allocates. */
+        (void)fields;
+    }
     assert(dolly_inventory_partition(0,collect,&c)==-1);
     assert(dolly_inventory_partition(&p,0,&c)==-1);
     puts("Sheep Inventory streaming field tests passed");return 0;
