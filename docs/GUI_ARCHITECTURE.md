@@ -514,3 +514,43 @@ labels, avoiding clipping under extreme font metrics, and extracting
 other views' constraint descriptions into a common layout engine.
 The auxiliary Sheep Counter still never owns/cancels the core operation,
 and this demo performs no disk I/O.
+
+### M1.16 — GadTools main-window shell; Sheep Counter initially closed
+
+User decision: **the main window opens first, with Sheep Counter closed
+by default**. The Sheep Counter button is unavailable when the core
+OperationSession is IDLE. It becomes enabled only during RUNNING/PAUSED
+states, where it opens an auxiliary public-screen window without closing
+the main window. Hide/close on the auxiliary window hides only that
+view, without affecting the running operation. After completion the
+main window disables opening a new Sheep Counter; an already visible
+counter may remain visible to show 100% until the user hides it.
+
+The first native M1.16 synthetic shell uses classic AmigaOS 2.04 GadTools:
+
+- `CYCLE_KIND` for two **synthetic** device choices and two operation
+  names; this is *not* physical device enumeration or disk access
+- `TEXT_KIND` for the read-only synthetic operation description/status
+- `BUTTON_KIND` Start demo, Sheep Counter and Quit demo
+- `TEXT_KIND` completed/total block count, from OperationSession
+
+Start demo is the only trigger for the synthetic session. While active,
+Start demo and selection cycles are disabled with `GA_Disabled` through
+the approved GadTools APIs. The Sheep Counter control becomes enabled.
+When the session finishes, the controls return to idle availability.
+Reopening a Sheep Counter during an operation uses current session
+progress. A new demo run resets the synthetic state without opening
+any real device.
+
+The measured main-window minimum has been adjusted to fit the added
+cycles, status, two action rows, and count. The main window remains
+on the public Workbench screen with SmartRefresh, using the current
+system font/pens and content-based dimensions. The 24x8 Sheep Counter
+renderer, Topaz/8 marker, recessed frames and incremental progress
+are unchanged. No physical media I/O occurs.
+
+**Status: source-only.** M1.16 needs Docker m68k compilation and WinUAE
+validation on MC68000, 512 KiB Chip RAM, Kickstart 2.04. Important
+checks: only the main window at launch, Sheep Counter disabled before
+Start demo, correct behavior after Start, Hide/reopen while the synthetic
+session continues, both minimum window sizes, and cleanup on Quit.
