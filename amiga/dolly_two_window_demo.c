@@ -49,6 +49,7 @@ struct Library *AslBase;
 #define MAIN_DESC_ID 214u
 #define MAIN_SOURCE_TEXT_ID 215u
 #define MAIN_TARGET_TEXT_ID 216u
+#define MAIN_INVENTORY_ID 217u
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
@@ -63,7 +64,7 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *quit, *start, *hide, *count, *errors, *percent;
+    struct Gadget *show, *inventory, *quit, *start, *hide, *count, *errors, *percent;
     struct Gadget *device,*target_button,*source_text,*target_text;
     struct Gadget *description,*op_selector,*status;
     char source_label[72],target_label[72],desc_label[96];
@@ -84,12 +85,12 @@ static DollyDemoView main_view, sheep_view;
 static DollyEndpoint selected_source,selected_target;
 static DollyEndpointPicker source_picker,target_picker;
 static STRPTR demo_operations[]={
-    (STRPTR)"Surface scan demo",
-    (STRPTR)"Inventory preview",
-    (STRPTR)"Copy disk/file demo",
-    (STRPTR)"Restore image demo",
-    (STRPTR)"Create image demo",
-    (STRPTR)"Disk Vet (coming soon)",NULL
+    (STRPTR)"Surface Scan",
+    (STRPTR)"Inventory",
+    (STRPTR)"Copy",
+    (STRPTR)"Restore Image",
+    (STRPTR)"Create Image",
+    (STRPTR)"Disk Vet",NULL
 };
 static const char *demo_descriptions[]={
     "Read-only scan of source blocks.",
@@ -165,7 +166,7 @@ static void update_main_status(void) {
               demo_descriptions[selected_operation]);
     if(operation.state==DOLLY_OP_RUNNING)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  "Synthetic operation running...");
+                  "Operation in progress...");
     else if(selected_operation==DOLLY_DEMO_DISK_VET)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Disk Vet planned; no repairs available yet.");
@@ -269,14 +270,16 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_h=d.bottom-d.top+1;
     if(main_window) {
         if(avail_w<320 || avail_h<175)return 0;
-        /* Operation precedes both endpoint selectors. */
-        d.main_operation_y=d.top+18;
-        d.main_device_y=d.top+38;
-        d.main_target_y=d.top+58;
-        d.main_desc_y=d.top+78;
-        d.controls_y=d.top+100;
-        d.main_count_y=d.top+143;
-        d.main_status_y=d.bottom-16;
+        /* Operation, Info, Source, Destination, action row.
+         * A compact Progress/status pair replaces the old gap.
+         */
+        d.main_operation_y=d.top+3;
+        d.main_desc_y=d.top+23;
+        d.main_device_y=d.top+43;
+        d.main_target_y=d.top+63;
+        d.controls_y=d.top+87;
+        d.main_count_y=d.top+129;
+        d.main_status_y=d.top+151;
         d.number_w=avail_w/3;
         if(d.number_w>150)d.number_w=150;
     } else {
@@ -318,6 +321,7 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     ng.ng_GadgetText=(STRPTR)title;
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)(
+                          (id==MAIN_INVENTORY_ID) ||
                           (id==MAIN_SHOW_ID &&
                            operation.state!=DOLLY_OP_RUNNING &&
                            operation.state!=DOLLY_OP_PAUSED) ||
@@ -391,7 +395,6 @@ static struct Gadget *make_cycle(struct Gadget *last,DollyDemoView *v,
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     struct Gadget *last;
     DemoLayout *d=&v->l;
-    LONG button_w;
     if(!calculate_layout(v,main_window))return 0;
     update_labels(v);
     if(v->gadgets) {
@@ -402,7 +405,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
             RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
-        v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+        v->show=NULL;v->inventory=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;
         v->device=NULL;v->target_button=NULL;
         v->source_text=NULL;v->target_text=NULL;
@@ -414,6 +417,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         LONG detail_x=d->left+120;
         LONG detail_w=d->right-detail_x+1;
         LONG operation_x=d->left+88;
+        LONG three_width,three_gap=6;
         update_main_status();
         last=make_button(last,v,MAIN_SOURCE_ID,d->left,d->main_device_y,
                          114,"Source...");
@@ -440,20 +444,26 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                        d->right-operation_x+1,v->desc_label,FALSE);
         if(!last)return 0;
         v->description=last;
-        button_w=(d->right-d->left-6)/2;
+        three_width=(d->right-d->left+1-2*three_gap)/3;
         last=make_button(last,v,MAIN_SHOW_ID,d->left,d->controls_y,
-                         button_w,"Sheep Counter");
+                         three_width,"Sheep Counter");
         if(!last)return 0;
         v->show=last;
-        last=make_button(last,v,MAIN_QUIT_ID,d->left+button_w+6,
-                         d->controls_y,button_w,"Quit demo");
+        last=make_button(last,v,MAIN_INVENTORY_ID,
+                         d->left+three_width+three_gap,d->controls_y,
+                         three_width,"Sheep Inventory");
+        if(!last)return 0;
+        v->inventory=last;
+        last=make_button(last,v,MAIN_QUIT_ID,
+                         d->left+2*(three_width+three_gap),d->controls_y,
+                         three_width,"Quit");
         if(!last)return 0;
         v->quit=last;
         last=make_button(last,v,MAIN_START_ID,d->left,
-                         d->controls_y+19,d->right-d->left+1,"Start demo");
+                         d->controls_y+19,d->right-d->left+1,"Start");
         if(!last)return 0;
         v->start=last;
-        last=make_text(last,v,MAIN_COUNT_ID,d->left+68,d->main_count_y,
+        last=make_text(last,v,MAIN_COUNT_ID,d->left+86,d->main_count_y,
                        d->number_w,v->block_label,TRUE);
         if(!last)return 0;
         v->count=last;
@@ -497,7 +507,7 @@ static void destroy_view(DollyDemoView *v) {
     }
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
-    v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+    v->show=NULL;v->inventory=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
     v->device=NULL;v->target_button=NULL;
     v->source_text=NULL;v->target_text=NULL;
@@ -524,7 +534,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
         {
-            static const char heading[]="Dolly / Operation & devices";
+            static const char heading[]="Operation:";
             static const char choice[]="Restore a file image to a destination.";
             ULONG a=(ULONG)TextLength(rp,(STRPTR)heading,
                                        (ULONG)strlen(heading));
@@ -535,7 +545,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         m.show_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Sheep Counter",13);
         m.quit_button_text_width=(ULONG)TextLength(rp,
-                (STRPTR)"Quit demo",9);
+                (STRPTR)"Sheep Inventory",15);
     } else {
         m.heading_width=(ULONG)TextLength(rp,
                 (STRPTR)"Surface scan (synthetic, read only)",35);
@@ -603,10 +613,9 @@ static void draw_main_static(void) {
     DemoLayout *d=&main_view.l;
     struct TagItem tags[3];
     if(!main_view.window)return;
-    label(main_view.window,d->left,d->top+10,"Dolly / Operation & devices");
     label(main_view.window,d->left,d->main_operation_y+11,"Operation:");
     label(main_view.window,d->left,d->main_desc_y+11,"Info:");
-    label(main_view.window,d->left,d->main_count_y+11,"Blocks:");
+    label(main_view.window,d->left,d->main_count_y+11,"Progress:");
     tags[0].ti_Tag=GT_VisualInfo;
     tags[0].ti_Data=(ULONG)main_view.visual;
     tags[1].ti_Tag=GTBB_Recessed;
@@ -733,6 +742,9 @@ static void update_main_actions(void) {
     int active=(operation.state==DOLLY_OP_RUNNING ||
                 operation.state==DOLLY_OP_PAUSED);
     if(!main_view.window)return;
+    if(main_view.inventory)
+        GT_SetGadgetAttrs(main_view.inventory,main_view.window,NULL,
+                          GA_Disabled,TRUE,TAG_DONE);
     if(main_view.show)
         GT_SetGadgetAttrs(main_view.show,main_view.window,NULL,
                           GA_Disabled,(ULONG)!active,TAG_DONE);
@@ -895,7 +907,7 @@ int main(void) {
         (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
     };
     dolly_operation_init(&operation);
-    puts("M1.18 BOOT: entered main");
+    puts("Dolly: entered main");
     /* Open the main UI idle. Starting a synthetic operation is explicit. */
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
     if(!IntuitionBase)return 10;
@@ -912,13 +924,13 @@ int main(void) {
        (ULONG)public_screen->Height<256ul)goto cleanup;
     screen_info=GetScreenDrawInfo(public_screen);
     if(!screen_info)goto cleanup;
-    puts("M1.18 BOOT: public screen ready");
-    if(!open_view(&main_view,1,"Dolly - Main window (demo)",
+    puts("Dolly: public screen ready");
+    if(!open_view(&main_view,1,"Dolly",
                   12,(ULONG)public_screen->BarHeight+1ul,600,213))
         goto cleanup;
     draw_full(&main_view,1);
     refresh_main_selection();
-    puts("M1.18 BOOT: main window ready");
+    puts("Dolly: main window ready");
     /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
         WaitTOF();
@@ -957,7 +969,7 @@ int main(void) {
             }
         }
     }
-    printf("SESSION blocks=%lu/192 state=%u visible=%u\n",
+    printf("Session blocks=%lu/192 state=%u visible=%u\n",
            (unsigned long)operation.completed_blocks,
            (unsigned)operation.state,
            (unsigned)operation.sheep_counter_visible);
