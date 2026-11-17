@@ -18,9 +18,10 @@ static int add_u64(uint64_t a,uint64_t b,uint64_t *out) {
 static int valid_block_size(uint32_t v) {
  return v>=MIN_RDB_BYTES && v<=MAX_RDB_BYTES && (v&(v-1))==0;
 }
-static int checksum(const unsigned char *data,uint32_t block_bytes) {
+static int checksum(const unsigned char *data,uint32_t block_bytes,uint32_t min_words) {
  uint32_t n=be32(data+4),sum=0,i;
- if(n<5 || n>block_bytes/4)return 0;
+ /* All parser-consumed fields must be covered by the checksum. */
+ if(n<min_words || n>block_bytes/4)return 0;
  for(i=0;i<n;i++)sum+=be32(data+i*4);
  return sum==0;
 }
@@ -45,13 +46,15 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
   visited[seen++]=current;
   s=load_block(src,out->base_offset,out->block_bytes,current,buf);if(s!=DOLLY_RDB_OK)return s;
   if(memcmp(buf,"PART",4)!=0)return DOLLY_RDB_BAD_BLOCK;
-  if(!checksum(buf,out->block_bytes))return DOLLY_RDB_BAD_CHECKSUM;
-  next=be32(buf+16);
+  /* We cannot trust de_TableSize before the checksum, but we can reject
+   * out-of-buffer values and demand enough checksummed words to cover
+   * every declared field we will read. */
   env_table_size=be32(buf+128);
-  /* DosEnvec's TableSize is the highest available field index.
-   * Geometry needs fields through de_NumBuffers (index 11).
-   * de_MaxTransfer (13) and de_DosType (16) are optional here. */
-  if(env_table_size<11 || env_table_size>=(out->block_bytes-128)/4)return DOLLY_RDB_BAD_BLOCK;
+  if(env_table_size<11 || env_table_size>=(out->block_bytes-128)/4)
+    return DOLLY_RDB_BAD_BLOCK;
+  if(!checksum(buf,out->block_bytes,33u+env_table_size))
+    return DOLLY_RDB_BAD_CHECKSUM;
+  next=be32(buf+16);
   size_block=be32(buf+128+1*4);
   surfaces=be32(buf+128+3*4);
   bpt=be32(buf+128+5*4);
@@ -93,7 +96,7 @@ DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,ui
   if(s==DOLLY_RDB_OUT_OF_RANGE)break;
   if(s!=DOLLY_RDB_OK){found=s;break;}
   if(memcmp(buf,"RDSK",4)!=0)continue;
-  if(!checksum(buf,bs)){saw_corrupt_checksum=1;continue;}
+  if(!checksum(buf,bs,19u)){saw_corrupt_checksum=1;continue;}
   if(be32(buf+16)!=bs){saw_invalid_size=1;continue;}
   out->header_block=n;out->partition_head=be32(buf+28);
   out->cylinders=be32(buf+64);out->sectors=be32(buf+68);out->heads=be32(buf+72);
