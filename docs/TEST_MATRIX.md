@@ -310,3 +310,37 @@ There is no automatic OpenDevice/DoIO.
 Do not enable an automatic GUI probe until the actual IDE DOS startup
 record can be identified and validated. The M1.24 Device name/Size
 recessed fields remain distinct.
+
+## L. Physical candidates: A1200 / OS3.1 diagnostic findings
+
+Observed \`--inspect\` after attaching an IDE HDF on \`scsi.device\`:
+14 registered DOS device entries; 0 candidates. In particular,
+OS:, WB_1.3:, WB_2.x: and GRY: reached DosEnvec, with
+\`de_TableSize=16\` and \`de_SizeBlock=128\`. Those values are
+ordinary (128 longwords = 512-byte blocks). Other devices,
+such as PIPE:, RAM:, CON:, SER:, PAR:, PRT:, are not assumed
+to be physical disks. DF0: and CC0: have invalid driver-name
+pointers or bytes under current heuristic; do not force them.
+
+The previous extractor incorrectly treated \`de_Surfaces\` and
+\`de_BlocksPerTrack\` as strict requirements for *identifying*
+a driver/unit. These are filesystem geometry hints; a virtual
+disk's hints need not correspond to measured hardware geometry.
+The extractor now accepts structurally plausible filesystem
+startup entries without requiring heads or sectors-per-track
+to be nonzero or below arbitrary small limits, but retains
+bounds on table size and block size, and still requires a
+valid BSTR driver name with a .device suffix. In \`--inspect\`
+it reports table, blockwords, heads, spt, driver and unit.
+
+Tests:
+- PHYS-22: OS3.1 A1200 IDE / --inspect: reveal whether OS:/WB/GRY
+  have recognized .device driver/unit tuples
+- PHYS-23: without --probe INDEX: never OpenDevice/DoIO, including
+  when a candidate is discovered
+- PHYS-24: unsupported handler/startup: excluded safely rather
+  than interpreted as a physical disk
+- PHYS-25: Device name and Size remain distinct; GUI still shows
+  unavailable until a tested real unit is integrated
+
+This patch is **not yet compiled or WinUAE tested**.
