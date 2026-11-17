@@ -32,6 +32,11 @@ int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;
  assert(run(path,base,&r)==DOLLY_RDB_OK);
  assert(r.partitions[0].max_transfer_present);
  assert(r.partitions[0].max_transfer_bytes==0x7fffffffu);
+ assert(r.partitions[0].buffer_count_present);
+ assert(r.partitions[0].buffer_memory_type_present);
+ assert(r.partitions[0].dma_mask_present);
+ assert(r.partitions[0].dma_mask==0);
+
  /* Historical shorter DosEnvec: fields 13+ absent but geometry readable. */
  make_part(part,DOLLY_RDB_END);wr32(part+128,12);finish_sum(part,64);
  store(f,base+2*BS,part);fflush(f);
