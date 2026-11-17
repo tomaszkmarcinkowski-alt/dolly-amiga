@@ -1013,3 +1013,26 @@ hardware queries. Read-only UI geometry only.
 Tests GUI-38..46 in docs/TEST_MATRIX.md. The code has not yet
 been cross-compiled or validated in WinUAE. RTG and RAM profiling
 are postponed at the user's request.
+
+### M1.24 continuation — data contract follows the revised picker
+
+The user accepted the M1.24 GUI arrangement: the first selection row
+has a role-appropriate inline Selected device/partition/file label.
+Physical and Partition have a **second row with independent recessed
+Device name and Size values**; the size field is at the far right.
+Do not merge these values back into a single descriptive text string.
+
+The opt-in M1.23 Shell diagnostic now emits those exact two fields:
+- Device name: sanitized SCSI INQUIRY vendor and product, or Unavailable.
+- Size: reported TD_GETGEOMETRY total sectors * sector size in MiB,
+  or Unavailable; this is not inferred from INQUIRY.
+
+One query failing does not clear the other result. OpenDevice failures
+are also shown as unavailable, and CloseDevice is only called after
+a successful OpenDevice. Neither query is automatically run by the
+picker because Physical/Partition entries are still demo placeholders.
+Physical GUI integration is blocked on verification of real DOS
+startup driver/unit candidates and the opt-in read-only diagnostic.
+
+This preserves current UI without adding risky media I/O.
+See PHYS-11 through PHYS-17 in docs/TEST_MATRIX.md.
