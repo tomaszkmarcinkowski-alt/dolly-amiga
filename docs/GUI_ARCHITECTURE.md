@@ -614,3 +614,51 @@ and WinUAE tests for source unit/partition/file, destination
 availability, changing operation kind, no overlap on narrow main
 window, no vertical main resize, chooser cancel/reopen, and Sheep
 Counter hide/reopen on MC68000, 512 KiB Chip RAM and Kickstart 2.04.
+
+### M1.18 — endpoint type first, with four GadTools picker modes
+
+User requested that detailed memory measurement be deferred until
+the end of visual/functional GUI work. The priority here is interaction
+and appearance, not profiling.
+
+The shared Source and Destination picker now begins with a native
+`CYCLE_KIND` offering four **endpoint types**. This is explicitly
+different from the rejected old device-choice Cycle:
+
+- **Physical device:** select `device`, then `unit`; choosing the
+  unit means the **entire disk/unit** rather than an arbitrary partition
+- **Logical device:** select a device/volume **mounted by AmigaDOS**,
+  represented in this prototype by synthetic `DH0:` and `DH1:` entries
+- **Partition:** select `device`, then `unit`, then a partition from
+  RDB/MBR; current entries are explicitly synthetic examples, **not**
+  actual RDB/MBR parsing
+- **File:** use the native ASL file requester (load for source, save
+  for destination); no disk image file is created by the demo
+
+The selector uses only the controls needed in its selected mode and
+rebuilds its GadTools gadget list when Cycle changes. Parent-dependent
+lists stay disabled until a parent selection exists, with a final
+`Use selection` confirmation. Source and destination use the same
+implementation but have distinct selected endpoint state.
+
+The main operation Cycle adds **Create image**. Its input is a selected
+device/unit, logical device, partition, or file; its **destination must
+be a file**. For convenience, the unselected destination picker opens
+in File mode when Create image is selected; the unselected source
+picker opens in File mode for Restore. The operation description is
+still displayed below the main operation Cycle. Target selection
+remains disabled for single-ended Scan and Inventory operations.
+Nothing reads a physical unit, parses RDB/MBR or writes image data
+in this prototype.
+
+`dolly_endpoint` now models logical devices separately from
+physical units, partition references and filenames. Host tests
+cover mode mapping, logical-vs-logical identical endpoint prevention,
+file-only Create image destinations, and the existing Copy/Restore
+constraints. Alias detection between an AmigaDOS logical device and
+a physical partition is **not yet possible** without actual device
+discovery; the model cannot authorize physical writes.
+
+**Unverified:** M1.18 requires a fresh host endpoint regression test,
+m68k cross-build using the NDK in Docker, and WinUAE interaction tests.
+Do not claim that the user has already tested this version.
