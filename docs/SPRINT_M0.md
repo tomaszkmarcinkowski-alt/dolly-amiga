@@ -154,9 +154,9 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 
 ## Future destructive-operation safety contract — 2026-11-17
 
-- [x] Document universal pre-destructive **verified backup image offer** DOL-078; applies to RDB Restore, future RDB growth and post-MVP partition shrink, but **not** read-only scans.
+- [x] Document universal, strongly recommended but **always optional** pre-destructive image backup offer DOL-078; applies to RDB Restore, future RDB growth and post-MVP partition shrink, but **not** read-only scans.
 - [x] Establish scope distinction: metadata RDB backup is not a substitute for full partition image where filesystem data can be moved or changed.
-- [ ] Implement a generic `backup required / optional / not needed` policy, destination overlap checks, measured byte count and readback CRC32 before enabling any physical write operation.
+- [ ] Implement a generic `backup offered / user chose backup / user explicitly skipped / not applicable` policy; destination overlap checks, measured byte count and readback CRC32 for backups that users choose. Backup bypass must NEVER bypass other essential device/layout/DMA checks.
 - [ ] WinUAE and real hardware failure/recovery tests; **no destructive operation enabled in M0**.
 
 ## Newly scoped RDB enhancements
@@ -165,3 +165,10 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] DOL-074 — read-only actual-capacity versus RDB/container range warnings (Issue #23).
 - [ ] DOL-075 — larger-media RDB geometry adaptation without enlarging existing partitions (Issue #24).
 - [ ] DOL-076/077 — **post-MVP** data-preserving shrink plus filesystem bitmap/reference audit (Issue #25).
+
+### Backup opt-out policy clarification (2026-11-17)
+
+- [x] User decision: **no backup is mandatory**, including RDB Restore, RDB grow and data-moving shrink. Strong recommendation only.
+- [ ] GadTools/CLI: default `Make backup`, always offer explicit `Continue without backup` with an additional confirmation about possible irreversible data loss. No preselected bypass.
+- [ ] If backup fails, allow Retry / Another destination / Cancel / explicit Continue without backup; report that no verified backup exists.
+- [ ] Keep hardware identification, writable target, filesystem layout, DMA checks and other independent safety gates mandatory. Skipping backup cannot override these controls.
