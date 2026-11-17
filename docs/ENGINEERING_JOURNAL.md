@@ -169,12 +169,23 @@
 **Test:** wymagany pełny przebieg CI; przegląd tekstu nie stanowi dowodu, że wszystkie buildy przeszły.
 
 
+
+### DJ-0019 · 2026-11-17 · RDB / kompatybilność · POPRAWIONE W ŹRÓDLE; REGRESJA DO POTWIERDZENIA
+**Temat:** Krótsze historyczne tablice `DosEnvec` nie powinny automatycznie oznaczać uszkodzenia rekordu `PART`.
+
+**Wykrycie:** parser początkowo wymagał `de_TableSize >= 17`, więc nie potrafił przedstawić stanu `de_MaxTransfer` nieobecnego w starszej tablicy. To prowadziło do odrzucenia części możliwych starszych wpisów jako `BAD_BLOCK`.
+
+**Działanie:** dostępne pola czytamy tylko w zakresie deklarowanego `de_TableSize`: geometria do indeksu 11 wymagana, `de_MaxTransfer` indeks 13 oraz `de_DosType` indeks 16 opcjonalne. Brakujące dane mają stan `NOT_PRESENT`, a nie domyślne „bezpieczne”.
+
+**Test:** dodano syntetyczny rekord `PART` z `de_TableSize=12` do `tests/test_rdb.c`; pełny CTest po zmianach wciąż czeka na potwierdzenie. Nie przesądza to poprawności montowania takich partycji.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0019 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0020 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
