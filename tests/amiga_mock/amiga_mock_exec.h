@@ -22,4 +22,7 @@ APTR AllocMem(ULONG bytes,ULONG flags);
 void FreeMem(APTR p,ULONG bytes);
 void dolly_mock_set_nsd(int enabled);
 int dolly_mock_last_read64(void);
+uint64_t dolly_mock_dma_address(void);
+void dolly_mock_set_dma_address(uint64_t address);
+ULONG dolly_mock_last_alloc_flags(void);
 #endif
