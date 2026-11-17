@@ -27,6 +27,7 @@ if(DOLLY_NATIVE_ONLY)
     if(DOLLY_NATIVE_M68000)
       target_compile_options(dolly-native-smoke PRIVATE -m68000)
       target_link_options(dolly-native-smoke PRIVATE -m68000)
+      target_compile_definitions(dolly-native-smoke PRIVATE DOLLY_AMIGAOS_MEMORY_PROFILING)
     endif()
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
