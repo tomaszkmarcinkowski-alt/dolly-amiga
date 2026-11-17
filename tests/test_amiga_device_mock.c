@@ -37,5 +37,27 @@ int main(void){
  assert(r.status==DOLLY_BLOCK_OK&&dolly_mock_last_read64());
  r=dolly_block_read(s,513,buf,512);assert(r.status==DOLLY_BLOCK_EINVAL);
  dolly_block_close(s);
+ /* A successful NSD query without READ64 in SupportedCommands is NOT
+  * permission to issue the 64-bit command. */
+ dolly_mock_set_nsd(2);
+ dolly_mock_read_fault(0,0);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,UINT64_C(0x100000000),buf,512);
+ assert(r.status==DOLLY_BLOCK_EUNSUPPORTED && r.bytes_read==0);
+ dolly_block_close(s);
+ /* A short second transfer must not be reported as successful. */
+ dolly_mock_set_nsd(1);
+ dolly_mock_read_fault(2,1);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,0,buf,2048);
+ assert(r.status==DOLLY_BLOCK_ESHORT && r.bytes_read==1024);
+ dolly_block_close(s);
+ /* A real I/O error must preserve completed byte count only. */
+ dolly_mock_read_fault(2,2);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,0,buf,2048);
+ assert(r.status==DOLLY_BLOCK_EIO && r.bytes_read==1024);
+ dolly_block_close(s);
+ dolly_mock_read_fault(0,0);
  puts("Mock Exec backend checks passed");return 0;
 }
