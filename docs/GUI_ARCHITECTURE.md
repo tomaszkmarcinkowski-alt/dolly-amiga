@@ -108,3 +108,28 @@ Revalidate current screen geometry on open, activation/resize, changes in Dolly 
 - [Intuition Screens font rules](https://wiki.amigaos.net/wiki/Intuition_Screens)
 - [ScreenNotify 1.0 (Aminet)](https://aminet.net/package/util/libs/ScreenNotify10)
 - [Issues #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14) and [#15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15)
+
+## M1.6 — GadTools-backed Sheep Counter, incremental grid (experimental)
+
+The default `dolly-sheep-window` prototype now uses OS 2.x GadTools:
+two read-only `NUMBER_KIND` values (blocks processed, errors) and a
+`BUTTON_KIND` Cancel control. It retains the maximized public-screen
+window **below** `Screen.BarHeight` and obtains system pens/font from
+the current public screen. GadTools values are changed with
+`GT_SetGadgetAttrs` — never by re-running `GT_RefreshWindow` every tick.
+
+The 20x6 synthetic surface-map grid and simple progress bar remain
+direct RastPort drawing: GadTools has no native cell-grid or
+read-only progress indicator. Only the old and new active cells
+and newly filled progress-bar span are redrawn for each block.
+The current cell is marked with ASCII `*` rather than an image.
+
+This prototype is not yet compiled or tested on MC68000, 512 KiB
+Chip RAM, Kickstart 2.04. It uses synthetic data and never opens a
+physical device or writes to any disk. Window resizing/re-exposure,
+font-sensitive layout, real scan integration, and functional Pause
+remain future work. The Cancel button stops only synthetic progress.
+
+The first native test should inspect correct GadTools creation,
+legibility and reduced flicker on actual WinUAE hardware emulation,
+and confirm `WINDOW PASS` and exit code zero.
