@@ -77,7 +77,7 @@ static int calculate(Ui *u) {
     top=w->BorderTop+26;
     bottom=l->progress_y-12;
     grid_height=bottom-top;
-    if(grid_height<ROWS*10)return 0;
+    if(grid_height<(LONG)(ROWS*10u))return 0;
     l->gx=l->left;
     l->gy=top;
     l->stepx=l->progress_w/(LONG)COLS;
@@ -213,7 +213,8 @@ int main(void) {
     if(!GadToolsBase){puts("WINDOW FAIL: gadtools V36");goto cleanup;}
     u.screen=LockPubScreen(NULL);
     if(!u.screen){puts("WINDOW SKIP: public screen unavailable");rc=20;goto cleanup;}
-    if(u.screen->Width<MIN_WIDTH || u.screen->Height<MIN_HEIGHT+u.screen->BarHeight) {
+    if((ULONG)u.screen->Width<MIN_WIDTH ||
+       (ULONG)u.screen->Height<MIN_HEIGHT+(ULONG)u.screen->BarHeight) {
         puts("WINDOW SKIP: public screen too small");rc=20;goto cleanup;
     }
     top=(ULONG)u.screen->BarHeight;
