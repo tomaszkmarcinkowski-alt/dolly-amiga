@@ -37,7 +37,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
  uint32_t current=out->partition_head,visited[DOLLY_RDB_MAX_PARTITIONS];
  unsigned seen=0;
  while(current!=DOLLY_RDB_END){
-  DollyRdbStatus s; uint32_t next,low,high,surfaces,bpt,dos,size_block;
+  DollyRdbStatus s; uint32_t next,low,high,surfaces,bpt,dos,size_block,env_table_size;
   uint64_t cyl_bytes,start,length,end,relative,fs_block_bytes;
   unsigned i;unsigned char name_len;
   if(seen>=DOLLY_RDB_MAX_PARTITIONS)return DOLLY_RDB_TOO_MANY;
@@ -47,13 +47,17 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
   if(memcmp(buf,"PART",4)!=0)return DOLLY_RDB_BAD_BLOCK;
   if(!checksum(buf,out->block_bytes))return DOLLY_RDB_BAD_CHECKSUM;
   next=be32(buf+16);
-  if(be32(buf+128)<17 || be32(buf+128)>=(out->block_bytes-128)/4)return DOLLY_RDB_BAD_BLOCK;
+  env_table_size=be32(buf+128);
+  /* DosEnvec's TableSize is the highest available field index.
+   * Geometry needs fields through de_NumBuffers (index 11).
+   * de_MaxTransfer (13) and de_DosType (16) are optional here. */
+  if(env_table_size<11 || env_table_size>=(out->block_bytes-128)/4)return DOLLY_RDB_BAD_BLOCK;
   size_block=be32(buf+128+1*4);
   surfaces=be32(buf+128+3*4);
   bpt=be32(buf+128+5*4);
   low=be32(buf+128+9*4);
   high=be32(buf+128+10*4);
-  dos=be32(buf+128+16*4);
+  dos=env_table_size>=16?be32(buf+128+16*4):0;
   if(!surfaces||!bpt||!size_block||high<low)return DOLLY_RDB_BAD_BLOCK;
   /* de_SizeBlock is in 32-bit longwords and may differ from the RDB
    * device block size. Account for it when calculating byte positions. */
@@ -68,7 +72,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
    memset(p,0,sizeof(*p));p->descriptor_block=current;
    p->low_cylinder=low;p->high_cylinder=high;p->dos_type=dos;
    /* de_TableSize describes the last valid DosEnvec index. */
-   p->max_transfer_present = be32(buf+128)>=13;
+   p->max_transfer_present = env_table_size>=13;
    if(p->max_transfer_present) p->max_transfer_bytes=be32(buf+128+13*4);
    p->start_bytes=start;p->length_bytes=length;
    name_len=buf[36];if(name_len>31)name_len=31;
