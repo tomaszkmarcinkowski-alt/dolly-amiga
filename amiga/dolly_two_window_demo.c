@@ -228,6 +228,13 @@ static void update_labels(DollyDemoView *v) {
     append_char(&p,limit,'/');
     append_char(&p,limit,' ');
     append_u32(&p,limit,total);
+    if(v==&main_view) {
+        append_char(&p,limit,' ');
+        append_char(&p,limit,'(');
+        append_u32(&p,limit,percent>100ul?100ul:percent);
+        append_char(&p,limit,'%');
+        append_char(&p,limit,')');
+    }
     *p='\0';
     p=v->percent_label;
     limit=v->percent_label+sizeof(v->percent_label)-1;
@@ -548,7 +555,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
                 (STRPTR)"Sheep Inventory",15);
     } else {
         m.heading_width=(ULONG)TextLength(rp,
-                (STRPTR)"Surface scan (synthetic, read only)",35);
+                (STRPTR)"Surface Scan - Sheep Counter",28);
         m.hide_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Hide",4);
     }
@@ -696,7 +703,7 @@ static void draw_sheep_static(void) {
     if(!sheep_view.window)return;
     rp=sheep_view.window->RPort;
     label(sheep_view.window,d->left,d->top+10,
-          "Surface scan (synthetic, read only)");
+          "Surface Scan - Sheep Counter");
     tags[0].ti_Tag=GT_VisualInfo;
     tags[0].ti_Data=(ULONG)sheep_view.visual;
     tags[1].ti_Tag=GTBB_Recessed;
