@@ -52,7 +52,12 @@ struct Library *AslBase;
 #define MAIN_INVENTORY_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly build M1.39"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly M1.40"
+#define MAIN_CONTROLS_OFFSET 87
+#define MAIN_PROGRESS_OFFSET 125
+#define MAIN_STATUS_OFFSET 147
+#define MAIN_GADGET_HEIGHT 15
+#define MAIN_STATUS_BEVEL_HEIGHT 19
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
@@ -338,8 +343,10 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_w=d.right-d.left+1;
     avail_h=d.bottom-d.top+1;
     if(main_window) {
-        /* Lowest status well ends 164 pixels after the content top. */
-        if(avail_w<320 || avail_h<166)return 0;
+        /* Last required element defines the client height. */
+        if(avail_w<320 ||
+           avail_h<MAIN_STATUS_OFFSET-2+MAIN_STATUS_BEVEL_HEIGHT+2)
+            return 0;
         /* Operation, Info, Source, Destination, action row.
          * A compact Progress/status pair replaces the old gap.
          */
@@ -347,9 +354,9 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         d.main_desc_y=d.top+23;
         d.main_device_y=d.top+43;
         d.main_target_y=d.top+63;
-        d.controls_y=d.top+87;
-        d.main_count_y=d.top+125;
-        d.main_status_y=d.top+147;
+        d.controls_y=d.top+MAIN_CONTROLS_OFFSET;
+        d.main_count_y=d.top+MAIN_PROGRESS_OFFSET;
+        d.main_status_y=d.top+MAIN_STATUS_OFFSET;
         /* Fixed compact percent well, Stop/Quit aligned to the right.
          * Keep enough room even at the 320px minimum client width.
          */
@@ -361,7 +368,9 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         d.stop_quit_w=avail_w<360?70:90;
         d.quit_x=d.right-d.stop_quit_w+1;
         d.stop_x=d.quit_x-d.stop_quit_w-6;
-        if(d.stop_x<d.progress_x+d.progress_w+6)return 0;
+        if(d.stop_x<d.progress_x+d.progress_w+12+
+           (LONG)TextLength(w->RPort,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
+                            (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL)))return 0;
         d.number_w=avail_w/3;
         if(d.number_w>150)d.number_w=150;
     } else {
@@ -629,6 +638,22 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.padding_y=2u;
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
+        ULONG status_bottom=(ULONG)(MAIN_STATUS_OFFSET-2+
+                                    MAIN_STATUS_BEVEL_HEIGHT);
+        ULONG progress_bottom=(ULONG)(MAIN_PROGRESS_OFFSET+
+                                      MAIN_GADGET_HEIGHT);
+        ULONG buttons_bottom=(ULONG)(MAIN_CONTROLS_OFFSET+19+
+                                     MAIN_GADGET_HEIGHT);
+        m.main_content_height=status_bottom;
+        if(m.main_content_height<progress_bottom)
+            m.main_content_height=progress_bottom;
+        if(m.main_content_height<buttons_bottom)
+            m.main_content_height=buttons_bottom;
+        /* Same visual breathing room below as above the controls. */
+        m.main_content_height+=3u;
+        m.main_build_label_width=(ULONG)TextLength(rp,
+            (STRPTR)DOLLY_DEMO_BUILD_LABEL,
+            (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
         {
             static const char heading[]="Operation:";
             static const char choice[]="Restore a file image to a destination.";
@@ -654,7 +679,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
        minimum.outer_height>(ULONG)w->Height)return 0;
     if(main_window)
         return WindowLimits(w,(LONG)minimum.outer_width,
-                            (LONG)w->Height,0,(LONG)w->Height)!=FALSE;
+                            (LONG)minimum.outer_height,0,0)!=FALSE;
     return WindowLimits(w,(LONG)minimum.outer_width,
                         (LONG)minimum.outer_height,0,0)!=FALSE;
 }
