@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**78 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**80 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -738,3 +738,34 @@
 - Działa jako wspólny mechanizm dla wszystkich przyszłych zapisów; **nie przerywa ani nie opóźnia operacji wyłącznie odczytowych**.
 
 **Zasada:** backup jest mocno zalecany, lecz nigdy nie jest obowiązkowym warunkiem uruchomienia operacji. Można kontynuować bez kopii po osobnym potwierdzeniu. **Stan:** wymaganie i Issue zapisane; **brak implementacji oraz testów sprzętowych**. Nie włączać zapisu na urządzeniach w M0.
+
+
+## Epic: Montowanie obrazów i wirtualne napędy
+
+### DOL-079 — Montowanie obrazów pod AmigaOS 3.2+ przez trackfile.device
+
+**Priorytet:** P1 · **Etap:** MVP po dopracowaniu M0 i natywnego GUI · [Issue #27](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/27)
+
+**Cel:** montować obrazy utworzone lub odczytane w Dolly jako wirtualne dyskietki, korzystając z wbudowanego w AmigaOS 3.2 mechanizmu **`trackfile.device` / `DAControl`**, bez dodatkowego sterownika na tym systemie.
+
+**Zakres formatów:**
+- **ADF i zgodne surowe obrazy dyskietek RAW** — montaż bezpośredni dopiero po potwierdzeniu geometrii i zgodności z systemowym mechanizmem ADF.
+- **XAD** — rozpakowanie kompatybilnego archiwum/obrazu do tymczasowego, poprawnego ADF; nie zakładać, że `trackfile.device` rozumie XAD bezpośrednio. Wymagany opcjonalny obsługiwany dekompresor.
+- **IFF DOLY** — strumieniowa ekstrakcja/reonstrukcja do ADF wyłącznie wtedy, gdy zawartość rzeczywiście reprezentuje obsługiwaną dyskietkę; błędy sektorów, niekompletne zakresy i dane odzyskane nie mogą być ukrywane.
+- **RAW/HDF całych dysków i RDB** — osobny przypadek badawczy; wbudowana obsługa ADF w OS 3.2 **nie dowodzi** obsługi obrazów dysków twardych.
+
+**Działanie:** przed montażem sprawdzić wersję AmigaOS, obecność `trackfile.device`/`DAControl`, typ obrazu, geometrię i możliwość bezpiecznego przygotowania pliku tymczasowego. Zaimplementować montowanie, wykrycie nazwy jednostki, wysuwanie/odmontowanie, kontrolę zajętego wolumenu i usuwanie plików tymczasowych dopiero po potwierdzonym odmontowaniu. Domyślnie chronić obraz źródłowy przed zapisem; jeśli backend nie umożliwia gwarantowanego montażu tylko do odczytu, używać odrębnej kopii roboczej z jasnym komunikatem. Odrzucać niekompletne obrazy bez ukrywania ryzyka.
+
+**GUI:** GadTools 640×256 i Topaz/8, czytelny komunikat o nieobsługiwanym typie/niedostępnym komponencie, podpowiedź co zrobić; brak ReAction/MUI w MVP.
+
+**Status:** wyłącznie backlog, **nie zaimplementowano montowania ani jego testów w WinUAE**. Oficjalne możliwości OS 3.2 potwierdzone jedynie dla ADF: [Hyperion — AmigaOS 3.2](https://www.hyperion-entertainment.com/index.php/where-to-buy/direct-downloads/327-amigaos-32).
+
+### DOL-080 — Wirtualne napędy w starszych AmigaOS (po MVP)
+
+**Priorytet:** P2 · **Etap:** **wyłącznie po MVP** · [Issue #28](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/28)
+
+**Cel:** opracować opcjonalne backendy montowania dla AmigaOS 2.04–3.1, analizując m.in. **`fmsdisk.device` (FMS)** i **`diskimage.device`**, w zależności od wymaganej wersji systemu oraz CPU. Nie uzależniać podstawowego programu od tych sterowników i nie instalować ich bez pytania. Niektóre wersje `diskimage.device` wymagają MC68020+, dlatego nie można automatycznie założyć zgodności z bazowym MC68000.
+
+**Zakres:** rozpoznanie API i licencji, niezależne sterowniki (lub adaptery), montowanie i odmontowanie ADF/RAW, konwersja XAD/DOLY tylko tam, gdzie możliwa, osobne wsparcie HDF/RDB jeśli sterownik rzeczywiście je obsługuje. Przy braku mechanizmu wyświetlać jasny komunikat o niedostępnej funkcji i kontynuować normalne działanie Dolly.
+
+**Status:** backlog post-MVP; brak implementacji.
