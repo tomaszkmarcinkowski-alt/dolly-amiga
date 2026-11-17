@@ -41,6 +41,8 @@ typedef enum ExtractReason {
     EXTRACT_NOT_DEVICE_DRIVER,
     EXTRACT_BAD_DOS_NAME,
     EXTRACT_DUPLICATE,
+    EXTRACT_DEFER_TRACKDISK,
+    EXTRACT_DEFER_CARDDISK,
     EXTRACT_LIMIT,
     EXTRACT_REASON_COUNT
 } ExtractReason;
@@ -64,7 +66,10 @@ static const char *const extract_reason_names[]={
     "accepted","no startup","startup pointer invalid",
     "environment pointer invalid","environment parameters rejected",
     "driver name pointer/bytes invalid","not a .device driver",
-    "DOS name invalid","duplicate physical unit","candidate limit"
+    "DOS name invalid","duplicate physical unit",
+    "excluded: floppy (filesystem repair only)",
+    "deferred: PCMCIA SRAM carddisk",
+    "candidate limit"
 };
 
 
@@ -174,6 +179,18 @@ static ExtractReason extract(const struct DosList *entry,
     out->unit=f->fssm_Unit;
     return EXTRACT_OK;
 }
+/* Keep trackdisk.device out of generic disk imaging/recovery
+ * selection: floppy handling belongs to the filesystem repair
+ * module. Defer carddisk.device until real PCMCIA SRAM tests.
+ * These names are never passed to OpenDevice by this diagnostic.
+ */
+static ExtractReason excluded_physical_driver(const char *driver) {
+    if(strcmp(driver,"trackdisk.device")==0)
+        return EXTRACT_DEFER_TRACKDISK;
+    if(strcmp(driver,"carddisk.device")==0)
+        return EXTRACT_DEFER_CARDDISK;
+    return EXTRACT_OK;
+}
 static void snapshot(void) {
     const ULONG flags=LDF_DEVICES|LDF_READ;
     struct DosList *e;
@@ -190,6 +207,8 @@ static void snapshot(void) {
         strcpy(rec.dos_name,"<invalid>");
         (void)bstr_copy(rec.dos_name,sizeof(rec.dos_name),e->dol_Name);
         reason=extract(e,&candidate,&rec);
+        if(reason==EXTRACT_OK)
+            reason=excluded_physical_driver(candidate.driver);
         if(reason==EXTRACT_OK) {
             for(i=0;i<count;++i)
                 if(candidates[i].unit==candidate.unit &&
