@@ -1,0 +1,14 @@
+build/
+CMakeFiles/
+CMakeCache.txt
+*.o
+*.a
+*.exe
+*.log
+*.tmp
+*.dly
+*.d[0-9][0-9]
+*.adf
+*.hdf
+.DS_Store
+__pycache__/
