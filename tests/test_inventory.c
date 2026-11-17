@@ -68,8 +68,10 @@ int main(void){
     p.buffer_count_present=1;p.buffer_count=30;
     p.buffer_memory_type_present=1;p.buffer_memory_type=0;
     p.dma_mask_present=1;p.dma_mask=0x00fffffeu;
+    p.block_size_longwords=128;p.sectors_per_block=1;
+    p.reserved_blocks=2;p.preallocated_blocks=0;
     assert(dolly_inventory_partition(&p,collect,&c)==0);
-    assert(c.received==12&&c.mask_seen==1&&c.max_seen==1&&c.name_seen==1&&c.derived_count==3);
+    assert(c.received==16&&c.mask_seen==1&&c.max_seen==1&&c.name_seen==1&&c.derived_count==3);
     assert(c.max_unavailable==0&&c.overflow_seen==0);
     memset(&c,0,sizeof(c));p.max_transfer_present=0;
     p.dos_type_present=0;
