@@ -8,6 +8,7 @@
 #include "dolly_inventory.h"
 #include "dolly_io_plan.h"
 #include "dolly_maxtransfer.h"
+#include "dolly_dma_policy.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,6 +124,10 @@ static int run_selftest(void){
        !=DOLLY_BLOCK_OK || plan.offset_high!=1 ||
        plan.command!=DOLLY_NSCMD_TD_READ64)goto cleanup;
     /* Fail closed on intentionally corrupted on-disk metadata. */
+    if(dolly_dma_check_buffer(UINT64_C(0x00100000),512,0x00fffffeu,2)
+       !=DOLLY_DMA_OK)goto cleanup;
+    if(dolly_dma_check_buffer(UINT64_C(0x00ffff00),512,0x00fffffeu,2)
+       !=DOLLY_DMA_OUTSIDE_MASK)goto cleanup;
     smoke_stage=6;
     disk_bytes[64]^=1;
     parsed=dolly_rdb_scan(source,0,SMOKE_BS,1,rdb);
