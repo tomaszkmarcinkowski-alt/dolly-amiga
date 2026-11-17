@@ -47,7 +47,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
   if(memcmp(buf,"PART",4)!=0)return DOLLY_RDB_BAD_BLOCK;
   if(!checksum(buf,out->block_bytes))return DOLLY_RDB_BAD_CHECKSUM;
   next=be32(buf+16);
-  if(be32(buf+128)<16 || be32(buf+128)>=(out->block_bytes-128)/4)return DOLLY_RDB_BAD_BLOCK;
+  if(be32(buf+128)<17 || be32(buf+128)>=(out->block_bytes-128)/4)return DOLLY_RDB_BAD_BLOCK;
   size_block=be32(buf+128+1*4);
   surfaces=be32(buf+128+3*4);
   bpt=be32(buf+128+5*4);
