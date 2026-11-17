@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**69 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**72 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -631,3 +631,36 @@
 **Acceptance:** device/vendor documentation or carefully documented real hardware tests, database release/build ID, format/schema version, integrity checks, detailed hardware and driver matching, provenance/confidence, contradiction handling. Unmatched/ambiguous/unverified versions fall back to generic DMA help, not to universal unverified parameters. A verified database match never enables raw DMA operations by itself. Automatic profile selection requires independent runtime verification and explicit safety rules; no user-visible "safe" guarantee based solely on plugin text.
 
 **Status:** initial profile matcher and sourced DMA advice composition are in source, with example synthetic profiles and tests; real curated hardware entries, native loader, versioned database package and GUI integration remain open.
+
+
+## M0 integrity, boot rescue and controlled device configuration
+
+### DOL-070 — Integralność programu i dodatków: wersja + CRC32
+
+**Priorytet:** P0 dla poprawnego startu, P1 dla paczki wydaniowej · **Etap:** M0/MVP · [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19)
+
+**Decyzja:** wyłącznie **identyfikator bieżącego wydania + suma kontrolna CRC32**, bez obowiązkowych podpisów cyfrowych czy rozbudowanego systemu kryptograficznego. W paczce wydania manifest zawiera ścieżkę, numer wydania, długość i CRC32 każdego pliku. Dodatki dodatkowo weryfikują format/API.
+
+**Program główny:** pakiet jest sprawdzany przed dystrybucją, a docelowy natywny bootstrap uruchamia kontrolę pliku wykonywalnego *przed* startem właściwego Dolly. Program nie może samodzielnie udowodnić autentyczności własnego pliku; manifest z tej samej paczki chroni jedynie przed **przypadkowym uszkodzeniem** lub przypadkową podmianą, nie celowym atakiem.
+
+**Dodatki:** błędne CRC32, inny rozmiar, niezgodne wydanie i niezgodne API skutkują wyłączeniem tylko zależnej funkcji oraz dokładnym ostrzeżeniem: ścieżka, przyczyna, konsekwencje i sposób naprawy. GadTools i core nadal startują. Baza urządzeń odrzucona za błąd CRC nie może ustawiać parametrów DMA.
+
+**Stan:** przenośny streaming CRC32, generator i offline weryfikator manifestu, testy oraz logika odmowy użycia niezgodnych plików dodane do źródeł. Brak jeszcze natywnej integracji czytania plików, prawdziwego startowego bootstrapu i testu WinUAE.
+
+### DOL-071 — Minimalna dyskietka ratunkowa Dolly z GadTools
+
+**Priorytet:** P2 · **Etap:** przygotowanie po M0, pełne wydanie w dalszym etapie · [Issue #20](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/20)
+
+**Cel:** oddzielny wariant **Dolly Rescue**: maksymalnie mały program z obowiązkowym GadTools, podstawową diagnostyką i bezpiecznymi odczytami. Stworzyć powtarzalny proces przygotowania bootującej dyskietki DD 880 KiB lub obrazu ADF, mierzący miejsce na pliki i wymagania pamięci.
+
+**Akceptacja:** ograniczyć zależności do minimum, nie dołączać dodatkowych GUI, ciężkich bibliotek, rozbudowanych baz i zbędnych katalogów. Wariant ma obsługiwać brakujące dodatki i CRC32/wersję. Uwzględnić wymagane komponenty AmigaOS i ich licencje — bez nieuprawnionej redystrybucji Workbencha/Kickstartu. Testy w WinUAE 68000/2.04 i na rzeczywistym komputerze. Nie deklarować, że cały pakiet się zmieści, dopóki nie zostanie zbudowany i zmierzony.
+
+### DOL-072 — Wprowadzanie konfiguracji z baz urządzeń do ustawień Dolly
+
+**Priorytet:** P1/P2 · **Etap:** M0 model propozycji, użycie po niezależnej walidacji sprzętu · [Issue #21](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/21)
+
+**Cel:** baza kontrolerów (o potwierdzonym wydaniu/CRC32/API) może podpowiadać i przygotowywać **lokalne ustawienia Dolly**, zamiast ograniczać się do ogólnych porad. Zmiana pokazuje ustawienie przed/po, źródło wiedzy i wymaga zgody użytkownika.
+
+**Ograniczenia:** w obecnym M0 dopuszczamy wyłącznie propozycję zmniejszenia lokalnego rozmiaru transferu — zgodną z rozmiarem sektora, limitem 64 KiB oraz dokładnie rozpoznanym modelem/sterownikiem/rewizją. Bez automatycznej zmiany Mask, ustawień AmigaDOS, RDB lub sprzętu; profil nigdy sam nie autoryzuje DMA. Dodać rollback, wykrywanie konfliktów, rozdzielenie danych obserwowanych od deklarowanych i testy realnych kontrolerów przed aktywacją automatyczną.
+
+**Stan:** model propozycji i testy jednostkowe dodane do repozytorium; faktyczna aplikacja ustawień/GUI i walidacja kontrolera pozostają otwarte.
