@@ -147,4 +147,4 @@ endif()
 
 # Host-only Sheep Inventory CLI prototype. Later GadTools UI consumes same field stream.
 add_executable(dolly-inventory src/dolly_inventory_inspect.c)
-target_link_libraries(dolly-inventory PRIVATE dollyinventory dollymap)
+target_link_libraries(dolly-inventory PRIVATE dollyinventory dollymap dollymaxtransfer)
