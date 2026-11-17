@@ -770,3 +770,26 @@ M1.33 is an **unverified isolation patch**, not a confirmed fix:
 
 Only test with a disposable WinUAE image. Do not use real media until
 the crash is resolved. RTG and memory profiling remain deferred.
+
+## AA. M1.33 verified in WinUAE — Destination Partition Query
+
+User confirmed screenshot on the previously crashing scenario:
+Source selected, disk-to-disk operation, Destination -> Partition ->
+scsi.device Unit 0 -> Query.
+
+**Observed PASS for this one scenario:**
+- No HALT3 or Guru.
+- Third LISTVIEW displays `1: WB_1.3`, `2: WB_2.x`,
+  `3: OS`, `4: GRY` correctly.
+- Device name: `UAE-IDE rafael.hdf`; Size: `1881 MiB`.
+- Partition info prompts "Select a partition..." until one is chosen.
+- Use selection appears disabled before partition choice.
+- Console reports "Query: reattach partition labels" and
+  "Query: in-place update completed".
+
+This confirms the M1.33 double-buffered list mechanism fixes the
+previously observed crash/corrupted-display scenario **in this
+WinUAE configuration**. Not yet tested: repeated Query, selecting
+another driver/unit after Query, alternating chooser roles repeatedly,
+or invalid/empty RDB. These remain pending before removing
+diagnostic traces or declaring the whole picker robust.
