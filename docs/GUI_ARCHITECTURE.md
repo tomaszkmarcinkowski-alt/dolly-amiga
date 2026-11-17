@@ -785,3 +785,70 @@ interpret this alert as proof of FPU code or hardware damage.
 
 **Do not mark M1.18 validated** until MC68000 / 512 KiB Chip /
 Kickstart 2.04 boot and both selectors pass.
+
+### M1.19 GUI preflight — native resizable Source/Destination pickers
+
+After user acceptance of the M1.18 main window and file-mode UI,
+the Source and Destination selectors are now **native resizable**
+Intuition windows (including SizeGadget). This GUI milestone comes
+before physical device discovery and before memory profiling.
+
+At the accepted 606x195 outer pixel baseline, the modal-looking
+chooser keeps its existing native GadTools layout and remains fully
+usable on the 640x256 Workbench reference screen. The window
+advertises `WA_MinWidth=606`, `WA_MinHeight=195` and screen-based
+maxima, so it cannot be shrunk smaller than its established tested
+baseline. More capable/high-resolution systems can expand it
+horizontally and vertically.
+
+New `picker_geometry()` computes the actual client-span width
+from the current Intuition border sizes. LISTVIEW_KIND columns
+occupy all the horizontal space (zero gutter), divide it evenly
+between two Physical or three Partition lists, and their heights
+expand with the additional window height. Logical mode's single
+LISTVIEW_KIND fills the same span. The type Cycle widens
+horizontally. File-mode Browse button, path field and file info/format
+control widen with the available client area. The bottom Use
+selection and Cancel buttons remain anchored along the bottom.
+Selected file preview and source metadata clip against current
+measured field width using the active RastPort font.
+
+Like the already validated two-window demo, interactive resize uses
+`IDCMP_SIZEVERIFY` to detach the old GadTools list before shrinking
+so old-size gadget images cannot flash outside the client area.
+`IDCMP_NEWSIZE` rebuilds and reattaches the gadgets using the
+new dimensions. The background is explicitly cleared before new
+gadgets and mode captions are drawn, preserving the M1.18
+no-ghosting fix. The `GTLV_Selected` state is restored on rebuild
+from the independent picker state so an in-progress hierarchical
+selection survives resizing. Both roles use the same code.
+
+This version is **not yet m68k compiled or WinUAE tested**. Test
+source and destination independently at minimum, maximum
+horizontal and vertical sizes; resize while switching modes,
+with device/unit/partition selected; check File ASL selection
+and output format Cycle after resizing. The main window and
+Sheep Counter are unchanged; no physical media operation is added.
+
+### M1.19 — selected endpoint preview in each LISTVIEW mode
+
+Added user-requested full-width, **recessed GadTools TEXT_KIND**
+selection preview **under the LISTVIEW(s), above Use selection and
+Cancel** in Physical, Logical and Partition modes. The preview shows
+the provisional selection immediately: selected device, selected
+unit or logical name, and selected partition when applicable. It
+never commits to the main window until Use selection is clicked.
+Cancel retains the previous committed endpoint.
+
+The chooser's `picker_geometry()` reserves a fixed-height preview
+row above the bottom action buttons, then gives the remaining
+vertical space to the list views. The preview stretches to the
+current client width, uses the same system-font text measurement
+as File path previews, and is rebuilt/restored when the native window
+resizes or the type Cycle changes. File mode keeps its **existing**
+path preview, metadata and image-format controls without a redundant
+second preview.
+
+GUI-13 through GUI-17 in `docs/TEST_MATRIX.md` cover this addition.
+The new module has **not yet been cross-compiled or validated in
+WinUAE**. RTG and memory tests remain deferred.
