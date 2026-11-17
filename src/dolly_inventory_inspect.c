@@ -1,6 +1,7 @@
 /* Sheep Inventory: host read-only prototype for RDB PART objects. */
 #include "dolly_partition_map.h"
 #include "dolly_inventory.h"
+#include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,14 @@ static int emit_field(const DollyInventoryField *f,void *ctx){
         fprintf(out,"  %-23s 0x%08" PRIX32 " (source: %s)\n",f->label,(uint32_t)f->number,source);
     }else{
         fprintf(out,"  %-23s %" PRIu64 " %s (source: %s)\n",f->label,f->number,f->unit,source);
+    }
+    if(!strcmp(f->key,"max_transfer")){
+        DollyMaxTransferClass category=dolly_maxtransfer_classify(
+            (uint32_t)f->number,f->availability==DOLLY_INV_PRESENT);
+        if(category==DOLLY_MT_ABOVE_REFERENCE ||
+           category==DOLLY_MT_INVALID_ZERO ||
+           category==DOLLY_MT_BELOW_REFERENCE)
+            fprintf(out,"    WARNING/NOTE: %s\n",dolly_maxtransfer_guidance(category));
     }
     return ferror(out)?1:0;
 }
