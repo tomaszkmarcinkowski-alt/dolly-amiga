@@ -61,6 +61,8 @@ DollyResourceScanResult dolly_resources_scan_optional(
         result.disabled_kinds|=UINT32_C(1)<<(unsigned)item->kind;
         notice.required_release=required_release;
         notice.found_release=observed.release_id;
+        notice.expected_format=item->expected_format;
+        notice.found_format=observed.format_version;
         notice.missing_path=path;
         notice.disabled_feature=disabled[item->kind];
         notice.suggested_action=actions[item->kind];
@@ -80,8 +82,13 @@ DollyResourceScanResult dolly_resources_scan_optional(
             notice.headline="Nieznany paszport pliku - Dolly go nie uruchomi!";
         }else{
             result.incompatible_files++;
-            notice.code="DOLLY_OPTIONAL_RESOURCE_VERSION_MISMATCH";
-            notice.headline="Plik z innego stada - wersja nie pasuje do Dolly!";
+            if(strcmp(observed.release_id,required_release)!=0){
+                notice.code="DOLLY_OPTIONAL_RESOURCE_VERSION_MISMATCH";
+                notice.headline="Plik z innego stada - wersja nie pasuje do Dolly!";
+            }else{
+                notice.code="DOLLY_OPTIONAL_RESOURCE_API_MISMATCH";
+                notice.headline="Inny format pliku - te owce mowia innym jezykiem!";
+            }
         }
         if(report)report(&notice,report_context);
     }
