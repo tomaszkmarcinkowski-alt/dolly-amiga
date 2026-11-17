@@ -201,7 +201,16 @@ static int populate_partitions(DollyEndpointPicker *p) {
         dst[n]='\0';
         memset(node,0,sizeof(*node));
         node->ln_Name=dst;
+        /* Keep each stage separately visible in AmigaShell; a last
+         * marker here localizes corruption to list-link manipulation.
+         */
+        printf("DOLLY M1.33 %s row=%u text=%s before AddTail\n",
+               p->role?"DEST":"SOURCE",i,dst);
+        fflush(stdout);
         AddTail(items,node);
+        printf("DOLLY M1.33 %s row=%u linked\n",
+               p->role?"DEST":"SOURCE",i);
+        fflush(stdout);
     }
     p->partition_bank=bank;
     return 1;
