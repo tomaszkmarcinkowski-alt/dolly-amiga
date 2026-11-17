@@ -681,3 +681,26 @@ creation and type transitions, **not** on every progress tick. The same
 function handles both source and destination picker windows.
 
 Pending Docker m68k compilation and WinUAE runtime confirmation.
+
+### M1.18 — File mode: preview before commit
+
+Following WinUAE feedback, the File mode no longer puts `Browse file...`
+in the bottom `Use selection` position. Instead it renders a
+full-client-width GadTools `BUTTON_KIND` above a full-width recessed
+`TEXT_KIND` path field in the area used by the other modes' lists.
+The bottom action row **always** retains separate `Use selection`
+and `Cancel` controls.
+
+ASL now selects a **pending** file endpoint, updates the read-only text
+field and enables `Use selection`; the parent Source/Destination
+selection is not changed until that button is clicked. Closing or
+cancelling the dialog leaves the previous committed endpoint intact.
+The path displayed in the text field is measured with the active font's
+`TextLength()` and clipped with an ellipsis to avoid crossing borders;
+the full unmodified path remains in `pending_file` and is committed
+on confirmation. An initially selected file is preloaded when revisiting
+the chooser.
+
+Same behavior applies to Source File and Destination File modes,
+including Create image. No actual image I/O is performed. This GUI fix
+still requires Docker m68k compile and WinUAE validation.
