@@ -602,7 +602,7 @@ static void destroy_view(DollyDemoView *v) {
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
     v->show=NULL;v->inventory=NULL;v->placeholder=NULL;
-        v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+    v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
     v->device=NULL;v->target_button=NULL;
     v->source_text=NULL;v->target_text=NULL;
@@ -640,7 +640,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         m.show_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Sheep Counter",13);
         m.quit_button_text_width=(ULONG)TextLength(rp,
-                (STRPTR)"Sheep Inventory",15);
+                (STRPTR)"Quit",4);
     } else {
         m.heading_width=(ULONG)TextLength(rp,
                 (STRPTR)"Surface Scan - Sheep Counter",28);
