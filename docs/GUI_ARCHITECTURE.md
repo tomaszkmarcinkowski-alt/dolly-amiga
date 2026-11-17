@@ -1227,3 +1227,53 @@ Status: implementation submitted for compilation and WinUAE verification,
 not yet tested by the assistant. Use the existing 640x256 A1200 / OS3.1
 test HDF first; verify OS2.04 separately for the version-dependent
 selection rendering. RTG remains deferred.
+
+
+### M1.35 — Operation first, contextual Source/Destination pages
+
+The main window retains its original GadTools Operation Cycle, but
+displays it in the first control row, above Source and Destination.
+The five existing demo operations are joined by a sixth visible
+entry **Disk Vet (coming soon)**, a friendly face for the planned
+DiskDoctor filesystem-first-aid project. Disk Vet needs Source only:
+the Destination button is disabled, and Start is **always disabled**
+because the backend is not implemented. Source may be Physical,
+Partition, Logical or File (filesystem image); no repair is implied.
+
+Each endpoint picker receives a mask of allowed modes, computed by
+the portable function \`dolly_allowed_modes(operation, role,
+source_kind, berserk)\`. These become a persistent NULL-terminated
+\`GTCY_Labels\` array owned by that picker and an array mapping
+**cycle positions** to stable \`DollyEndpointMode\` values.
+No individual disabled entries are shown. The mapping is essential:
+for Restore Image, Source Cycle position 0 = File (enum value 3).
+A stored endpoint is preserved when Operation changes, but if its
+kind does not match the new mode policy Start is disabled and a
+message requests a new Source or Destination. Picker opens in
+an allowed mode even if its previous selection is incompatible.
+
+Normal policy:
+- Scan: Source Physical/Partition/Logical; no Destination.
+- Inventory: Source Physical/Partition/Logical/File; no Destination.
+- Copy: Source any; Source Physical -> Destination Physical,
+  Partition -> Partition, Logical -> Logical, File -> File.
+- Restore Image: Source File; Destination Physical/Partition.
+- Create Image: Source Physical/Partition/Logical; Destination File.
+- Disk Vet: Source any; no Destination; Start always unavailable.
+
+Destination button is disabled until a valid Source compatible
+with the chosen Operation is committed. Operation Cycle is disabled
+while either picker is open, avoiding policy changing mid-selection.
+Double-click remains disabled in every picker. RDB scanning,
+double-buffered LISTVIEW banks, explicit Query and separate Device
+name/Size inset fields are unchanged.
+
+M1.35 includes only **normal-mode** filtering; \`berserk_mode\` is
+fixed to 0 in this GUI. The portable policy supports future Berserk
+masks for exceptional combinations but it is not yet presented
+as a switch and never grants real-media write authority. Current
+Copy File -> File is a **selection/demo workflow only**, not an
+implemented image conversion backend. See DOL-081–084 in the backlog.
+
+Implementation prepared on a feature branch; Amiga cross-compilation
+and WinUAE tests are required. RTG and RAM profiling remain deferred.
