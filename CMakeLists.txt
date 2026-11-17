@@ -143,3 +143,7 @@ add_test(NAME inventory_streaming COMMAND test-inventory)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-inventory PRIVATE -UNDEBUG)
 endif()
+
+# Host-only Sheep Inventory CLI prototype. Later GadTools UI consumes same field stream.
+add_executable(dolly-inventory src/dolly_inventory_inspect.c)
+target_link_libraries(dolly-inventory PRIVATE dollyinventory dollymap)
