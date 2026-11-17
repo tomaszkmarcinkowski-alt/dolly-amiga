@@ -586,8 +586,9 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
           WA_SizeGadget,TRUE,
           WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,
           WA_Activate,TRUE,WA_SmartRefresh,TRUE,
-          WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|
-                   IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
+          WA_IDCMP,LISTVIEWIDCMP|CYCLEIDCMP|BUTTONIDCMP|
+                   IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW|
+                   IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
           TAG_DONE);
     if(!p->window)return 0;
     return rebuild(p);
@@ -599,12 +600,55 @@ void dolly_picker_close(DollyEndpointPicker *p) {
     if(p->gadgets){FreeGadgets(p->gadgets);p->gadgets=NULL;}
     if(p->visual){FreeVisualInfo(p->visual);p->visual=NULL;}
 }
+/* All commit methods (button or list double-click) use one path.
+ * changed/result deliberately survive dolly_picker_close(), so the
+ * main event loop can copy the endpoint after the chooser disappears.
+ */
+static int commit_picker(DollyEndpointPicker *p) {
+    int ok=0;
+    if(p->mode==DOLLY_MODE_PHYSICAL && p->has_device && p->has_unit)
+        ok=dolly_endpoint_set_unit(&p->result,p->device,p->unit);
+    else if(p->mode==DOLLY_MODE_PARTITION &&
+            p->has_device && p->has_unit && p->has_partition)
+        ok=dolly_endpoint_set_partition(&p->result,p->device,
+                                        p->unit,p->partition);
+    else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical)
+        ok=dolly_endpoint_set_logical(&p->result,p->logical);
+    else if(p->mode==DOLLY_MODE_FILE &&
+            p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
+        p->result=p->pending_file;
+        if(p->role)p->result.image_format=p->output_format;
+        ok=1;
+    }
+    if(ok)p->changed=1;
+    return ok;
+}
+/* DoubleClick() uses timestamps from GT_GetIMsg BEFORE GT_ReplyIMsg.
+ * A click on a different row, different list, or stale event cannot
+ * commit the previous selection. A parent Device click never commits.
+ */
+static int picker_double_click(DollyEndpointPicker *p,UWORD id,UWORD code,
+                               ULONG seconds,ULONG micros) {
+    int is_double=p->last_click_valid &&
+                  p->last_click_id==id &&
+                  p->last_click_code==code &&
+                  DoubleClick(p->last_click_seconds,
+                              p->last_click_micros,
+                              seconds,micros);
+    p->last_click_id=id;
+    p->last_click_code=code;
+    p->last_click_seconds=seconds;
+    p->last_click_micros=micros;
+    p->last_click_valid=1;
+    return is_double;
+}
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
         UWORD id=0,code=msg->Code;
+        ULONG seconds=msg->Seconds,micros=msg->Micros;
         int close=0;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
@@ -622,6 +666,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         GT_ReplyIMsg(msg);
         if(cls==IDCMP_NEWSIZE) {
+            p->last_click_valid=0;
             /* Resize completed: discard old pixel positions, build
              * fresh GadTools gadgets at the newly measured geometry.
              */
@@ -642,6 +687,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->mode=(DollyEndpointMode)code;
             p->has_device=0;p->has_unit=0;
             p->has_partition=0;p->has_logical=0;
+            p->last_click_valid=0;
             if(!rebuild(p))close=1;
             if(close)dolly_picker_close(p);
             return; /* never use a stale gadget ID after a rebuild */
@@ -655,37 +701,33 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             change_enabled(p);
             refresh_selection_preview(p);
+            p->last_click_valid=0;
         } else if(id==PICK_UNIT && code<2u && p->has_device) {
+            if(p->mode==DOLLY_MODE_PARTITION)
+                p->last_click_valid=0;
             p->unit=code;p->has_unit=1;p->has_partition=0;
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             change_enabled(p);
             refresh_selection_preview(p);
+            if(p->mode==DOLLY_MODE_PHYSICAL &&
+               picker_double_click(p,id,code,seconds,micros))
+                close=commit_picker(p);
         } else if(id==PICK_PARTITION && code<2u && p->has_unit) {
             p->partition=code;p->has_partition=1;
             change_enabled(p);
             refresh_selection_preview(p);
+            if(picker_double_click(p,id,code,seconds,micros))
+                close=commit_picker(p);
         } else if(id==PICK_LOGICAL && code<2u) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);
+            if(picker_double_click(p,id,code,seconds,micros))
+                close=commit_picker(p);
         } else if(id==PICK_SELECT) {
-            int ok=0;
-            if(p->mode==DOLLY_MODE_PHYSICAL && p->has_unit)
-                ok=dolly_endpoint_set_unit(&p->result,p->device,p->unit);
-            else if(p->mode==DOLLY_MODE_PARTITION && p->has_partition)
-                ok=dolly_endpoint_set_partition(&p->result,p->device,
-                                                p->unit,p->partition);
-            else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical)
-                ok=dolly_endpoint_set_logical(&p->result,p->logical);
-            else if(p->mode==DOLLY_MODE_FILE &&
-                    p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
-                p->result=p->pending_file;
-                if(p->role)p->result.image_format=p->output_format;
-                ok=1;
-            }
-            if(ok){p->changed=1;close=1;}
+            close=commit_picker(p);
         } else if(id==PICK_IMAGE_FORMAT && p->role && code<4u) {
             p->output_format=(DollyImageFormat)code;
         } else if(id==PICK_FILE && p->mode==DOLLY_MODE_FILE) {
