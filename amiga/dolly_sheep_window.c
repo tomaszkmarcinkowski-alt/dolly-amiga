@@ -74,6 +74,7 @@ int main(void) {
     struct Window *win = NULL;
     struct DrawInfo *di = NULL;
     ULONG before, after, during;
+    ULONG window_top, window_height;
     unsigned step, tick;
     int rc = 10, quit = 0;
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library", 36);
@@ -82,8 +83,8 @@ int main(void) {
     if(!GfxBase) {puts("WINDOW FAIL: graphics V36 required");goto cleanup;}
     pub=LockPubScreen(NULL);
     if(!pub) {puts("WINDOW SKIP: no available public screen");rc=20;goto cleanup;}
-    if(pub->Width < 620 || pub->Height < 256) {
-        puts("WINDOW SKIP: public screen too small for this fixed-layout smoke");
+    if(pub->Width < 640 || pub->Height < 256) {
+        puts("WINDOW SKIP: needs at least 640x256 public screen");
         rc=20;goto cleanup;
     }
     di=GetScreenDrawInfo(pub);
@@ -93,11 +94,16 @@ int main(void) {
     if(before < 131072ul || AvailMem(MEMF_CHIP|MEMF_LARGEST) < 65536ul) {
         puts("WINDOW SKIP: low Chip RAM");rc=20;goto cleanup;
     }
+    /* Fill all space below the system screen bar; never cover the bar.
+     * WA_Width/Height refer to the complete window including its borders.
+     */
+    window_top=(ULONG)pub->BarHeight;
+    window_height=(ULONG)pub->Height-window_top;
     win=OpenWindowTags(NULL,
         WA_PubScreen, (ULONG)pub,
         WA_Title, (ULONG)"Dolly - Sheep Counter",
-        WA_Left, 4, WA_Top, (ULONG)pub->BarHeight + 2,
-        WA_InnerWidth, 580, WA_InnerHeight, 215,
+        WA_Left, 0, WA_Top, window_top,
+        WA_Width, (ULONG)pub->Width, WA_Height, window_height,
         WA_DragBar, TRUE, WA_DepthGadget, TRUE,
         WA_CloseGadget, TRUE, WA_Activate, TRUE,
         WA_SmartRefresh, TRUE,
