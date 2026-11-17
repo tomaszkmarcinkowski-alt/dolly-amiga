@@ -55,6 +55,10 @@ Read the chronological [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md) fo
 
 The experimental host utilities also detect collisions between RDB partitions, `RDSK` and `PART` metadata. `dolly-layout` reports when MBR and a whole-device RDB are both present; neither view is automatically assumed safe for writes. This is preliminary inspection, not full hybrid-drive support. See [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
 
+## Motorola 68000 smoke milestone (source only)
+
+An experimental, POSIX-free `dolly-native-smoke` target now exercises synthetic RDB parsing and read planning **in memory**; it cannot access disks. Native 68000 compilation and WinUAE execution are still pending. See [Native smoke test and cross-build instructions](docs/NATIVE_SMOKE.md).
+
 ## Sheep Inventory (early host prototype)
 
 The preliminary `dolly-inventory IMAGE [BLOCK_BYTES]` command displays MBR/RDB partition details using a **streaming, allocation-free field API** with units, provenance, evidence levels (declared/observed/derived/estimated) and explicit unavailable values. The early field providers cover RDSK, PART (including signed Boot Priority) and MBR; device and filesystem support are planned. Shared non-destructive warning streams cover MaxTransfer and preliminary RDB overlap checks. A GadTools window and richer device/volume providers are future work. See [Sheep Inventory design](docs/SHEEP_INVENTORY.md) and [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
