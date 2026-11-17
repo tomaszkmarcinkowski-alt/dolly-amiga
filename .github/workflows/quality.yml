@@ -45,3 +45,17 @@ jobs:
         run: cmake --build build-asan --parallel
       - name: Test
         run: ctest --test-dir build-asan --output-on-failure
+
+  native-smoke-host:
+    name: Native-only source separation (host dry run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure without POSIX backends
+        run: cmake -S . -B build-native-host -DDOLLY_NATIVE_ONLY=ON -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic"
+      - name: Compile portable native smoke
+        run: cmake --build build-native-host --parallel
+      - name: Run memory-only selftest
+        run: ctest --test-dir build-native-host --output-on-failure
+      - name: Notice
+        run: echo "This is a host dry run, NOT a Motorola 68000 or AmigaOS binary test."
