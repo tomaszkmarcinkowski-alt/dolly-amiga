@@ -85,13 +85,15 @@ static STRPTR demo_operations[]={
     (STRPTR)"Surface scan demo",
     (STRPTR)"Inventory preview",
     (STRPTR)"Copy disk/file demo",
-    (STRPTR)"Restore image demo",NULL
+    (STRPTR)"Restore image demo",
+    (STRPTR)"Create image demo",NULL
 };
 static const char *demo_descriptions[]={
     "Read-only scan of source blocks.",
     "Inspect device and partition layout.",
     "Copy blocks from source to destination.",
-    "Restore a file image to a destination."
+    "Restore a file image to a destination.",
+    "Create an image file from a selected source."
 };
 static UWORD selected_operation=0;
 static void text_copy(char *dst,size_t cap,const char *src) {
@@ -107,6 +109,11 @@ static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
     }
     if(e->kind==DOLLY_ENDPOINT_FILE){
         text_copy(out,cap,e->path);return;
+    }
+    if(e->kind==DOLLY_ENDPOINT_LOGICAL) {
+        text_copy(out,cap,e->logical==0 ? "DH0: (mounted demo)" :
+                   "DH1: (mounted demo)");
+        return;
     }
     sprintf(tmp,"Demo device %u / unit %u",
             (unsigned)e->device,(unsigned)e->unit);
@@ -143,6 +150,10 @@ static void update_main_status(void) {
     else if(need && !selected_target.kind)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Choose destination.");
+    else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+            selected_target.kind!=DOLLY_ENDPOINT_FILE)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Create image needs a destination file.");
     else if(!can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Source and destination overlap.");
@@ -789,7 +800,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                                       &selected_target))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
-            } else if(id==MAIN_OPERATION_ID && code<4u) {
+            } else if(id==MAIN_OPERATION_ID && code<5u) {
                 selected_operation=code;
                 refresh_main_selection();
             } else if(id==MAIN_START_ID &&
