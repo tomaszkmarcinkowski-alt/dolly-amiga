@@ -137,6 +137,25 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
                         GTCY_Labels,(ULONG)mode_names,
                         GTCY_Active,(ULONG)p->mode,TAG_DONE);
 }
+/* LISTVIEW columns must occupy the whole client width, with the same
+ * gutter independent of whether this mode has two or three columns.
+ * Geometry follows actual Intuition borders, not absolute screen size.
+ */
+static void column_geometry(DollyEndpointPicker *p,unsigned count,
+                            unsigned index,WORD *left,WORD *width) {
+    struct Window *w=p->window;
+    LONG start=(LONG)w->BorderLeft+4;
+    LONG end=(LONG)w->Width-(LONG)w->BorderRight-4;
+    LONG available=end-start;
+    LONG gap=8;
+    LONG span=available-gap*(LONG)(count-1u);
+    LONG x=start+(span*(LONG)index)/(LONG)count+
+           gap*(LONG)index;
+    LONG next=start+(span*(LONG)(index+1u))/(LONG)count+
+              gap*(LONG)index;
+    *left=(WORD)x;
+    *width=(WORD)(next-x);
+}
 static void captions(DollyEndpointPicker *p) {
     struct RastPort *rp;
     struct DrawInfo *info;
@@ -148,10 +167,16 @@ static void captions(DollyEndpointPicker *p) {
     Move(rp,20,36);
     Text(rp,(STRPTR)"Select type:",12);
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
-        Move(rp,20,59);Text(rp,(STRPTR)"Device",6);
-        Move(rp,223,59);Text(rp,(STRPTR)"Unit",4);
-        if(p->mode==DOLLY_MODE_PARTITION) {
-            Move(rp,426,59);Text(rp,(STRPTR)"Partition (RDB/MBR)",19);
+        WORD x,w;
+        unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
+        column_geometry(p,columns,0u,&x,&w);
+        Move(rp,x,59);Text(rp,(STRPTR)"Device",6);
+        column_geometry(p,columns,1u,&x,&w);
+        Move(rp,x,59);Text(rp,(STRPTR)"Unit",4);
+        if(columns==3u) {
+            column_geometry(p,columns,2u,&x,&w);
+            Move(rp,x,59);
+            Text(rp,(STRPTR)"Partition (RDB/MBR)",19);
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         Move(rp,20,59);Text(rp,(STRPTR)"Mounted logical device (demo)",29);
@@ -221,14 +246,19 @@ static int rebuild(DollyEndpointPicker *p) {
     if(!last)return 0;
     p->mode_cycle=last;
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
-        last=list(last,p,PICK_DEVICE,20,66,186,&p->devices,0);
+        WORD x,w;
+        unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
+        column_geometry(p,columns,0u,&x,&w);
+        last=list(last,p,PICK_DEVICE,x,66,w,&p->devices,0);
         if(!last)return 0;
         p->device_list=last;
-        last=list(last,p,PICK_UNIT,223,66,186,&p->units,!p->has_device);
+        column_geometry(p,columns,1u,&x,&w);
+        last=list(last,p,PICK_UNIT,x,66,w,&p->units,!p->has_device);
         if(!last)return 0;
         p->unit_list=last;
-        if(p->mode==DOLLY_MODE_PARTITION) {
-            last=list(last,p,PICK_PARTITION,426,66,160,
+        if(columns==3u) {
+            column_geometry(p,columns,2u,&x,&w);
+            last=list(last,p,PICK_PARTITION,x,66,w,
                       &p->partitions,!p->has_unit);
             if(!last)return 0;
             p->partition_list=last;
@@ -269,13 +299,18 @@ static int pick_file(DollyEndpoint *result,unsigned destination) {
         ASL_FileRequest,ASL_FuncFlags,(ULONG)(destination?FILF_SAVE:0),
         TAG_DONE);
     if(!fr)return 0;
-    if(AslRequest(fr,NULL) && fr->fr_Drawer && fr->fr_File) {
-        dn=strlen((const char *)fr->fr_Drawer);
+    if(AslRequest(fr,NULL) && fr->fr_File) {
+        /* ASL may return an empty drawer for a file in the current
+         * directory. A relative filename is a valid DOS pathname.
+         * Do not dereference fr_Drawer when NULL.
+         */
+        dn=fr->fr_Drawer ?
+           strlen((const char *)fr->fr_Drawer) : 0u;
         fn=strlen((const char *)fr->fr_File);
         slash=dn>0u && fr->fr_Drawer[dn-1u]!=':' &&
               fr->fr_Drawer[dn-1u]!='/';
-        if(dn>0u && fn>0u && dn+(size_t)slash+fn<sizeof(path)) {
-            memcpy(path,fr->fr_Drawer,dn);
+        if(fn>0u && dn+(size_t)slash+fn<sizeof(path)) {
+            if(dn)memcpy(path,fr->fr_Drawer,dn);
             if(slash)path[dn++]='/';
             memcpy(path+dn,fr->fr_File,fn+1u);
             ok=dolly_endpoint_set_file(result,path);
