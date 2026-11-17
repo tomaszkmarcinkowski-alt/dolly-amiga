@@ -16,4 +16,8 @@ typedef enum DollyDmaStatus {
 DollyDmaStatus dolly_dma_check_buffer(uint64_t address,uint64_t bytes,
                                     uint32_t mask,uint32_t alignment);
 const char *dolly_dma_status_name(DollyDmaStatus status);
+/* User-facing diagnostic (7-bit English fallback for classic AmigaOS).
+ * The CLI/GadTools layer is responsible for displaying it and translating
+ * through the locale catalog when available. No claim of disk damage. */
+const char *dolly_dma_user_message(DollyDmaStatus status);
 #endif
