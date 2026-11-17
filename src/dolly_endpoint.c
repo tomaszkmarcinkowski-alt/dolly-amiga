@@ -19,7 +19,7 @@ int dolly_endpoint_set_partition(DollyEndpoint *e,unsigned d,
     return 1;
 }
 int dolly_endpoint_set_logical(DollyEndpoint *e,unsigned logical) {
-    if(!e || logical>1u)return 0;
+    if(!e || logical>23u)return 0;
     dolly_endpoint_clear(e);
     e->kind=DOLLY_ENDPOINT_LOGICAL;
     e->logical=(uint8_t)logical;
@@ -66,7 +66,10 @@ int dolly_demo_can_start(DollyDemoOperation op,
     if(dolly_demo_needs_target(op) &&
        source->kind==DOLLY_ENDPOINT_LOGICAL &&
        target->kind==DOLLY_ENDPOINT_LOGICAL &&
-       source->logical==target->logical)return 0;
+       ((source->path[0] && target->path[0] &&
+          strcmp(source->path,target->path)==0) ||
+        ((!source->path[0] || !target->path[0]) &&
+         source->logical==target->logical)))return 0;
     if(dolly_demo_needs_target(op) &&
        (source->kind==DOLLY_ENDPOINT_UNIT ||
         source->kind==DOLLY_ENDPOINT_PARTITION) &&
