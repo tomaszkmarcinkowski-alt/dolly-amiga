@@ -27,8 +27,14 @@ void dolly_amiga_discover_dos_devices(DollyDosDevices *out) {
             out->truncated=1;
             continue;
         }
+        /* Never make an incorrect device alias by truncating its
+         * identity. Skip entries whose full NAME: cannot fit.
+         */
+        if(n>DOLLY_DOS_NAME_BYTES-2u) {
+            out->truncated=1;
+            continue;
+        }
         dest=out->names[out->count];
-        if(n>DOLLY_DOS_NAME_BYTES-2u)n=DOLLY_DOS_NAME_BYTES-2u;
         for(i=0;i<n;++i)dest[i]=(char)bstr[i+1u];
         dest[n++]=':';
         dest[n]='\0';
