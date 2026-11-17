@@ -32,7 +32,7 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
         /* Progress at x=86, 66px well, build label with 6px
          * clearance at each side, 70px Stop/Quit with 6px gap. */
         client_w=max_u32(client_w,86u+66u+12u+
-                         m.main_build_label_width+70u*2u+6u);
+                         m.main_build_label_width+90u*2u+6u);
         /* The caller derives the bottommost extent from actual GUI
          * positions and widget sizes, not a historical fixed height. */
         client_h=max_u32(m.main_content_height,
