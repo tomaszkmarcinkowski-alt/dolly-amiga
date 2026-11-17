@@ -7,6 +7,10 @@ typedef struct DollyNativePartition {
     char summary[160];  /* formatted from validated on-disk fields */
     uint64_t start_bytes,length_bytes;
     ULONG low_cyl,high_cyl,fs_block_bytes,sectors_per_block,dos_type;
+    ULONG max_transfer,dma_mask;
+    int32_t boot_priority;
+    unsigned char dos_type_present,boot_priority_present;
+    unsigned char max_transfer_present,dma_mask_present;
     UBYTE mbr_type;
     unsigned char is_rdb;
 } DollyNativePartition;
