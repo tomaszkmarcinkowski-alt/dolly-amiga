@@ -179,8 +179,15 @@ static void populate_partitions(DollyEndpointPicker *p) {
     unsigned i;
     init_list(&p->partitions);
     for(i=0;i<p->partition_count;++i) {
+        /* On-disk PART chain order is already preserved by scan_rdb.
+         * Prefix only the displayed LISTVIEW strings; keep the raw
+         * volume label for Selection, Partition info and endpoints.
+         * Neither the RDB itself nor its order is modified.
+         */
+        sprintf(p->partition_list_labels[i],"%u: %s",i+1u,
+                p->partition_map.parts[i].label);
         memset(&p->partition_nodes[i],0,sizeof(p->partition_nodes[i]));
-        p->partition_nodes[i].ln_Name=p->partition_map.parts[i].label;
+        p->partition_nodes[i].ln_Name=p->partition_list_labels[i];
         AddTail(&p->partitions,&p->partition_nodes[i]);
     }
 }
@@ -244,8 +251,15 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
     ng.ng_Width=w;
     ng.ng_Height=picker_geometry(p).list_h;
     ng.ng_GadgetID=id;ng.ng_GadgetText=(STRPTR)"";
+    /* Without GTLV_ShowSelected, LISTVIEW_KIND only flashes the
+     * active row while the mouse is down. Explicitly requesting a
+     * selection display makes it persistent: V39+ highlights the
+     * row, while V37 shows the selected text below the list.
+     * GTLV_Selected now also restores selection after rebuilding.
+     */
     return CreateGadget(LISTVIEW_KIND,last,&ng,
                         GTLV_Labels,(ULONG)items,
+                        GTLV_ShowSelected,(ULONG)NULL,
                         GTLV_Selected,selected,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
