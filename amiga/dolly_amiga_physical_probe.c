@@ -30,6 +30,36 @@ typedef struct ProbeCandidate {
 } ProbeCandidate;
 static ProbeCandidate candidates[MAX_CANDIDATES];
 static unsigned count,skipped;
+#define MAX_INSPECT 48u
+typedef enum ExtractReason {
+    EXTRACT_OK=0,
+    EXTRACT_NO_STARTUP,
+    EXTRACT_BAD_STARTUP,
+    EXTRACT_BAD_ENV,
+    EXTRACT_BAD_GEOMETRY,
+    EXTRACT_BAD_DRIVER_BSTR,
+    EXTRACT_NOT_DEVICE_DRIVER,
+    EXTRACT_BAD_DOS_NAME,
+    EXTRACT_DUPLICATE,
+    EXTRACT_LIMIT,
+    EXTRACT_REASON_COUNT
+} ExtractReason;
+typedef struct InspectRecord {
+    char dos_name[40];
+    ExtractReason reason;
+    ULONG startup;
+    ULONG env_sizeblock;
+    ULONG env_tablesize;
+} InspectRecord;
+static InspectRecord inspect_records[MAX_INSPECT];
+static unsigned inspect_count,reason_counts[EXTRACT_REASON_COUNT];
+static const char *const extract_reason_names[]={
+    "accepted","no startup","startup pointer invalid",
+    "environment pointer invalid","environment parameters rejected",
+    "driver name pointer/bytes invalid","not a .device driver",
+    "DOS name invalid","duplicate physical unit","candidate limit"
+};
+
 
 /* Inspect DOS startup data as untrusted, driver-specific input.
  * A valid address alone is NOT enough. All expected fields, bounds and
@@ -72,28 +102,34 @@ static int driver_suffix(const char *name) {
     }
     return 1;
 }
-static int extract(const struct DosList *entry,ProbeCandidate *out) {
+static ExtractReason extract(const struct DosList *entry,
+                             ProbeCandidate *out,InspectRecord *record) {
     BPTR startup;
     const struct FileSysStartupMsg *f;
     const struct DosEnvec *env;
-    if(!entry)return 0;
+    if(!entry)return EXTRACT_NO_STARTUP;
     startup=(BPTR)entry->dol_misc.dol_handler.dol_Startup;
-    if(!valid_bptr(startup,sizeof(*f)))return 0;
+    record->startup=(ULONG)startup;
+    if(!startup)return EXTRACT_NO_STARTUP;
+    if(!valid_bptr(startup,sizeof(*f)))return EXTRACT_BAD_STARTUP;
     f=(const struct FileSysStartupMsg *)BADDR(startup);
-    if(!valid_bptr(f->fssm_Environ,sizeof(ULONG)*11u))return 0;
+    if(!valid_bptr(f->fssm_Environ,sizeof(ULONG)*11u))
+        return EXTRACT_BAD_ENV;
     env=(const struct DosEnvec *)BADDR(f->fssm_Environ);
+    record->env_tablesize=env->de_TableSize;
+    record->env_sizeblock=env->de_SizeBlock;
     if(env->de_TableSize<10ul || env->de_TableSize>256ul ||
        env->de_SizeBlock<64ul || env->de_SizeBlock>4096ul ||
        !env->de_Surfaces || env->de_Surfaces>256ul ||
        !env->de_BlocksPerTrack || env->de_BlocksPerTrack>1024ul)
-        return 0;
-    if(!bstr_copy(out->driver,sizeof(out->driver),f->fssm_Device) ||
-       !driver_suffix(out->driver))
-        return 0;
+        return EXTRACT_BAD_GEOMETRY;
+    if(!bstr_copy(out->driver,sizeof(out->driver),f->fssm_Device))
+        return EXTRACT_BAD_DRIVER_BSTR;
+    if(!driver_suffix(out->driver))return EXTRACT_NOT_DEVICE_DRIVER;
     if(!bstr_copy(out->volume,sizeof(out->volume),entry->dol_Name))
-        return 0;
+        return EXTRACT_BAD_DOS_NAME;
     out->unit=f->fssm_Unit;
-    return 1;
+    return EXTRACT_OK;
 }
 static void snapshot(void) {
     const ULONG flags=LDF_DEVICES|LDF_READ;
@@ -103,20 +139,49 @@ static void snapshot(void) {
     if(!e)return;
     while((e=NextDosEntry(e,LDF_DEVICES))!=NULL) {
         ProbeCandidate candidate;
+        InspectRecord rec;
+        ExtractReason reason;
         unsigned i;
         memset(&candidate,0,sizeof(candidate));
-        if(!extract(e,&candidate)) {
-            ++skipped;
-            continue;
+        memset(&rec,0,sizeof(rec));
+        strcpy(rec.dos_name,"<invalid>");
+        (void)bstr_copy(rec.dos_name,sizeof(rec.dos_name),e->dol_Name);
+        reason=extract(e,&candidate,&rec);
+        if(reason==EXTRACT_OK) {
+            for(i=0;i<count;++i)
+                if(candidates[i].unit==candidate.unit &&
+                   strcmp(candidates[i].driver,candidate.driver)==0)break;
+            if(i<count)reason=EXTRACT_DUPLICATE;
+            else if(count<MAX_CANDIDATES)candidates[count++]=candidate;
+            else reason=EXTRACT_LIMIT;
         }
-        for(i=0;i<count;++i)
-            if(candidates[i].unit==candidate.unit &&
-               strcmp(candidates[i].driver,candidate.driver)==0)break;
-        if(i<count)continue; /* multiple DOS partitions, one drive */
-        if(count<MAX_CANDIDATES)candidates[count++]=candidate;
-        else ++skipped;
+        rec.reason=reason;
+        if((unsigned)reason<EXTRACT_REASON_COUNT)
+            ++reason_counts[reason];
+        if(reason!=EXTRACT_OK && reason!=EXTRACT_DUPLICATE)
+            ++skipped;
+        if(inspect_count<MAX_INSPECT)
+            inspect_records[inspect_count++]=rec;
     }
     UnLockDosList(flags);
+}
+static void report_inspection(void) {
+    unsigned i;
+    puts("DOS device entry diagnostics (no physical I/O):");
+    for(i=0;i<inspect_count;++i) {
+        const InspectRecord *r=&inspect_records[i];
+        printf("  %s: %s",r->dos_name,
+               extract_reason_names[r->reason]);
+        if(r->reason==EXTRACT_BAD_GEOMETRY)
+            printf(" (table=%lu blockwords=%lu)",
+                   (unsigned long)r->env_tablesize,
+                   (unsigned long)r->env_sizeblock);
+        printf("\n");
+    }
+    if(reason_counts[EXTRACT_BAD_STARTUP] ||
+       reason_counts[EXTRACT_BAD_ENV])
+        puts("Note: DOS startup values are handler-specific; invalid "
+             "pointers are not dereferenced.");
 }
 static void sanitize(char *dest,ULONG cap,const UBYTE *src,ULONG len) {
     ULONG i;
@@ -229,6 +294,8 @@ int main(int argc,char **argv) {
     puts("Dolly M1.23: read-only AmigaDOS physical candidates");
     snapshot();
     printf("Candidates: %u (skipped/unknown: %u)\n",count,skipped);
+    if(!count || (argc>1 && strcmp(argv[1],"--inspect")==0))
+        report_inspection();
     for(i=0;i<count;++i) {
         printf("%u: %s unit %lu (from %s:)\n",i,
                candidates[i].driver,(unsigned long)candidates[i].unit,
