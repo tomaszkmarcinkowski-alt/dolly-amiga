@@ -139,5 +139,15 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] Device-proposal review/confirm/rollback and real controller validation.
 - [ ] Separate future **Dolly Rescue** GadTools-only bootable floppy (Issue #20) does not gate M0.
 
-- [x] In-process `dolly_selfcheck_stream()` and decision tests added to normal and native-only CMake modes.
+- [x] In-process `dolly_selfcheck_embedded_stream()` and decision tests added to normal and native-only CMake modes.
 - [ ] Wire self-check to the actual AmigaDOS Dolly executable before enabling disk operations; ensure failures block device actions without a second program.
+
+## AmigaOS standard version + embedded executable CRC32 (2026-11-17)
+
+- [x] Add a standard `$VER: Dolly 0.1 (17.11.2026)` tag so classic AmigaDOS `C:Version FILE` can identify the executable (host source, not WinUAE verified).
+- [x] Add a 40-byte embedded CRC32/build-ID record and allocation-free, bounded self-check stream. Calculated CRC32 treats its own eight ASCII hex characters as ASCII zeroes.
+- [x] Add post-link `tools/stamp_selfcheck.py` with a mandatory `$VER: Dolly` presence check, verify mode and corruption/duplicate-record tests.
+- [x] Fix parser bug discovered in host testing: an unstamped record must fail immediately, rather than continue into the data reader. Local GCC/Clang/ASan/UBSan regression PASS.
+- [x] Run Python stamping/verify tests on a local host binary (PASS); the actual Amiga hunk executable and `C:Version FILE` are still untested.
+- [ ] Generate numeric OS version and embedded release ID from one canonical build source; avoid manual divergence.
+- [ ] Locate/stream actual Dolly executable in AmigaOS, call selfcheck before disk I/O, and show actionable GadTools failure message.
