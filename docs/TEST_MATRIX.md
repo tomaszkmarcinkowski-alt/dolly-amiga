@@ -265,3 +265,151 @@ probe and does not issue any new device commands.
 
 **Pending:** Docker m68k compile and WinUAE confirmation. RTG remains
 deferred.
+
+## J. M1.24 bridge: independent Device name and Size diagnostics
+
+The approved M1.24 GUI already has two separate recessed fields:
+Device name and Size. The independently launched diagnostic now prints
+exactly those two keys; it still does **not** populate the GUI directly.
+
+| ID | Scenario | Expected |
+|---|---|---|
+| PHYS-11 | No-argument physical candidate listing | No physical device opened; no geometry or SCSI queries |
+| PHYS-12 | Explicit probe of supported SCSI-direct device | Device name contains sanitized INQUIRY vendor/product |
+| PHYS-13 | Geometry supported | Size is independently reported in MiB |
+| PHYS-14 | SCSI-direct unsupported, geometry available | Device name: Unavailable, Size: measured value |
+| PHYS-15 | Geometry unsupported, SCSI INQUIRY available | Device name: product, Size: Unavailable |
+| PHYS-16 | OpenDevice failure | Both labeled fields Unavailable; device not CloseDevice'd |
+| PHYS-17 | GUI Source/Destination Physical/Partition | Keeps the two inset fields unchanged, still displays demo placeholders |
+
+**Integration gate:** do not wire physical probe results to the
+selection dialog until real driver/unit candidates and read-only query
+results have been verified in WinUAE. Do not map hardware to the
+synthetic Device/Unit indices.
+
+## K. M1.24 WinUAE regression: physical candidates always zero
+
+Observed: initial 68000/OS2.04 with no controller media produced
+Candidates: 0, skipped/unknown: 8. A1200/OS3.1 with IDE disk attached
+to scsi.device still produced Candidates: 0, skipped/unknown: 14.
+
+Do **not** infer that the Amiga does not have an IDE drive from this.
+The existing strict FileSysStartupMsg/DosEnvec heuristic may reject
+legitimate handlers or structures. An extra no-physical-I/O diagnostic
+now records each DOS entry's name and first failure reason, then
+prints diagnostics *after* releasing the LockDosList read lock.
+There is no automatic OpenDevice/DoIO.
+
+| ID | Run | Expected |
+|---|---|---|
+| PHYS-18 | dolly-physical-probe, no args | If no candidates, prints device-by-device rejection reasons |
+| PHYS-19 | dolly-physical-probe --inspect | Always prints per-entry reasons (no hardware I/O) |
+| PHYS-20 | Boot A1200/OS3.1 with scsi.device IDE | Determine whether actual disk's DOS node is rejected by pointer, environment validation or .device name |
+| PHYS-21 | Diagnostic errors | No unvalidated BADDR dereference, no calls to OpenDevice or DoIO for enumeration |
+
+Do not enable an automatic GUI probe until the actual IDE DOS startup
+record can be identified and validated. The M1.24 Device name/Size
+recessed fields remain distinct.
+
+## L. Physical candidates: A1200 / OS3.1 diagnostic findings
+
+Observed \`--inspect\` after attaching an IDE HDF on \`scsi.device\`:
+14 registered DOS device entries; 0 candidates. In particular,
+OS:, WB_1.3:, WB_2.x: and GRY: reached DosEnvec, with
+\`de_TableSize=16\` and \`de_SizeBlock=128\`. Those values are
+ordinary (128 longwords = 512-byte blocks). Other devices,
+such as PIPE:, RAM:, CON:, SER:, PAR:, PRT:, are not assumed
+to be physical disks. DF0: and CC0: have invalid driver-name
+pointers or bytes under current heuristic; do not force them.
+
+The previous extractor incorrectly treated \`de_Surfaces\` and
+\`de_BlocksPerTrack\` as strict requirements for *identifying*
+a driver/unit. These are filesystem geometry hints; a virtual
+disk's hints need not correspond to measured hardware geometry.
+The extractor now accepts structurally plausible filesystem
+startup entries without requiring heads or sectors-per-track
+to be nonzero or below arbitrary small limits, but retains
+bounds on table size and block size, and still requires a
+valid BSTR driver name with a .device suffix. In \`--inspect\`
+it reports table, blockwords, heads, spt, driver and unit.
+
+Tests:
+- PHYS-22: OS3.1 A1200 IDE / --inspect: reveal whether OS:/WB/GRY
+  have recognized .device driver/unit tuples
+- PHYS-23: without --probe INDEX: never OpenDevice/DoIO, including
+  when a candidate is discovered
+- PHYS-24: unsupported handler/startup: excluded safely rather
+  than interpreted as a physical disk
+- PHYS-25: Device name and Size remain distinct; GUI still shows
+  unavailable until a tested real unit is integrated
+
+This patch is **not yet compiled or WinUAE tested**.
+
+## M. A1200/OS3.1 IDE: every disk DOS entry fails driver BSTR validation
+
+New user WinUAE result: DB0:/CC0:/OS:/WB_1.3:/WB_2.x:/GRY:/DL0:
+reach DOS startup geometry, including ordinary \`table=16\` and
+\`blockwords=128\`, but fail \`fssm_Device\` BSTR validation.
+Even the directly mounted IDE disk on \`scsi.device\` does not
+appear as a physical candidate. Do not further relax geometry
+checks or guess/force scsi.device unit numbers.
+
+The next no-I/O diagnostic now captures, **only for failed driver
+BSTR validation**, the raw BCPL pointer, its translated address,
+Exec TypeOfMem result, reported BSTR length (only if the first byte
+is in valid memory) and up to 8 validated bytes in hexadecimal.
+This enables differentiation among invalid pointer, unusual memory
+mapping, empty/oversized BSTR and actual unexpected contents.
+
+Test M-01: build and run \`dolly-physical-probe --inspect\` in the
+same A1200/OS3.1/WinUAE configuration. Record one or two complete
+entries of OS:/WB_1.3:/DL0: with the new bracketed diagnostics.
+Never run \`--probe INDEX\` until a correctly identified candidate
+appears; current normal enumeration performs no physical I/O.
+
+## N. M1.24 A1200 driver BSTR: trailing zero identified
+
+WinUAE OS 3.1 screenshot showed validated addresses and recognizable
+ASCII hex prefixes for driver names. For example: OS: length=12,
+bytes \`736373692e646576\` = "scsi.dev...", whereas "scsi.device"
+is 11 characters. DB0: length=17 versus "trackdisk.device" at 16;
+CC0: 16 versus "carddisk.device" at 15; DL0: 13 versus
+"uaehf.device" at 12.
+
+Likely cause: startup BSTR includes an optional terminal NUL counted
+in its length. The original parser rejected control bytes entirely.
+The amended parser first validates memory for the complete length,
+accepts exactly one terminal NUL, and continues rejecting any
+embedded NUL or other control byte. The DOS device-name path uses
+the same bounded function.
+
+| ID | Next WinUAE check | Expected |
+|---|---|---|
+| PHYS-26 | A1200/OS3.1 IDE, no arguments | Detect real \`scsi.device\` and other valid \`.device\` pairs |
+| PHYS-27 | \`--inspect\` | Shows accepted driver/unit candidates; no I/O |
+| PHYS-28 | Other handler names, unknown formats | Still rejected when their startup data is not a well-formed device record |
+| PHYS-29 | Physical probe | Not run until candidate driver/unit verified against actual emulator configuration |
+
+Do not automatically send read-only hardware commands merely because
+candidate enumeration now succeeds. Keep the approved GUI's
+Device name and Size in **separate fields**.
+
+## O. Device support decision: trackdisk only excluded
+
+- `trackdisk.device`: excluded from the normal Physical/Partition
+  picker and generic imaging; floppy support is reserved for a future
+  filesystem repair module
+- `carddisk.device`: **keep** in discovery and normal selection;
+  study PCMCIA SRAM-specific behavior with real hardware later
+- `scsi.device`, `uaehf.device`: current controlled WinUAE targets
+
+| ID | Scenario | Expected |
+|---|---|---|
+| PHYS-30 | Enumerate with DF0: | trackdisk.device reported as excluded, absent from probeable candidates |
+| PHYS-31 | Enumerate with CC0: | carddisk.device remains a candidate (not silently filtered) |
+| PHYS-32 | Reference GUI | No trackdisk entry; carddisk is retained in synthetic picker until real discovery replaces it |
+| PHYS-33 | Later SRAM card hardware test | Record carddisk-specific geometry / errors without assuming SCSI behavior |
+| PHYS-34 | Future filesystem repair | Floppy-specific handling independent from generic disk workflow |
+
+Following the filter, do not reuse an old --probe INDEX; run the
+enumeration again and confirm the driver/unit identity first.

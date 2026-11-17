@@ -1013,3 +1013,44 @@ hardware queries. Read-only UI geometry only.
 Tests GUI-38..46 in docs/TEST_MATRIX.md. The code has not yet
 been cross-compiled or validated in WinUAE. RTG and RAM profiling
 are postponed at the user's request.
+
+### M1.24 continuation — data contract follows the revised picker
+
+The user accepted the M1.24 GUI arrangement: the first selection row
+has a role-appropriate inline Selected device/partition/file label.
+Physical and Partition have a **second row with independent recessed
+Device name and Size values**; the size field is at the far right.
+Do not merge these values back into a single descriptive text string.
+
+The opt-in M1.23 Shell diagnostic now emits those exact two fields:
+- Device name: sanitized SCSI INQUIRY vendor and product, or Unavailable.
+- Size: reported TD_GETGEOMETRY total sectors * sector size in MiB,
+  or Unavailable; this is not inferred from INQUIRY.
+
+One query failing does not clear the other result. OpenDevice failures
+are also shown as unavailable, and CloseDevice is only called after
+a successful OpenDevice. Neither query is automatically run by the
+picker because Physical/Partition entries are still demo placeholders.
+Physical GUI integration is blocked on verification of real DOS
+startup driver/unit candidates and the opt-in read-only diagnostic.
+
+This preserves current UI without adding risky media I/O.
+See PHYS-11 through PHYS-17 in docs/TEST_MATRIX.md.
+
+### M1.24 — scope of floppy and PCMCIA device support
+
+For generic Physical device / Partition discovery and imaging,
+exclude **only** `trackdisk.device` (floppy). Floppy-specific
+handling is reserved for the future filesystem repair module.
+
+`carddisk.device` **remains in the general device discovery and
+picker**; its unusual PCMCIA SRAM characteristics will be documented
+and tested later using the user's real Amiga and SRAM card. Do not
+exclude it or infer full SCSI/IDE compatibility from the name.
+`scsi.device` and `uaehf.device` continue to be used for the
+immediate WinUAE investigation. The standalone diagnostic deliberately
+only removes trackdisk from probeable candidates, so indexes must be
+rechecked on each run.
+
+The approved M1.24 GUI retains independent recessed fields for
+Device name and Size. No automatic device probe has been connected.

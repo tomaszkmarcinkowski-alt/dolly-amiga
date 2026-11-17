@@ -30,6 +30,46 @@ typedef struct ProbeCandidate {
 } ProbeCandidate;
 static ProbeCandidate candidates[MAX_CANDIDATES];
 static unsigned count,skipped;
+#define MAX_INSPECT 48u
+typedef enum ExtractReason {
+    EXTRACT_OK=0,
+    EXTRACT_NO_STARTUP,
+    EXTRACT_BAD_STARTUP,
+    EXTRACT_BAD_ENV,
+    EXTRACT_BAD_GEOMETRY,
+    EXTRACT_BAD_DRIVER_BSTR,
+    EXTRACT_NOT_DEVICE_DRIVER,
+    EXTRACT_BAD_DOS_NAME,
+    EXTRACT_DUPLICATE,
+    EXTRACT_DEFER_TRACKDISK,
+    EXTRACT_LIMIT,
+    EXTRACT_REASON_COUNT
+} ExtractReason;
+typedef struct InspectRecord {
+    char dos_name[40];
+    ExtractReason reason;
+    ULONG startup;
+    ULONG env_sizeblock;
+    ULONG env_tablesize;
+    ULONG env_surfaces;
+    ULONG env_blocks_per_track;
+    ULONG unit;
+    ULONG driver_bptr,driver_addr,driver_memtype,driver_length;
+    UBYTE driver_sample[8];
+    unsigned driver_sample_count;
+    char driver[DRIVER_LEN];
+} InspectRecord;
+static InspectRecord inspect_records[MAX_INSPECT];
+static unsigned inspect_count,reason_counts[EXTRACT_REASON_COUNT];
+static const char *const extract_reason_names[]={
+    "accepted","no startup","startup pointer invalid",
+    "environment pointer invalid","environment parameters rejected",
+    "driver name pointer/bytes invalid","not a .device driver",
+    "DOS name invalid","duplicate physical unit",
+    "excluded: floppy (filesystem repair only)",
+    "candidate limit"
+};
+
 
 /* Inspect DOS startup data as untrusted, driver-specific input.
  * A valid address alone is NOT enough. All expected fields, bounds and
@@ -52,7 +92,14 @@ static int bstr_copy(char *dest,ULONG cap,BPTR b) {
     if(!valid_bptr(b,1))return 0;
     bytes=(const UBYTE *)BADDR(b);
     n=bytes[0];
-    if(!n || n>=cap || !valid_bptr(b,n+1u))return 0;
+    if(!n || !valid_bptr(b,n+1u))return 0;
+    /* Some filesystem startup records store a terminating NUL
+     * within the length-prefixed name. The real text is then one
+     * byte shorter than the BSTR length. Accept only a final NUL,
+     * never an embedded NUL or other control character.
+     */
+    if(bytes[n]==0u)--n;
+    if(!n || n>=cap)return 0;
     for(i=0;i<n;++i) {
         UBYTE ch=bytes[i+1u];
         if(ch<33u || ch>126u)return 0;
@@ -60,6 +107,27 @@ static int bstr_copy(char *dest,ULONG cap,BPTR b) {
     }
     dest[n]='\0';
     return 1;
+}
+/* Record only bounded, independently validated bytes from the BSTR
+ * address. We do not dereference a candidate that fails TypeOfMem.
+ * This distinguishes a bad BPTR from a long/non-ASCII BSTR.
+ */
+static void inspect_driver_bstr(InspectRecord *record,BPTR b) {
+    const UBYTE *bytes;
+    unsigned i,n;
+    record->driver_bptr=(ULONG)b;
+    if(!b || ((ULONG)b&0xc0000000ul))return;
+    bytes=(const UBYTE *)BADDR(b);
+    record->driver_addr=(ULONG)bytes;
+    record->driver_memtype=(ULONG)TypeOfMem((APTR)bytes);
+    if(!record->driver_memtype)return;
+    n=(unsigned)bytes[0];
+    record->driver_length=n;
+    if(!n || !valid_bptr(b,n+1u))return;
+    if(n>8u)n=8u;
+    for(i=0;i<n;++i)
+        record->driver_sample[i]=bytes[i+1u];
+    record->driver_sample_count=n;
 }
 static int driver_suffix(const char *name) {
     ULONG n=(ULONG)strlen(name),i;
@@ -72,28 +140,51 @@ static int driver_suffix(const char *name) {
     }
     return 1;
 }
-static int extract(const struct DosList *entry,ProbeCandidate *out) {
+static ExtractReason extract(const struct DosList *entry,
+                             ProbeCandidate *out,InspectRecord *record) {
     BPTR startup;
     const struct FileSysStartupMsg *f;
     const struct DosEnvec *env;
-    if(!entry)return 0;
-    startup=(BPTR)entry->dol_Startup;
-    if(!valid_bptr(startup,sizeof(*f)))return 0;
+    if(!entry)return EXTRACT_NO_STARTUP;
+    startup=(BPTR)entry->dol_misc.dol_handler.dol_Startup;
+    record->startup=(ULONG)startup;
+    if(!startup)return EXTRACT_NO_STARTUP;
+    if(!valid_bptr(startup,sizeof(*f)))return EXTRACT_BAD_STARTUP;
     f=(const struct FileSysStartupMsg *)BADDR(startup);
-    if(!valid_bptr(f->fssm_Environ,sizeof(ULONG)*11u))return 0;
+    if(!valid_bptr(f->fssm_Environ,sizeof(ULONG)*11u))
+        return EXTRACT_BAD_ENV;
     env=(const struct DosEnvec *)BADDR(f->fssm_Environ);
+    record->env_tablesize=env->de_TableSize;
+    record->env_sizeblock=env->de_SizeBlock;
+    record->env_surfaces=env->de_Surfaces;
+    record->env_blocks_per_track=env->de_BlocksPerTrack;
+    record->unit=f->fssm_Unit;
+    /* These are filesystem/partition geometry hints, not driver
+     * identity. Some virtual controllers provide zero or synthetic
+     * heads/sectors-per-track. Never reject the underlying device
+     * solely because these optional geometry hints are unusual.
+     */
     if(env->de_TableSize<10ul || env->de_TableSize>256ul ||
-       env->de_SizeBlock<64ul || env->de_SizeBlock>4096ul ||
-       !env->de_Surfaces || env->de_Surfaces>256ul ||
-       !env->de_BlocksPerTrack || env->de_BlocksPerTrack>1024ul)
-        return 0;
-    if(!bstr_copy(out->driver,sizeof(out->driver),f->fssm_Device) ||
-       !driver_suffix(out->driver))
-        return 0;
+       env->de_SizeBlock<64ul || env->de_SizeBlock>4096ul)
+        return EXTRACT_BAD_GEOMETRY;
+    inspect_driver_bstr(record,f->fssm_Device);
+    if(!bstr_copy(out->driver,sizeof(out->driver),f->fssm_Device))
+        return EXTRACT_BAD_DRIVER_BSTR;
+    strcpy(record->driver,out->driver);
+    if(!driver_suffix(out->driver))return EXTRACT_NOT_DEVICE_DRIVER;
     if(!bstr_copy(out->volume,sizeof(out->volume),entry->dol_Name))
-        return 0;
+        return EXTRACT_BAD_DOS_NAME;
     out->unit=f->fssm_Unit;
-    return 1;
+    return EXTRACT_OK;
+}
+/* Exclude floppy drive access from generic physical disk workflows.
+ * carddisk.device remains discoverable; its PCMCIA/SRAM semantics
+ * will be characterized separately on actual hardware later.
+ */
+static ExtractReason excluded_physical_driver(const char *driver) {
+    if(strcmp(driver,"trackdisk.device")==0)
+        return EXTRACT_DEFER_TRACKDISK;
+    return EXTRACT_OK;
 }
 static void snapshot(void) {
     const ULONG flags=LDF_DEVICES|LDF_READ;
@@ -103,20 +194,72 @@ static void snapshot(void) {
     if(!e)return;
     while((e=NextDosEntry(e,LDF_DEVICES))!=NULL) {
         ProbeCandidate candidate;
+        InspectRecord rec;
+        ExtractReason reason;
         unsigned i;
         memset(&candidate,0,sizeof(candidate));
-        if(!extract(e,&candidate)) {
-            ++skipped;
-            continue;
+        memset(&rec,0,sizeof(rec));
+        strcpy(rec.dos_name,"<invalid>");
+        (void)bstr_copy(rec.dos_name,sizeof(rec.dos_name),e->dol_Name);
+        reason=extract(e,&candidate,&rec);
+        if(reason==EXTRACT_OK)
+            reason=excluded_physical_driver(candidate.driver);
+        if(reason==EXTRACT_OK) {
+            for(i=0;i<count;++i)
+                if(candidates[i].unit==candidate.unit &&
+                   strcmp(candidates[i].driver,candidate.driver)==0)break;
+            if(i<count)reason=EXTRACT_DUPLICATE;
+            else if(count<MAX_CANDIDATES)candidates[count++]=candidate;
+            else reason=EXTRACT_LIMIT;
         }
-        for(i=0;i<count;++i)
-            if(candidates[i].unit==candidate.unit &&
-               strcmp(candidates[i].driver,candidate.driver)==0)break;
-        if(i<count)continue; /* multiple DOS partitions, one drive */
-        if(count<MAX_CANDIDATES)candidates[count++]=candidate;
-        else ++skipped;
+        rec.reason=reason;
+        if((unsigned)reason<EXTRACT_REASON_COUNT)
+            ++reason_counts[reason];
+        if(reason!=EXTRACT_OK && reason!=EXTRACT_DUPLICATE)
+            ++skipped;
+        if(inspect_count<MAX_INSPECT)
+            inspect_records[inspect_count++]=rec;
     }
     UnLockDosList(flags);
+}
+static void report_inspection(void) {
+    unsigned i;
+    puts("DOS device entry diagnostics (no physical I/O):");
+    for(i=0;i<inspect_count;++i) {
+        const InspectRecord *r=&inspect_records[i];
+        printf("  %s: %s",r->dos_name,
+               extract_reason_names[r->reason]);
+        if(r->reason==EXTRACT_BAD_DRIVER_BSTR) {
+            unsigned j;
+            printf(" [bptr=%08lx addr=%08lx mem=%08lx len=%lu",
+                   (unsigned long)r->driver_bptr,
+                   (unsigned long)r->driver_addr,
+                   (unsigned long)r->driver_memtype,
+                   (unsigned long)r->driver_length);
+            if(r->driver_sample_count) {
+                printf(" bytes=");
+                for(j=0;j<r->driver_sample_count;++j)
+                    printf("%02lx",(unsigned long)r->driver_sample[j]);
+            }
+            printf("]");
+        }
+        if(r->env_tablesize || r->env_sizeblock) {
+            printf(" (table=%lu blockwords=%lu heads=%lu spt=%lu",
+                   (unsigned long)r->env_tablesize,
+                   (unsigned long)r->env_sizeblock,
+                   (unsigned long)r->env_surfaces,
+                   (unsigned long)r->env_blocks_per_track);
+            if(r->driver[0])
+                printf(" drv=%s unit=%lu",
+                       r->driver,(unsigned long)r->unit);
+            printf(")");
+        }
+        printf("\n");
+    }
+    if(reason_counts[EXTRACT_BAD_STARTUP] ||
+       reason_counts[EXTRACT_BAD_ENV])
+        puts("Note: DOS startup values are handler-specific; invalid "
+             "pointers are not dereferenced.");
 }
 static void sanitize(char *dest,ULONG cap,const UBYTE *src,ULONG len) {
     ULONG i;
@@ -129,13 +272,21 @@ static void sanitize(char *dest,ULONG cap,const UBYTE *src,ULONG len) {
     while(len && dest[len-1u]==' ')--len;
     dest[len]='\0';
 }
+/* Model and capacity are independent fields. A driver can support
+ * TD_GETGEOMETRY but not HD_SCSICMD, or the other way round.
+ * Keep status explicit and never derive bytes from SCSI INQUIRY.
+ */
 static void probe(const ProbeCandidate *c) {
     struct MsgPort *port=NULL;
     struct IOStdReq *io=NULL;
     struct DriveGeometry geom;
     struct SCSICmd sc;
     UBYTE *data=NULL;
-     LONG status;
+    char name[64],size[40];
+    LONG status;
+    int opened=0;
+    strcpy(name,"Unavailable");
+    strcpy(size,"Unavailable");
     port=CreateMsgPort();
     if(!port)goto done;
     io=(struct IOStdReq *)CreateIORequest(port,sizeof(*io));
@@ -146,6 +297,7 @@ static void probe(const ProbeCandidate *c) {
         printf("  OpenDevice failed: %ld\n",status);
         goto done;
     }
+    opened=1;
     memset(&geom,0,sizeof(geom));
     io->io_Command=TD_GETGEOMETRY;
     io->io_Data=&geom;
@@ -155,18 +307,17 @@ static void probe(const ProbeCandidate *c) {
        geom.dg_SectorSize && geom.dg_TotalSectors) {
         uint64_t bytes=(uint64_t)geom.dg_TotalSectors*
                        (uint64_t)geom.dg_SectorSize;
-        printf("  Geometry: %lu sectors x %lu bytes",
-               (unsigned long)geom.dg_TotalSectors,
-               (unsigned long)geom.dg_SectorSize);
-        printf(" = %lu MiB\n",(unsigned long)(bytes/1048576u));
-    } else puts("  Geometry: unavailable");
-    /* Legacy DMA engines may require Chip RAM. Skip INQUIRY if none. */
+        unsigned long mib=(unsigned long)(bytes/1048576u);
+        sprintf(size,"%lu MiB",mib);
+    }
+    /* Both the SCSI CDB and data buffer are in Chip RAM for old DMA
+     * controllers. No physical sectors are read or changed.
+     */
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
     if(data) {
-        char vendor[9],product[17],revision[5];
+        char vendor[9],product[17];
         memset(&sc,0,sizeof(sc));
-        /* CDB and reply both in Chip RAM for legacy DMA drivers. */
-        data[40]=0x12u;
+        data[40]=0x12u; /* SCSI INQUIRY */
         data[44]=36u;
         sc.scsi_Data=(UWORD *)data;
         sc.scsi_Length=36;
@@ -181,15 +332,21 @@ static void probe(const ProbeCandidate *c) {
            sc.scsi_Status==0 && sc.scsi_Actual>=36) {
             sanitize(vendor,sizeof(vendor),data+8,8);
             sanitize(product,sizeof(product),data+16,16);
-            sanitize(revision,sizeof(revision),data+32,4);
-            printf("  INQUIRY: %s %s %s\n",vendor,product,revision);
-        } else puts("  INQUIRY: unsupported / unavailable");
-    } else puts("  INQUIRY: unavailable (no Chip RAM)");
-    CloseDevice((struct IORequest *)io);
+            if(vendor[0] && product[0])
+                sprintf(name,"%s %s",vendor,product);
+            else if(product[0])
+                strcpy(name,product);
+            else if(vendor[0])
+                strcpy(name,vendor);
+        }
+    }
 done:
+    if(opened)CloseDevice((struct IORequest *)io);
     if(data)FreeMem(data,64);
     if(io)DeleteIORequest((struct IORequest *)io);
     if(port)DeleteMsgPort(port);
+    printf("  Device name: %s\n",name);
+    printf("  Size: %s\n",size);
 }
 int main(int argc,char **argv) {
     unsigned i,selected=MAX_CANDIDATES;
@@ -215,6 +372,8 @@ int main(int argc,char **argv) {
     puts("Dolly M1.23: read-only AmigaDOS physical candidates");
     snapshot();
     printf("Candidates: %u (skipped/unknown: %u)\n",count,skipped);
+    if(!count || (argc>1 && strcmp(argv[1],"--inspect")==0))
+        report_inspection();
     for(i=0;i<count;++i) {
         printf("%u: %s unit %lu (from %s:)\n",i,
                candidates[i].driver,(unsigned long)candidates[i].unit,
