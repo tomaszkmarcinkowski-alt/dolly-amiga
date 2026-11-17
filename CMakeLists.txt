@@ -105,3 +105,15 @@ target_link_libraries(dolly-rdb PRIVATE dollymaxtransfer)
 
 # Full layout CLI uses the same MaxTransfer advisory as dolly-rdb.
 target_link_libraries(dolly-layout PRIVATE dollymaxtransfer)
+
+# Additional non-destructive audit: cross-check RDB partition and metadata spans.
+add_library(dollyrdbaudit STATIC src/dolly_rdb_audit.c)
+target_include_directories(dollyrdbaudit PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyrdbaudit PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-rdb-audit tests/test_rdb_audit.c)
+target_link_libraries(test-rdb-audit PRIVATE dollyrdbaudit)
+add_test(NAME rdb_collision_audit COMMAND test-rdb-audit)
+target_link_libraries(dolly-layout PRIVATE dollyrdbaudit)
+target_link_libraries(dolly-rdb PRIVATE dollyrdbaudit)
