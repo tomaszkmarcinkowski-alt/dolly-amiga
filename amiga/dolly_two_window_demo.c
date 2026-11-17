@@ -14,6 +14,7 @@
 #include <graphics/gfxbase.h>
 #include <graphics/rastport.h>
 #include <graphics/text.h>
+#include <dos/dosextens.h>
 #include <libraries/gadtools.h>
 #include <utility/tagitem.h>
 #include <proto/exec.h>
@@ -27,6 +28,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *AslBase;
+struct DosLibrary *DOSBase;
 
 #define GRID_COLS 24u
 #define GRID_ROWS 8u
@@ -866,6 +868,7 @@ int main(void) {
     GfxBase=(struct GfxBase *)OpenLibrary("graphics.library",36);
     GadToolsBase=OpenLibrary("gadtools.library",36);
     AslBase=OpenLibrary("asl.library",36); /* Optional file selector. */
+    DOSBase=(struct DosLibrary *)OpenLibrary("dos.library",36);
     if(!GfxBase || !GadToolsBase)goto cleanup;
     marker_font=OpenFont(&marker_attr);
     if(!marker_font)goto cleanup;
@@ -932,6 +935,7 @@ cleanup:
         FreeScreenDrawInfo(public_screen,screen_info);
     if(public_screen)UnlockPubScreen(NULL,public_screen);
     if(marker_font)CloseFont(marker_font);
+    if(DOSBase)CloseLibrary((struct Library *)DOSBase);
     if(AslBase)CloseLibrary(AslBase);
     if(GadToolsBase)CloseLibrary(GadToolsBase);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);
