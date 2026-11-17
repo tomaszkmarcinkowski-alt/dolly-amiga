@@ -1277,3 +1277,34 @@ implemented image conversion backend. See DOL-081–084 in the backlog.
 
 Implementation prepared on a feature branch; Amiga cross-compilation
 and WinUAE tests are required. RTG and RAM profiling remain deferred.
+
+### M1.36 — final-label and compact main-window polish
+
+On the main GadTools window (baseline 640×256) the first visible
+control is now **Operation**, followed immediately by **Info**,
+then **Source** and **Destination**. Removed the decorative in-client
+heading "Dolly / Operation & devices" entirely, and reclaimed the
+vertical row previously reserved for it. The three primary buttons
+share the same calculated width (with matching 6px gaps):
+**Sheep Counter**, **Sheep Inventory**, **Quit**. Sheep Inventory
+is a disabled BUTTON_KIND placeholder and performs no action; it
+must stay disabled even while an operation is running.
+
+The remaining full-width action button is labelled **Start**.
+Removed "demo"/"preview" from the visible Operation choices,
+title bar, buttons, and Sheep Counter description. The genuine
+operation backend remains a synthetic simulation (no real disk
+copying/writes are enabled), regardless of display text.
+
+Renamed **Blocks:** to **Progress:** and appended percentage in
+parentheses to the progress display, e.g. `96 / 192 (50%)`.
+The main count text and Sheep Counter progress use the same
+OperationSession counters, but only the main view appends parentheses
+because the Sheep Counter has its own separate percentage display.
+The status inset now follows the Progress row closely without the
+previous large gap.
+
+This is a main-window-only UI revision. Existing Source and
+Destination GadTools selection code, explicit Query, RDB/MBR,
+double-buffered partition nodes, and contextual Cycle lists are
+unchanged. Native cross-build and WinUAE layout verification pending.
