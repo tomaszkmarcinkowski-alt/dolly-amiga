@@ -42,7 +42,6 @@ typedef enum ExtractReason {
     EXTRACT_BAD_DOS_NAME,
     EXTRACT_DUPLICATE,
     EXTRACT_DEFER_TRACKDISK,
-    EXTRACT_DEFER_CARDDISK,
     EXTRACT_LIMIT,
     EXTRACT_REASON_COUNT
 } ExtractReason;
@@ -68,7 +67,6 @@ static const char *const extract_reason_names[]={
     "driver name pointer/bytes invalid","not a .device driver",
     "DOS name invalid","duplicate physical unit",
     "excluded: floppy (filesystem repair only)",
-    "deferred: PCMCIA SRAM carddisk",
     "candidate limit"
 };
 
@@ -179,16 +177,13 @@ static ExtractReason extract(const struct DosList *entry,
     out->unit=f->fssm_Unit;
     return EXTRACT_OK;
 }
-/* Keep trackdisk.device out of generic disk imaging/recovery
- * selection: floppy handling belongs to the filesystem repair
- * module. Defer carddisk.device until real PCMCIA SRAM tests.
- * These names are never passed to OpenDevice by this diagnostic.
+/* Exclude floppy drive access from generic physical disk workflows.
+ * carddisk.device remains discoverable; its PCMCIA/SRAM semantics
+ * will be characterized separately on actual hardware later.
  */
 static ExtractReason excluded_physical_driver(const char *driver) {
     if(strcmp(driver,"trackdisk.device")==0)
         return EXTRACT_DEFER_TRACKDISK;
-    if(strcmp(driver,"carddisk.device")==0)
-        return EXTRACT_DEFER_CARDDISK;
     return EXTRACT_OK;
 }
 static void snapshot(void) {
