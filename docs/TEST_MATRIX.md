@@ -822,3 +822,31 @@ names, and separate Device name/Size boxes remain unchanged.
 This is a trace-only cleanup and is not yet cross-compiled or
 tested in WinUAE. Continue controlled test-HDF use; RTG and RAM
 profiling remain deferred.
+
+
+## AC. M1.35 contextual Cycle filtering and Disk Vet
+
+| ID | Test | Expected |
+|---|---|---|
+| GUI-114 | Main at 640x256 | Operation Cycle on top, followed by Source and Destination; no overlap |
+| GUI-115 | Change Operation with Source/Target chosen | Previous values retained but incompatible Start disabled with explanatory status |
+| GUI-116 | Restore Image -> Source chooser | Cycle shows File only; no Physical/Logical/Partition choice |
+| GUI-117 | Restore Image -> Destination after File Source | Cycle shows Physical and Partition only; correctly maps positions 0/1 to mode enum 0/2 |
+| GUI-118 | Create Image -> Destination | Cycle contains File only (mode enum 3), no index confusion |
+| GUI-119 | Copy -> Source Physical -> Destination | Physical only in Normal; Partition hidden |
+| GUI-120 | Copy -> Source Partition -> Destination | Partition only in Normal; physical hidden |
+| GUI-121 | Copy -> Source Logical -> Destination | Logical only in Normal |
+| GUI-122 | Copy -> Source File -> Destination | File only; identical paths rejected, distinct files allowed by demo validator |
+| GUI-123 | Disk Vet | Visible sixth Operation; Source chooser offered, Destination disabled; Start never enabled |
+| GUI-124 | Scan/Inventory | Destination disabled, proper Source page subsets |
+| GUI-125 | Change Source while choosing Destination | Operation control cannot change while picker is open |
+| GUI-126 | Picker Mode selection | Correct interpretation of filtered GTCY_Active/IDCMP Code |
+| GUI-127 | Source/Destination Query and RDB | Explicit Query gate and double-buffered numbered PART list unaffected |
+| GUI-128 | Portable endpoint test with -Werror | Mode mask and validation assertions pass |
+| GUI-129 | OS2.04 / MC68000 | Dynamic NULL-terminated GTCY_Labels works on GadTools V37 |
+| GUI-130 | Conversion/Doctor | File-to-File Copy is demo only; Disk Vet never invokes a repair backend |
+
+All M1.35 rows remain **pending** until the feature branch is built
+and tested. Berserk is only a future policy parameter, with no
+active UI toggle or authorization to write. No RTG/memory profiling
+in this stage.
