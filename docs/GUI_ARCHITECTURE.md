@@ -444,3 +444,42 @@ This specific change is intended to avoid old-size gadget redraw
 during drag; it must be cross-compiled and tested on WinUAE
 MC68000 / 512 KiB Chip / Kickstart 2.04. It has **not** been
 runtime-validated.
+
+### Minimum window geometry must be content-derived (GUI policy, 2026-11-17)
+
+The tester confirmed the M1.14 resize behavior in WinUAE, but one
+placeholder label ("Sheep Counter is an auxiliary window.") slightly
+overlaps the frame at the current minimum size. The placeholder itself
+does not require special treatment; the general constraint is now
+**mandatory for future Dolly GUI work**:
+
+1. Measure the actual displayed font and label widths using the
+   window RastPort's `TextLength()` (or equivalent graphics text
+   measurement). Do not estimate English text widths from character count
+   or assume Topaz/8 for labels when the screen font is configurable.
+2. Account for native gadget dimensions and text, internal separation,
+   requested content padding, and the actual window borders from
+   `BorderLeft/Right/Top/Bottom`. Use 4px horizontal and 2px vertical
+   padding for non-square pixels, or 2px/2px for square pixels.
+3. Derive the window's minimum **outer** width and height from the
+   tightest permissible content layout plus the actual window chrome,
+   including a size gadget if used. Update constraints when the layout,
+   font, localization, screen geometry or visible controls change.
+4. Before accepting an `IDCMP_NEWSIZE` reflow, ensure every visible
+   control and *all mandatory text* fit inside the client rectangle.
+   Treat optional explanatory text separately: wrap, abbreviate or hide
+   it when too narrow, rather than clipping across the border.
+5. Preserve the current content-derived minimum under subsequent
+   resizes. Test the smallest width, smallest height, both minima
+   simultaneously, system-font changes, and longer translated labels.
+6. Never silently discard actions such as Hide/Quit to make a window
+   smaller. Prefer a higher minimum or a well-defined responsive layout.
+7. Retain native GadTools gadgets and update values with their native
+   attributes. Do not substitute repeated manual painting of text
+   for controls whose sizes and content can be managed by GadTools.
+
+The current demonstrator still contains hard-coded `MAIN_MIN_W/H`
+and `SHEEP_MIN_W/H`; it is not evidence that this general measurement
+policy is implemented yet. Incorporate a measurable layout preflight
+and corresponding boundary tests before treating the full GUI as
+release-ready.
