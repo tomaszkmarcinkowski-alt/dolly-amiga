@@ -148,3 +148,18 @@ endif()
 # Host-only Sheep Inventory CLI prototype. Later GadTools UI consumes same field stream.
 add_executable(dolly-inventory src/dolly_inventory_inspect.c)
 target_link_libraries(dolly-inventory PRIVATE dollyinventory dollymap dollymaxtransfer)
+
+# Unified non-destructive notices used by future Sheep Inventory UI.
+add_library(dollyinventorynotices STATIC src/dolly_inventory_notices.c)
+target_include_directories(dollyinventorynotices PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(dollyinventorynotices PUBLIC dollymaxtransfer)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyinventorynotices PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-inventory-notices tests/test_inventory_notices.c)
+target_link_libraries(test-inventory-notices PRIVATE dollyinventorynotices)
+add_test(NAME inventory_advisories COMMAND test-inventory-notices)
+target_link_libraries(dolly-inventory PRIVATE dollyinventorynotices)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-inventory-notices PRIVATE -UNDEBUG)
+endif()
