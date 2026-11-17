@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**72 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**77 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -664,3 +664,60 @@
 **Ograniczenia:** w obecnym M0 dopuszczamy wyłącznie propozycję zmniejszenia lokalnego rozmiaru transferu — zgodną z rozmiarem sektora, limitem 64 KiB oraz dokładnie rozpoznanym modelem/sterownikiem/rewizją. Bez automatycznej zmiany Mask, ustawień AmigaDOS, RDB lub sprzętu; profil nigdy sam nie autoryzuje DMA. Dodać rollback, wykrywanie konfliktów, rozdzielenie danych obserwowanych od deklarowanych i testy realnych kontrolerów przed aktywacją automatyczną.
 
 **Stan:** model propozycji i testy jednostkowe dodane do repozytorium; faktyczna aplikacja ustawień/GUI i walidacja kontrolera pozostają otwarte.
+
+
+## Epic: RDB safety, media-capacity adaptation and recovery
+
+### DOL-073 — Backup i Restore RDB (pełny obraz metadanych)
+
+**Priorytet:** P1 · **Etap:** Backup: MVP po M0; Restore: MVP wyłącznie po pełnej weryfikacji zapisów · [Issue #22](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/22)
+
+**Cel:** wykonać niezależną kopię wszystkich istotnych metadanych RDB i móc je odtworzyć po awarii lub błędnej konfiguracji. Backup to operacja odczytu; Restore to operacja zapisu wymagająca ścisłych zabezpieczeń.
+
+**Zakres:** zachować surowe bloki i ich pierwotne offsety, strukturę `RDSK`, `PART`, `FSHD`, `LSEG`, `BADB` oraz bloki zarezerwowane/nieznane w granicach ustalonych podczas audytu; utrwalić pojemność, rozmiar bloku, geometrię, kontener whole-disk lub MBR `0x76`, checksummy i CRC32 kopii. Nie zakładać, że sam nagłówek RDSK stanowi kompletną kopię.
+
+**Bezpieczeństwo:** Restore wymaga weryfikacji nośnika docelowego, kopii aktualnego RDB, podglądu planowanych zmian blok po bloku, jawnego potwierdzenia, zapisu z późniejszym odczytem weryfikującym, procedury odzyskiwania po przerwanym zapisie. Nie obiecywać atomowości. W przypadku niezgodnej pojemności nie wykonywać Restore bez osobnej, bezpiecznej analizy.
+
+**Status:** backlog, **brak implementacji**.
+
+### DOL-074 — Wykrywanie RDB niezgodnego z rzeczywistą pojemnością nośnika
+
+**Priorytet:** P0/P1 · **Etap:** M0 (model analizy), MVP (odczyt/diagnostyka) · [Issue #23](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/23)
+
+**Cel:** wykrywać sytuacje po zapisaniu obrazu RAW na kartę SD/dysk o pojemności większej lub mniejszej od nośnika źródłowego. Porównać **faktyczną pojemność urządzenia lub kontenera** z deklarowaną geometrią RDB i zakresem wszystkich partycji.
+
+**Klasyfikacja:** `zgodne`, `większy nośnik / końcowe miejsce niewykorzystane`, `mniejszy nośnik / wyjście partycji lub metadanych poza koniec`, `niespójna geometria`, `nieznane / brak wiarygodnej pojemności`. Raportować rozbieżności w bajtach, LBA i (gdy sensowne) cylindrach, z pochodzeniem każdego pomiaru.
+
+**Pułapki:** RDB zapisany wewnątrz partycji MBR typu `0x76` musi być oceniany według granic **tego kontenera**, a nie swobodnego obszaru całej karty; hybrydowy MBR+RDB, inne systemy plików, bloki zarezerwowane i nieznane obszary mają być uwzględniane. Nie nazywać obszaru „wolnym do zapisu”, dopóki nie wykluczono istniejących danych. Ostrzeżenie i bezpieczne porady w Sheep Inventory/CLI/GadTools 640×256.
+
+**Status:** backlog, **brak nowej implementacji**; wykorzystać obecny parser RDB i częściowy audyt kolizji.
+
+### DOL-075 — Dopasowanie RDB do większego nośnika bez zmiany istniejących partycji
+
+**Priorytet:** P1 · **Etap:** po ukończeniu DOL-073 i DOL-074; MVP tylko po dowiedzeniu bezpieczeństwa, w przeciwnym razie późniejszy etap · [Issue #24](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/24)
+
+**Cel:** po odtworzeniu mniejszego obrazu RAW na większym urządzeniu w sposób kontrolowany poprawić odpowiednie parametry geometrii/zakresu RDB, aby **udostępnić dotychczas niewykorzystaną końcową pojemność jako przestrzeń nieprzydzieloną** za ostatnią partycją.
+
+**Zasady:** istniejące partycje, ich początki/końce i dane pozostają nietknięte; **nie powiększać automatycznie** ostatniej partycji ani systemu plików. Obowiązkowo: audyt układu, uwzględnienie zaokrąglenia do cylindrów, reserved RDB area, ograniczeń sterownika i granic MBR; kopia RDB, podgląd „przed/po”, jawna zgoda, zapis sum kontrolnych RDB i weryfikacja po zapisie. Nie zwiększać zagnieżdżonego RDB poza partycję MBR; rozszerzenie kontenera MBR stanowi odrębną operację.
+
+**Status:** backlog, **bez implementacji i bez zgody na wykonywanie zapisów w M0**.
+
+### DOL-076 — Redukcja partycji z zachowaniem danych dla mniejszego nośnika
+
+**Priorytet:** P2 · **Etap:** **wyłącznie po MVP** · [Issue #25](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/25)
+
+**Cel:** w przyszłości umożliwić migrację obrazu RAW na mniejszy dysk/kartę przez rzeczywiste zmniejszenie partycji i, gdy trzeba, bezpieczne przemieszczenie bloków danych oraz przebudowanie metadanych obsługiwanego systemu plików.
+
+**Warunki:** nie sprowadzać redukcji do zmiany `de_HighCyl` w `PART`; bez analizy wszystkich bloków użytych, katalogów, plików, bitmap i struktur filesystemu spowodowałoby to utratę danych. Wymagać zdrowego, obsługiwanego, niezamontowanego wolumenu, pełnego backupu, trybu dry-run, wykonalnego planu relokacji, potwierdzenia użytkownika i możliwości odzyskania po przerwanym zapisie. Osobna implementacja dla OFS/FFS i dla ewentualnych filesystemów pluginowych; nie obsługiwać nieznanych systemów plików przez zgadywanie.
+
+**Status:** backlog badawczo-rozwojowy, **post-MVP**.
+
+### DOL-077 — Audyt bitmap i odwołań do bloków poza fizycznym zakresem nośnika
+
+**Priorytet:** P1 jako osobny inspektor tylko do odczytu; P2 jako zależność DOL-076 · **Etap:** MVP wyłącznie jeśli zweryfikowany; rozbudowa po MVP · [Issue #25](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/25)
+
+**Cel:** stwierdzić, czy bitmapy alokacji i faktyczne struktury filesystemu zawierają wpisy lub referencje do bloków **poza fizyczną pojemnością nośnika** albo poza rozważanym, mniejszym rozmiarem partycji.
+
+**Wymagania:** analizować osobno deklarowane granice `PART`, zakres bitmapy, bloki oznaczone jako zajęte, rzeczywiste odwołania z nagłówków plików/katalogów/list rozszerzeń oraz bloki metadanych i samej bitmapy. Raportować stany: `alokacja poza granicą`, `referencja poza granicą`, `bitmapa niespójna`, `nie można zbadać`. **Sama bitmapa z wolnymi bitami nie dowodzi braku danych**, zwłaszcza przy błędach lub nieobsługiwanym filesystemie. Brak zapisu w pierwszym etapie, testy na syntetycznych OFS/FFS i uszkodzonych obrazach, ostrzeżenia o niepewności.
+
+**Status:** backlog, **brak implementacji**.
