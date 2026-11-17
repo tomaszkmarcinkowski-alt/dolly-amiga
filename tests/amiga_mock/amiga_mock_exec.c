@@ -3,17 +3,22 @@
 #include <string.h>
 static int g_nsd;
 static int g_last_read64;
+static uint64_t g_dma_address=UINT64_C(0x00100000);
+static ULONG g_last_alloc_flags;
 static UWORD g_commands[]={2,0xc000,0};
 struct NSQueryMock {ULONG format,size;UWORD type,subtype;UWORD *cmds;};
 void dolly_mock_set_nsd(int enabled){g_nsd=enabled;g_last_read64=0;}
 int dolly_mock_last_read64(void){return g_last_read64;}
+uint64_t dolly_mock_dma_address(void){return g_dma_address;}
+void dolly_mock_set_dma_address(uint64_t address){g_dma_address=address;}
+ULONG dolly_mock_last_alloc_flags(void){return g_last_alloc_flags;}
 struct MsgPort *CreateMsgPort(void){return calloc(1,sizeof(struct MsgPort));}
 void DeleteMsgPort(struct MsgPort *p){free(p);}
 struct IORequest *CreateIORequest(struct MsgPort *p,ULONG sz){(void)p;(void)sz;return calloc(1,sizeof(struct IOStdReq)+128);}
 void DeleteIORequest(struct IORequest *p){free(p);}
 LONG OpenDevice(CONST_STRPTR n,ULONG unit,struct IORequest *r,ULONG flags){(void)r;(void)flags;(void)unit;return strcmp(n,"mock.device")==0?0:-1;}
 void CloseDevice(struct IORequest *r){(void)r;}
-APTR AllocMem(ULONG bytes,ULONG flags){(void)flags;return malloc(bytes);}
+APTR AllocMem(ULONG bytes,ULONG flags){g_last_alloc_flags=flags;return malloc(bytes);}
 void FreeMem(APTR p,ULONG bytes){(void)bytes;free(p);}
 LONG DoIO(struct IORequest *r){
  ULONG i;uint64_t start;
