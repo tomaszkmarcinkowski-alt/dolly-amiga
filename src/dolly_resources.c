@@ -23,14 +23,14 @@ const char *dolly_resource_kind_directory(DollyResourceKind kind){
 }
 DollyResourceScanResult dolly_resources_scan_optional(
     const DollyResourceSpec *items,size_t count,
-    const char *required_release,uint32_t required_format,
+    const char *required_release,
     DollyResourceInspect inspect,void *inspect_context,
     DollyResourceReport report,void *report_context){
     DollyResourceScanResult result={0};
     size_t i;
     char path[256];
     if((count&&!items)||!inspect||!required_release||!required_release[0]||
-       strlen(required_release)>80||required_format==0||count>1024u){
+       strlen(required_release)>80||count>1024u){
         result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
     }
     for(i=0;i<count;i++){
@@ -39,7 +39,8 @@ DollyResourceScanResult dolly_resources_scan_optional(
         DollyResourceNotice notice;
         const DollyResourceSpec *item=&items[i];
         const char *directory;
-        if((unsigned)item->kind>=DOLLY_RESOURCE_KIND_COUNT){
+        if((unsigned)item->kind>=DOLLY_RESOURCE_KIND_COUNT ||
+           item->expected_format==0){
             result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
         }
         st=dolly_path_resource(item->relative_path,path,sizeof(path));
@@ -56,7 +57,7 @@ DollyResourceScanResult dolly_resources_scan_optional(
         if(observed.state==DOLLY_RESOURCE_READABLE &&
            observed.integrity_ok==1 && observed.release_id &&
            strcmp(observed.release_id,required_release)==0 &&
-           observed.format_version==required_format)continue;
+           observed.format_version==item->expected_format)continue;
         result.disabled_kinds|=UINT32_C(1)<<(unsigned)item->kind;
         notice.required_release=required_release;
         notice.found_release=observed.release_id;
