@@ -9,7 +9,8 @@
 #include <errno.h>
 static int emit_field(const DollyInventoryField *f,void *ctx){
     FILE *out=(FILE *)ctx;
-    const char *source=f->origin==DOLLY_INV_DERIVED?"computed":"RDB PART";
+    const char *source=f->origin==DOLLY_INV_DERIVED?"computed":
+        f->origin==DOLLY_INV_MBR?"MBR":"RDB PART";
     if(f->availability==DOLLY_INV_UNAVAILABLE){
         fprintf(out,"  %-23s unavailable (source: %s)\n",f->label,source);
         return 0;
@@ -72,6 +73,8 @@ int main(int argc,char **argv){
         const DollyMbrPartition *p=&map->primary[i];
         printf("MBR primary #%u: type=0x%02X start=%" PRIu64 " length=%" PRIu64 "\n",
                i+1,p->type,p->start_bytes,p->length_bytes);
+        if(dolly_inventory_mbr_partition(p,emit_field,stdout)!=0)
+            fprintf(stderr,"MBR inventory rendering stopped\n");
         if(p->contains_rdb)show_rdb(&p->nested_rdb,"Nested RDB");
     }
     if(map->has_whole_disk_rdb)show_rdb(&map->whole_disk_rdb,"Whole-disk RDB");
