@@ -15,6 +15,16 @@ static DollyRdbStatus run(const char *path,unsigned long long base,DollyRdb *r){
 int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;unsigned char rdb[BS],part[BS];DollyRdb r;unsigned long long base=2048ULL*BS;assert(fd>=0);f=fdopen(fd,"wb+");assert(f);make_rdb(rdb,2);make_part(part,DOLLY_RDB_END);store(f,base+BS,rdb);store(f,base+2*BS,part);assert(fseeko(f,(off_t)(base+500ULL*BS-1),SEEK_SET)==0);assert(fputc(0,f)==0);fflush(f);
  assert(run(path,base,&r)==DOLLY_RDB_OK);assert(r.header_block==1);assert(r.partition_count==1);assert(strcmp(r.partitions[0].name,"DH0")==0);assert(r.partitions[0].start_bytes==base+2ULL*4*16*BS);assert(r.partitions[0].length_bytes==4ULL*4*16*BS);
  assert(run(path,0,&r)==DOLLY_RDB_NOT_FOUND);
+ /* 256 longwords per filesystem block = 1024 bytes, RDB device blocks 512. */
+ make_part(part,DOLLY_RDB_END);wr32(part+132,256);finish_sum(part,64);
+ store(f,base+2*BS,part);
+ assert(fseeko(f,(off_t)(base+1600ULL*BS-1),SEEK_SET)==0);
+ assert(fputc(0,f)==0);fflush(f);
+ assert(run(path,base,&r)==DOLLY_RDB_OK);
+ assert(r.partitions[0].start_bytes==base+2ULL*4*16*1024u);
+ assert(r.partitions[0].length_bytes==4ULL*4*16*1024u);
+ make_part(part,DOLLY_RDB_END);store(f,base+2*BS,part);fflush(f);
+
  part[40]^=1;store(f,base+2*BS,part);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_BAD_CHECKSUM);
  make_part(part,2);store(f,base+2*BS,part);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_CYCLE);
  make_part(part,DOLLY_RDB_END);wr32(part+168,300);finish_sum(part,64);store(f,base+2*BS,part);fflush(f);assert(run(path,base,&r)==DOLLY_RDB_OUT_OF_RANGE);
