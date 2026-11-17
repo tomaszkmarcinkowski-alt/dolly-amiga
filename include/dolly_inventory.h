@@ -5,7 +5,7 @@
 #include "dolly_partition_map.h"
 #include <stdint.h>
 typedef enum DollyInventoryValueKind {
-    DOLLY_INV_U64 = 0, DOLLY_INV_TEXT
+    DOLLY_INV_U64 = 0, DOLLY_INV_TEXT, DOLLY_INV_I64
 } DollyInventoryValueKind;
 typedef enum DollyInventoryAvailability {
     DOLLY_INV_PRESENT = 0, DOLLY_INV_UNAVAILABLE,
@@ -31,6 +31,7 @@ typedef struct DollyInventoryField {
     DollyInventoryOrigin origin;
     DollyInventoryEvidence evidence;
     uint64_t number;
+    int64_t signed_number;
     const char *text;
 } DollyInventoryField;
 /* Return nonzero from callback to stop enumeration early. A zero return
