@@ -2,69 +2,86 @@
 #include <stdint.h>
 #include <string.h>
 static const char *const disabled[DOLLY_RESOURCE_KIND_COUNT]={
-    "Optional GUI backend is unavailable; built-in GadTools remains available.",
-    "Optional filesystem extension is unavailable; basic disk inspection remains available.",
-    "Automatic controller-profile suggestions are unavailable; unverified DMA reads remain blocked.",
-    "Translated messages are unavailable; built-in fallback language remains available.",
-    "Extended help is unavailable; core commands remain available."
+    "Optional GUI backend unavailable; built-in GadTools is still available.",
+    "Optional filesystem extension unavailable; basic disk inspection remains available.",
+    "Controller database advice unavailable; raw DMA safety checks remain enforced.",
+    "Translation unavailable; built-in fallback text remains available.",
+    "Extended help unavailable; core commands remain available."
 };
 static const char *const actions[DOLLY_RESOURCE_KIND_COUNT]={
-    "Install this optional GUI addon under DOLLY:Plugins/GUI/ or select GadTools.",
-    "Reinstall the filesystem addon under DOLLY:Plugins/Filesystems/.",
-    "Install a compatible device profile under DOLLY:Plugins/Devices/; do not bypass DMA checks.",
-    "Restore the missing catalog under DOLLY:Catalogs/.",
-    "Restore the help file under DOLLY:Docs/."
+    "Restore the correct Dolly-release GUI plugin in DOLLY:Plugins/GUI/.",
+    "Restore this release's filesystem extension in DOLLY:Plugins/Filesystems/.",
+    "Install a matching trusted controller database in DOLLY:Plugins/Devices/. Do not bypass DMA.",
+    "Restore the matching catalog in DOLLY:Catalogs/.",
+    "Restore the matching help file in DOLLY:Docs/."
 };
-static const char *const directories[DOLLY_RESOURCE_KIND_COUNT]={
+static const char *const dirs[DOLLY_RESOURCE_KIND_COUNT]={
     "Plugins/GUI/","Plugins/Filesystems/","Plugins/Devices/","Catalogs/","Docs/"
 };
 const char *dolly_resource_kind_directory(DollyResourceKind kind){
-    return (unsigned)kind<DOLLY_RESOURCE_KIND_COUNT?directories[kind]:0;
+    return (unsigned)kind<DOLLY_RESOURCE_KIND_COUNT?dirs[kind]:0;
 }
 DollyResourceScanResult dolly_resources_scan_optional(
     const DollyResourceSpec *items,size_t count,
-    DollyResourceExists exists,void *exists_context,
+    const char *required_release,uint32_t required_format,
+    DollyResourceInspect inspect,void *inspect_context,
     DollyResourceReport report,void *report_context){
     DollyResourceScanResult result={0};
     size_t i;
     char path[256];
-    if((count&&!items)||!exists||count>1024u){
+    if((count&&!items)||!inspect||!required_release||!required_release[0]||
+       strlen(required_release)>80||required_format==0||count>1024u){
         result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
     }
     for(i=0;i<count;i++){
         DollyPathStatus st;
-        const DollyResourceSpec *item=&items[i];
+        DollyResourceProbeResult observed;
         DollyResourceNotice notice;
-        const char *prefix;
-        int probe;
+        const DollyResourceSpec *item=&items[i];
+        const char *directory;
         if((unsigned)item->kind>=DOLLY_RESOURCE_KIND_COUNT){
             result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
         }
         st=dolly_path_resource(item->relative_path,path,sizeof(path));
         if(st!=DOLLY_PATH_OK){
             result.status=st==DOLLY_PATH_TOO_LONG?
-                 DOLLY_RESOURCE_SCAN_PATH_TOO_LONG:DOLLY_RESOURCE_SCAN_INVALID;
+                DOLLY_RESOURCE_SCAN_PATH_TOO_LONG:DOLLY_RESOURCE_SCAN_INVALID;
             return result;
         }
-        prefix=dolly_resource_kind_directory(item->kind);
-        if(!prefix || strncmp(item->relative_path,prefix,strlen(prefix))!=0){
+        directory=dolly_resource_kind_directory(item->kind);
+        if(!directory||strncmp(item->relative_path,directory,strlen(directory))!=0){
             result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
         }
-        probe=exists(path,exists_context);
-        if(probe>0)continue;
-        if(probe<0)result.unreadable_files++;
-        else result.missing_files++;
-        result.missing_kinds|=UINT32_C(1)<<(unsigned)item->kind;
-        notice.code=probe<0?"DOLLY_OPTIONAL_RESOURCE_UNREADABLE":
-                             "DOLLY_OPTIONAL_RESOURCE_MISSING";
-        notice.headline=probe<0?
-            "Owce znalazly plik, ale nie moga go odczytac!":
-            "Wilki wykradly pliki - niektore owce nie moga pracowac!";
+        observed=inspect(path,inspect_context);
+        if(observed.state==DOLLY_RESOURCE_READABLE &&
+           observed.integrity_ok==1 && observed.release_id &&
+           strcmp(observed.release_id,required_release)==0 &&
+           observed.format_version==required_format)continue;
+        result.disabled_kinds|=UINT32_C(1)<<(unsigned)item->kind;
+        notice.required_release=required_release;
+        notice.found_release=observed.release_id;
         notice.missing_path=path;
         notice.disabled_feature=disabled[item->kind];
-        notice.suggested_action=probe<0?
-            "Check file access and installation integrity; do not bypass safety checks.":
-            actions[item->kind];
+        notice.suggested_action=actions[item->kind];
+        if(observed.state==DOLLY_RESOURCE_ABSENT){
+            result.missing_files++;
+            notice.code="DOLLY_OPTIONAL_RESOURCE_MISSING";
+            notice.headline="Wilki wykradly pliki - te owce odpoczywaja!";
+        }else if(observed.state==DOLLY_RESOURCE_UNREADABLE){
+            result.unreadable_files++;
+            notice.code="DOLLY_OPTIONAL_RESOURCE_UNREADABLE";
+            notice.headline="Owce widza plik, lecz nie moga go odczytac!";
+        }else if(observed.state==DOLLY_RESOURCE_UNVERIFIED ||
+                 observed.state!=DOLLY_RESOURCE_READABLE ||
+                 observed.integrity_ok!=1 || !observed.release_id){
+            result.unverified_files++;
+            notice.code="DOLLY_OPTIONAL_RESOURCE_UNVERIFIED";
+            notice.headline="Nieznany paszport pliku - Dolly go nie uruchomi!";
+        }else{
+            result.incompatible_files++;
+            notice.code="DOLLY_OPTIONAL_RESOURCE_VERSION_MISMATCH";
+            notice.headline="Plik z innego stada - wersja nie pasuje do Dolly!";
+        }
         if(report)report(&notice,report_context);
     }
     return result;
