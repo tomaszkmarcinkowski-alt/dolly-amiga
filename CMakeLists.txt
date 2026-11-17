@@ -89,7 +89,7 @@ add_executable(test-amiga-mock tests/test_amiga_device_mock.c
 target_compile_definitions(test-amiga-mock PRIVATE DOLLY_AMIGA_MOCK)
 target_include_directories(test-amiga-mock PRIVATE
   ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan)
+target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan dollydma)
 add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
 
 # Strict streaming IFF FORM DOLY envelope inspection.
@@ -187,4 +187,17 @@ add_test(NAME inventory_advisories COMMAND test-inventory-notices)
 target_link_libraries(dolly-inventory PRIVATE dollyinventorynotices)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-inventory-notices PRIVATE -UNDEBUG)
+endif()
+
+# Pure C99 DMA safety policy: necessary mask/range/alignment checks.
+add_library(dollydma STATIC src/dolly_dma_policy.c)
+target_include_directories(dollydma PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollydma PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-dma-policy tests/test_dma_policy.c)
+target_link_libraries(test-dma-policy PRIVATE dollydma)
+add_test(NAME dma_mask_alignment COMMAND test-dma-policy)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-dma-policy PRIVATE -UNDEBUG)
 endif()
