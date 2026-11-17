@@ -252,7 +252,11 @@ static struct Gadget *make_cycle(struct Gadget *last,DollyDemoView *v,
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
                         GTCY_Labels,(ULONG)choices,
-                        GTCY_Active,(ULONG)active,TAG_DONE);
+                        GTCY_Active,(ULONG)active,
+                        GA_Disabled,(ULONG)(
+                          operation.state==DOLLY_OP_RUNNING ||
+                          operation.state==DOLLY_OP_PAUSED),
+                        TAG_DONE);
 }
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     struct Gadget *last;
@@ -574,6 +578,12 @@ static void update_main_actions(void) {
     if(main_view.start)
         GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
                           GA_Disabled,(ULONG)active,TAG_DONE);
+    if(main_view.device)
+        GT_SetGadgetAttrs(main_view.device,main_view.window,NULL,
+                          GA_Disabled,(ULONG)active,TAG_DONE);
+    if(main_view.op_selector)
+        GT_SetGadgetAttrs(main_view.op_selector,main_view.window,NULL,
+                          GA_Disabled,(ULONG)active,TAG_DONE);
 }
 static void progress_view_update(unsigned old) {
     DemoLayout *d=&sheep_view.l;
@@ -632,6 +642,10 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             } else if(id==MAIN_START_ID) {
                 if(dolly_operation_start(&operation,GRID_TOTAL)==DOLLY_OP_OK) {
                     update_numbers(&main_view);
+                    if(sheep_view.window) {
+                        draw_full(&sheep_view,0);
+                        update_numbers(&sheep_view);
+                    }
                     update_main_actions();
                 }
             } else if(id==MAIN_SHOW_ID &&
