@@ -5,7 +5,9 @@ static int numeric(DollyInventoryEmit emit,void *user,const char *key,
                    DollyInventoryOrigin origin,DollyInventoryAvailability available){
     DollyInventoryField f;
     f.key=key;f.label=label;f.unit=unit;f.kind=DOLLY_INV_U64;
-    f.availability=available;f.origin=origin;f.number=value;f.text=0;
+    f.availability=available;f.origin=origin;
+    f.evidence=origin==DOLLY_INV_DERIVED?DOLLY_EVIDENCE_DERIVED:DOLLY_EVIDENCE_DECLARED;
+    f.number=value;f.text=0;
     return emit(&f,user);
 }
 static int string(DollyInventoryEmit emit,void *user,const char *key,
@@ -13,6 +15,7 @@ static int string(DollyInventoryEmit emit,void *user,const char *key,
     DollyInventoryField f;
     f.key=key;f.label=label;f.unit="";f.kind=DOLLY_INV_TEXT;
     f.availability=DOLLY_INV_PRESENT;f.origin=DOLLY_INV_RDB_PART;
+    f.evidence=DOLLY_EVIDENCE_DECLARED;
     f.number=0;f.text=value;
     return emit(&f,user);
 }
@@ -113,5 +116,15 @@ const char *dolly_inventory_availability_name(DollyInventoryAvailability s){
     case DOLLY_INV_UNSUPPORTED:return "unsupported";
     case DOLLY_INV_INCONSISTENT:return "inconsistent";
     default:return "invalid status";
+    }
+}
+
+const char *dolly_inventory_evidence_name(DollyInventoryEvidence s){
+    switch(s){
+    case DOLLY_EVIDENCE_DECLARED:return "declared";
+    case DOLLY_EVIDENCE_OBSERVED:return "observed";
+    case DOLLY_EVIDENCE_DERIVED:return "derived";
+    case DOLLY_EVIDENCE_ESTIMATED:return "estimated";
+    default:return "invalid evidence";
     }
 }
