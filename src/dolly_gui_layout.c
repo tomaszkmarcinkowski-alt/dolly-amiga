@@ -46,9 +46,14 @@ DollyGuiLayout dolly_gui_plan(DollyGuiView view,DollyGuiScreen s,
        s.reserved_top>=s.screen_height ||
        s.reserved_bottom>=s.screen_height-s.reserved_top||
        s.border_left>128||s.border_right>128||
-       s.border_top>128||s.border_bottom>128 ||
-       (!good_font(preferred)&&!good_font(topaz8)))
+       s.border_top>128||s.border_bottom>128)
         return r;
+    /* A valid screen with no usable font is a layout-fit failure,
+     * not malformed screen geometry. Keep BAD_INPUT for invalid geometry. */
+    if(!good_font(preferred)&&!good_font(topaz8)){
+        r.fit=DOLLY_GUI_NO_FIT;
+        return r;
+    }
     avail_w=s.screen_width;
     avail_h=s.screen_height-s.reserved_top-s.reserved_bottom;
     if(s.max_window_width)avail_w=smaller(avail_w,s.max_window_width);
