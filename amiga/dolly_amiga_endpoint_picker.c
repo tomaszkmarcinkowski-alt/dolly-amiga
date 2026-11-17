@@ -1029,7 +1029,6 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             }
             populate_units(p);
             invalidate_query(p);
-            p->last_click_valid=0;
             if(!rebuild(p))close=1;
             if(close)dolly_picker_close(p);
             return; /* never use a stale gadget ID after a rebuild */
