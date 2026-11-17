@@ -508,12 +508,38 @@
 **Test:** po zmianie **GCC PASS, Clang PASS, GCC ASan/UBSan PASS** na lokalnym dokładnym odpowiedniku kodu modułu. Zmiana opublikowana w `src/dolly_paths.c`. Brak weryfikacji na kompilatorze m68k.
 
 
+### DJ-0050 · 2026-11-17 · Integralność wydania / decyzja użytkownika · CRC32 + WERSJA, PROTOTYP M0
+**Temat:** Czy Dolly potrzebuje pełnego systemu podpisów plików?
+
+**Decyzja:** dla MVP wystarczy **identyfikator wersji wydania oraz CRC32 pliku**, zarówno dla programu, jak i dodatków. Odrzucamy dodatkową infrastrukturę kryptograficzną z zakresu M0. Ważne ograniczenie: CRC32 wykrywa przypadkowe uszkodzenia i pomieszanie plików, **nie potwierdza autentyczności** i może być celowo podrobiona.
+
+**Implementacja:** strumieniowe `dolly_checksum` (C99, bez dynamicznej pamięci), pakietowe `make_release_manifest.py` i `verify_release_manifest.py`. Każdy wpis manifestu zawiera wersję, długość pliku i CRC32. Dodano test wzorca `123456789 → CBF43926`, inkrementalnego obliczania, przykładowego manifestu oraz wykrywania celowo zmienionego pliku.
+
+**Ważna granica:** uruchomiony program nie może sprawdzić **przed własnym uruchomieniem** swojego pliku. To wymaga osobnego, minimalnego programu startowego lub instalatora. Częściowa samokontrola działającego programu nie stanowi zaufanej weryfikacji pliku wykonywalnego. Native bootstrap pozostaje do wykonania. [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19), [specyfikacja](INTEGRITY.md).
+
+### DJ-0051 · 2026-11-17 · Zasoby opcjonalne / kontrola wydania · WDROŻONO REGUŁĘ, PEŁNY BUILD OTWARTY
+**Temat:** Zgodny numer wydania nie wystarcza, gdy zawartość pliku została uszkodzona.
+
+**Działanie:** `DollyResourceSpec` zawiera oczekiwany `CRC32` i długość, a `DollyResourceProbeResult` wartości rzeczywiście zmierzone przez adapter. `dolly_resources_scan_optional()` wymaga zgodności wersji, indywidualnego formatu/API, długości i sumy kontrolnej. Oddzielny komunikat `DOLLY_OPTIONAL_RESOURCE_CHECKSUM_MISMATCH` wyłącza tylko zależną funkcję. Dodano syntetyczną fixturę pliku z prawidłowym numerem wydania i błędną CRC32.
+
+**Błąd podczas integracji testu:** pierwsza aktualizacja `tests/test_resources.c` zawierała asercje dla uszkodzonego pliku, ale zapomniała dodać go do tablicy manifestu testowego. Fixturę następnie dodano, dopasowując licznik do 7 plików i 6 komunikatów. To przypomina o konieczności wykonania *całego* aktualnego CTest.
+
+**Ograniczenie:** sam dostawca wyników `DollyResourceInspect` nadal jest kontraktem, **bez natywnego czytnika plików AmigaDOS**. Pełna kompilacja `main`, WinUAE i zabezpieczenie przed zamianą pliku pomiędzy sprawdzeniem a załadowaniem pozostają otwarte.
+
+### DJ-0052 · 2026-11-17 · Profile urządzeń / kontrolowana zmiana ustawień · PROTOTYP M0
+**Temat:** Baza znanych kontrolerów może zmniejszać liczbę ustawień wprowadzanych ręcznie, ale nie może autoryzować niesprawdzonego DMA.
+
+**Działanie:** `dolly_profile_prepare_config()` przygotowuje **propozycję**, wyłącznie zmniejszenia lokalnego limitu wielkości odczytu. Wymaga zgodnej bazy, jednoznacznego dopasowania kontrolera/drivera/rewizji, źródła informacji, wielokrotności rozmiaru bloku oraz potwierdzenia użytkownika. Nie zmienia sterownika, RDB, `de_Mask` ani uprawnienia `dma_profile_verified`. Dodano testy odmowy użycia bazy niezweryfikowanej, limitu zbyt dużego i niepodzielnego przez rozmiar sektora.
+
+**Do zrobienia:** GUI podglądu różnicy i zatwierdzania, zapisywanie/rollback lokalnych opcji, natywna walidacja urządzeń, niezależne testy DMA. [Issue #21](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/21).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0050 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0053 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
