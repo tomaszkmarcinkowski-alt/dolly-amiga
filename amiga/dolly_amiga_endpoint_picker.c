@@ -32,6 +32,7 @@ extern struct DosLibrary *DOSBase;
 #define PICK_IMAGE_FORMAT 510u
 #define PICK_FILE_INFO 511u
 #define PICK_SELECTION_TEXT 512u
+#define PICK_DISK_INFO_TEXT 513u
 
 static STRPTR image_formats[]={
     (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",NULL
@@ -59,7 +60,7 @@ static STRPTR partition_names[]={
 typedef struct PickerGeometry {
     WORD left,right,full_width;
     WORD mode_x,mode_w;
-    WORD list_y,list_h,action_y,preview_y;
+    WORD list_y,list_h,action_y,preview_y,disk_info_y;
     WORD browse_y,path_y,detail_y;
     WORD format_x,format_w;
 } PickerGeometry;
@@ -69,10 +70,15 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     LONG left=20;
     LONG right=(LONG)w->Width-(LONG)w->BorderRight-20;
     LONG action=(LONG)w->Height-(LONG)w->BorderBottom-31;
-    LONG preview=action-23;
-    LONG height=preview-66-7;
+    /* Physical/Partition: two 16px inset panels with 3px gaps.
+     * Logical: one panel, closer to buttons than before.
+     */
+    LONG preview=action-19;
+    LONG first=action-38;
+    LONG height=(p->mode==DOLLY_MODE_PHYSICAL ||
+                 p->mode==DOLLY_MODE_PARTITION ? first : preview)-66-3;
     if(right<left+320)right=left+320;
-    if(height<56)height=56;
+    if(height<40)height=40;
     g.left=(WORD)left;
     g.right=(WORD)right;
     g.full_width=(WORD)(right-left);
@@ -81,7 +87,10 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.list_y=66;
     g.list_h=(WORD)height;
     g.action_y=(WORD)action;
-    g.preview_y=(WORD)preview;
+    g.preview_y=(WORD)(p->mode==DOLLY_MODE_PHYSICAL ||
+                            p->mode==DOLLY_MODE_PARTITION ?
+                            first:preview);
+    g.disk_info_y=(WORD)preview;
     g.browse_y=66;
     g.path_y=105;
     g.detail_y=132;
@@ -254,6 +263,42 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
     if(p->selection_text && p->window)
         GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->selection_display,TAG_DONE);
+}
+/* A physical unit can only be identified by reading the real driver.
+ * M1.21 still uses synthetic Device/Unit data for these modes, so no
+ * SCSI command can safely be attributed to that selection yet.
+ * Report unknown rather than inventing INQUIRY or capacity results.
+ */
+static void update_disk_info(DollyEndpointPicker *p) {
+    if(!p->has_device || !p->has_unit) {
+        strcpy(p->disk_info_display,"INQUIRY: select a unit | Size: unknown");
+    } else {
+        strcpy(p->disk_info_display,
+               "INQUIRY: not queried (demo) | Size: unavailable");
+    }
+}
+static struct Gadget *disk_info_text(struct Gadget *last,
+                                     DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    PickerGeometry g=picker_geometry(p);
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=g.left;ng.ng_TopEdge=g.disk_info_y;
+    ng.ng_Width=g.full_width;ng.ng_Height=16;
+    ng.ng_GadgetID=PICK_DISK_INFO_TEXT;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTTX_Text,(ULONG)p->disk_info_display,
+                        GTTX_Border,TRUE,TAG_DONE);
+}
+static void refresh_disk_info(DollyEndpointPicker *p) {
+    if(p->mode!=DOLLY_MODE_PHYSICAL &&
+       p->mode!=DOLLY_MODE_PARTITION)return;
+    update_disk_info(p);
+    if(p->disk_info_text && p->window)
+        GT_SetGadgetAttrs(p->disk_info_text,p->window,NULL,
+                          GTTX_Text,(ULONG)p->disk_info_display,TAG_DONE);
 }
 static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
@@ -454,6 +499,8 @@ static int rebuild(DollyEndpointPicker *p) {
     preview_file(p);
     file_details(p);
     if(p->mode!=DOLLY_MODE_FILE)update_selection_preview(p);
+    if(p->mode==DOLLY_MODE_PHYSICAL ||
+       p->mode==DOLLY_MODE_PARTITION)update_disk_info(p);
     if(p->gadgets) {
         if(!p->gadgets_detached)
             RemoveGList(p->window,p->gadgets,-1);
@@ -469,6 +516,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
     p->format_cycle=NULL;p->file_info=NULL;
     p->selection_text=NULL;
+    p->disk_info_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -503,6 +551,12 @@ static int rebuild(DollyEndpointPicker *p) {
         last=selection_text(last,p);
         if(!last)return 0;
         p->selection_text=last;
+        if(p->mode==DOLLY_MODE_PHYSICAL ||
+           p->mode==DOLLY_MODE_PARTITION) {
+            last=disk_info_text(last,p);
+            if(!last)return 0;
+            p->disk_info_text=last;
+        }
     }
     if(p->mode==DOLLY_MODE_FILE) {
         /* Reuse the otherwise empty LISTVIEW area. Full client width. */
@@ -741,6 +795,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             change_enabled(p);
             refresh_selection_preview(p);
+            refresh_disk_info(p);
             p->last_click_valid=0;
         } else if(id==PICK_UNIT && code<2u && p->has_device) {
             if(p->mode==DOLLY_MODE_PARTITION)
@@ -751,6 +806,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             change_enabled(p);
             refresh_selection_preview(p);
+            refresh_disk_info(p);
             if(p->mode==DOLLY_MODE_PHYSICAL &&
                picker_double_click(p,id,code,seconds,micros))
                 close=commit_picker(p);
