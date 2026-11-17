@@ -60,3 +60,13 @@ Every inventory field additionally carries `DollyInventoryEvidence`:
 | `ESTIMATED` | Approximation that should be explicitly labelled |
 
 The current MBR/RDB providers emit **declared** and **derived** only. Active controller limits, mounted filesystem options and actual I/O capabilities will require dedicated, read-only AmigaOS providers.
+
+## Shared advisory feed — implemented prototype
+
+`dolly_inventory_partition_notices()` emits stable diagnostic codes and severities without allocating a list or changing the disk. Initial rules include above/below/missing/zero MaxTransfer, nonstandard `de_SectorPerBlock`, suspicious zero `de_Mask`, and absent `DosType`.
+
+`dolly_inventory_rdb_notices()` uses the existing RDB collision audit to report overlapping partitions, header/PART descriptor collisions, out-of-container extents and invalid audit parameters. The `dolly-inventory` CLI prints these messages after the corresponding object. Absence of warnings is **not** proof of a healthy disk.
+
+`DollyInventoryNotice.code` is stable and nonlocalized, whereas the English message is provisional; localization and tailored suggestions will be added for GadTools. The warning feed is distinct from the raw `InventoryField` data stream, so clients can filter, group and display severity consistently.
+
+Local standalone compiler checks: C99 GCC + Clang **PASS**, ASan/UBSan for partition notices **PASS**, and GCC/Clang after adding RDB collision notices **PASS**. Full current GitHub Actions and native AmigaOS tests remain unverified.
