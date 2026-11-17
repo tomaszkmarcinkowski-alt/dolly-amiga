@@ -565,3 +565,25 @@ only on explicit Query; no sector writes exist, and the source
 driver may still block on synchronous DoIO. Use the controlled
 WinUAE A1200/OS3.1 test HDF. RTG and memory usage profiling remain
 postponed.
+
+## U. M1.28 confirmed WinUAE screenshot (A1200 / OS 3.1 / 640x256)
+
+The user confirmed the M1.28 GUI starts and works, with a screenshot
+of **Source → Partition** after Query of `scsi.device` Unit 0.
+Observed, not simulated:
+
+- Physical identity: `UAE-IDE rafael.hdf`
+- Media capacity: `1881 MiB`
+- Third LISTVIEW populated with RDB names:
+  `WB_1.3`, `WB_2.x`, `OS`, `GRY`
+- `Selected partition`: `scsi.device / Unit 0 / OS`
+- `Partition info`: `OS 600MiB DOS1(FFS) Cyl860-1990 Blk512 SPB1`
+- Third recessed information row and bottom buttons visually fit
+  the classic 640x256 selector without visible overlap.
+
+The screenshot supports successful native compilation and the
+tested RDB/INQUIRY/READ CAPACITY display path. It does **not** by
+itself verify all M1.28 tests, particularly cancellation semantics,
+Query gating before selection, failure paths, MBR interpretation,
+or actual copying/imaging. No write operations have been added.
+Keep those cases pending before treating M1.28 as fully validated.
