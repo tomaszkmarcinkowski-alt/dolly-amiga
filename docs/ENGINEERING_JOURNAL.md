@@ -367,12 +367,22 @@
 **Weryfikacja:** poprawione wartości zapisano i ponownie odczytano ze źródła na GitHub. Pełna kompilacja docelowa oraz testy runtime czekają na pierwszy toolchain AmigaOS.
 
 
+### DJ-0037 · 2026-11-17 · Pierwsza kompilacja natywna / UX · POPRAWIONE W KODZIE; TEST NATYWNY OTWARTY
+**Temat:** Tryb `--help` powinien kończyć się kodem sukcesu, a błędy samodzielnego testu muszą być diagnostyczne.
+
+**Wykrycie:** w pierwszej wersji `dolly-native-smoke` przełącznik `--help` wyświetlał instrukcję, ale zwracał kod `20` (jak dla błędnego argumentu), choć był opisany w dokumentacji. W razie niepowodzenia `--selftest` podawano jedynie ogólne `FAIL`.
+
+**Działanie:** `--help` zwraca `0`, a `--selftest` zgłasza numer etapu testu, na którym wystąpiła awaria, i rozmiar stertowej struktury `DollyRdb`. Takie informacje będą przydatne przy debugowaniu 68000 i niskiej pamięci.
+
+**Testy:** kod opublikowano, ale brak cross-kompilatora i WinUAE w bieżącym środowisku; natywne zachowanie `exit()`, `printf()` i liczb 64-bitowych pozostaje do sprawdzenia. W CI dodano osobny hostowy przebieg `DOLLY_NATIVE_ONLY`, którego status nadal nie jest potwierdzony.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0037 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0038 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
