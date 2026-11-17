@@ -23,22 +23,28 @@ static void init_rows(DollyNativeInventoryView *v) {
     v->rows.l_pad=0;
     v->count=0;
 }
+/* Explicit bounded copies avoid strncpy truncation diagnostics with
+ * -Werror while still providing guaranteed NUL termination.
+ */
+static void copy_text(char *dst,unsigned size,const char *s) {
+    unsigned i=0;
+    if(!size)return;
+    while(i+1u<size && s[i]) {
+        dst[i]=s[i];
+        ++i;
+    }
+    dst[i]='\0';
+}
 static void add_row(DollyNativeInventoryView *v,const char *description) {
     struct Node *n;
     unsigned i=v->count;
     if(i>=DOLLY_INVENTORY_ROWS)return;
-    strncpy(v->row_text[i],description,sizeof(v->row_text[i])-1u);
-    v->row_text[i][sizeof(v->row_text[i])-1u]='\0';
+    copy_text(v->row_text[i],sizeof(v->row_text[i]),description);
     n=&v->nodes[i];
     memset(n,0,sizeof(*n));
     n->ln_Name=v->row_text[i];
     AddTail(&v->rows,n);
     v->count++;
-}
-static void copy_text(char *dst,unsigned size,const char *s) {
-    if(!size)return;
-    strncpy(dst,s,size-1u);
-    dst[size-1u]='\0';
 }
 /* Endpoint.path is constructed by our picker as "driver / Unit N".
  * The endpoint's byte-sized unit field is only an index, NOT the
@@ -181,8 +187,16 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                     sprintf(line,"%u: %s",i+1u,p->label);
                     add_row(v,line);
                 }
-                sprintf(v->status,"%s: %u partition(s) declared",
-                        v->map.status,v->map.count);
+                {
+                    char suffix[40];
+                    unsigned used;
+                    copy_text(v->status,sizeof(v->status),v->map.status);
+                    used=(unsigned)strlen(v->status);
+                    /* Short numeric suffix; bounded append of both parts. */
+                    sprintf(suffix,": %u partition(s) declared",v->map.count);
+                    copy_text(v->status+used,
+                              (unsigned)sizeof(v->status)-used,suffix);
+                }
             } else {
                 if(v->map.status[0])
                     copy_text(v->status,sizeof(v->status),v->map.status);
