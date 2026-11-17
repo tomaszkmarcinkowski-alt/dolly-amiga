@@ -77,7 +77,7 @@ static void render(struct RastPort *rp, unsigned step) {
                         "MC68000 | 512K | Baa in progress");
 }
 int main(void) {
-    static const UWORD colours[4] = {0x012, 0xfff, 0xd22, 0x888};
+    static UWORD colours[4] = {0x012, 0xfff, 0xd22, 0x888};
     struct Screen *screen = NULL;
     ULONG before, opened, after, largest;
     unsigned step, tick;
