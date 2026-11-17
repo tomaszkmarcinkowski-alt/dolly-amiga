@@ -140,12 +140,20 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         p->start_bytes=begin;p->length_bytes=length;
         p->low_cyl=low;p->high_cyl=high;
         p->fs_block_bytes=blockwords*4u;
+        p->sectors_per_block=be32(r->buffer+144);
         p->dos_type=dos;
         dos_name(type,dos);
-        sprintf(p->summary,"%s | %lu MiB | %s | Cyl %lu-%lu | %lu B",
+        /* DosType is RDB filesystem metadata, not a filesystem
+         * signature verified from partition contents.
+         */
+        sprintf(p->summary,
+                "%s %luMiB %s%s Cyl%lu-%lu Blk%lu SPB%lu",
                 p->label,(unsigned long)(length/1048576u),type,
+                dos==0x444f5301ul?"(FFS)":
+                dos==0x444f5300ul?"(OFS)":"",
                 (unsigned long)low,(unsigned long)high,
-                (unsigned long)p->fs_block_bytes);
+                (unsigned long)p->fs_block_bytes,
+                (unsigned long)p->sectors_per_block);
         head=next;
     }
     /* Fail closed if RDB partitions overlap one another. */
