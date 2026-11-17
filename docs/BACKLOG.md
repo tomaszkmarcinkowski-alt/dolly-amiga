@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**60 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**61 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -521,3 +521,19 @@
 **Akceptacja:** pola pogrupowane kontekstowo; źródło i status wiarygodności każdego pomiaru; Hex/bajty/LBA i inne jednostki, dane kontrolera oraz urządzenia, RDB/MBR, MaxTransfer/Mask, filesystem; niewspierane dane oznaczone jako nieznane. Okno tylko do odczytu, na małej pamięci 68000, z oddzielnym uruchamianiem kosztownych analiz, opcją kopiowania informacji i wersją CLI.
 
 **Uwagi:** diagnostyka i informacja, nie naprawa. Wynik nie certyfikuje bezpieczeństwa dysku. Wspólne dane Inventory mogą kiedyś służyć Flock Managerowi, ale nie przenosimy tam żadnych prywatnych informacji automatycznie.
+
+
+### DOL-061 — Komunikaty dla użytkownika przy problemach z DMA
+
+**Priorytet:** P0 (bezpieczeństwo) · **Etap:** M0 / przed dopuszczeniem fizycznego I/O · [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8)
+
+**User story:** Jako użytkownik Dolly chcę otrzymać jasne, widoczne ostrzeżenie, kiedy program wykryje nieznany profil DMA, bufor poza maską adresową, niewłaściwe wyrównanie lub brak odpowiedniej pamięci, aby wiedzieć, dlaczego operacja została zatrzymana i co należy sprawdzić.
+
+**Akceptacja:**
+- Dla każdej odmowy operacji z powodu DMA: kod diagnostyczny + zrozumiały komunikat + bezpieczna wskazówka.
+- Ostrzeżenie jest dostępne w CLI i przyszłym oknie GadTools; nie może ginąć jako anonimowe `EINVAL` lub `EUNSUPPORTED`.
+- Program **zatrzymuje operację**, nie podejmuje samodzielnie ryzykownych prób innych masek, wyrównań ani zmiany ustawień.
+- Komunikat odróżnia *niepotwierdzoną zgodność DMA* od *faktycznego uszkodzenia danych*; nie twierdzi, że dane są uszkodzone.
+- W logu zachować urządzenie/unit oraz kod problemu, a adresy/maski ujawniać tylko w diagnostyce zaawansowanej, bez prywatnych danych.
+- Przewidzieć lokalizację PL/EN (Locale), testy poprawności callbacku także na fake Exec, przypadki braku bufora.
+- **Status:** przenośne komunikaty i wymagany callback diagnostyczny w eksperymentalnym backendzie są wstępnie zaimplementowane; realne UI i testy AmigaOS pozostają otwarte.
