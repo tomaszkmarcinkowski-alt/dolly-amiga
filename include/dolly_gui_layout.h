@@ -44,5 +44,33 @@ typedef struct DollyGuiLayout {
  * No window opens when fit is NO_FIT or BAD_INPUT. */
 DollyGuiLayout dolly_gui_plan(DollyGuiView view,DollyGuiScreen screen,
                              DollyGuiFont preferred,DollyGuiFont topaz8);
+/* Default: use font of the actual screen (Screen.Font/DrawInfo.dri_Font).
+ * Explicit custom Dolly font takes precedence only when enabled and available.
+ * A non-fitting custom font may fall back to Screen Font, then topaz/8.
+ * This function plans gadget/text fonts, NEVER alters a public screen's
+ * own title/menu font. Renderer must measure real string widths separately. */
+typedef enum DollyGuiFontSource {
+    DOLLY_GUI_FONT_SYSTEM_SCREEN=0,
+    DOLLY_GUI_FONT_CUSTOM,
+    DOLLY_GUI_FONT_TOPAZ8
+} DollyGuiFontSource;
+typedef struct DollyGuiFontSettings {
+    uint8_t custom_enabled;
+    DollyGuiFont custom;
+} DollyGuiFontSettings;
+typedef struct DollyGuiFontPlan {
+    DollyGuiLayout layout;
+    DollyGuiFontSource selected_font;
+    uint8_t custom_unavailable;
+    uint8_t custom_rejected_for_size;
+    uint8_t screen_rejected_for_size;
+} DollyGuiFontPlan;
+DollyGuiFontPlan dolly_gui_plan_with_fonts(
+    DollyGuiView view,DollyGuiScreen screen,
+    DollyGuiFont system_screen_font,
+    DollyGuiFontSettings settings,
+    DollyGuiFont topaz8);
+const char *dolly_gui_font_source_name(DollyGuiFontSource source);
+
 const char *dolly_gui_fit_name(DollyGuiFit fit);
 #endif
