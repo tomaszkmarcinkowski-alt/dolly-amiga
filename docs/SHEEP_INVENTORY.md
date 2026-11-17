@@ -5,11 +5,11 @@
 ## Why a streaming model?
 Classic Amigas may have little free Fast RAM and very limited stack space. The first implementation emits one `DollyInventoryField` at a time via a callback; the GUI or CLI consumes each field immediately without allocating an inventory list or copying the entire RDB layout again.
 
-`dolly_inventory_partition()` currently emits 12 fields:
+`dolly_inventory_partition()` currently emits 16 fields:
 - Partition name and PART descriptor block;
 - DosType, low and high cylinder;
 - Start offset, byte length and end-exclusive offset;
-- RDB filesystem `de_MaxTransfer` (not Dolly's raw backend transfer limit);\n- `de_NumBuffers`, `de_BufMemType` and `de_Mask`, each with its own presence flag.
+- RDB filesystem `de_MaxTransfer` (not Dolly's raw backend transfer limit);\n- `de_NumBuffers`, `de_BufMemType`, `de_Mask`, `de_SizeBlock`, `de_SectorPerBlock`, `de_Reserved` and `de_PreAlloc`, with explicit field origin and availability.
 
 Each field contains a stable key, display label, unit, typed value (`uint64_t` or text), data origin (`RDB_PART` or `DERIVED`), and an availability flag. Missing DosType and missing MaxTransfer are intentionally distinct from numeric zero. Overflow during end-offset computation is presented as unavailable.
 
@@ -40,10 +40,23 @@ The standalone `dolly_inventory_partition` C99 source and test passed local GCC 
 
 ## Incremental providers added (November 2026)
 
-The common callback now supports three provenance types beyond computed values: `RDB PART`, `MBR`, and `RDSK` header. The MBR provider emits 7 fields; the RDB header provider emits 7; and the partition provider emits 12. These are **preliminary**, not exhaustive.
+The common callback now supports three provenance types beyond computed values: `RDB PART`, `MBR`, and `RDSK` header. The MBR provider emits 7 fields; the RDB header provider emits 7; and the partition provider emits 16. These are **preliminary**, not exhaustive.
 
 Availability states distinguish `present`, `not present`, `not queried`, `unsupported` and `inconsistent`. Only `present` is currently generated from parsed header fields; the others are reserved for deeper inspection providers and are not substitutes for observed failures.
 
 Cross-source contradictions (e.g. mounted vs on-disk settings) must report both values and their origins, never collapse them into one without explanation. `de_Mask` represents AmigaDOS's address mask; interpreting its safety requires identifying the real controller and buffer path.
 
 Local host unit verification for the extended streaming interface passed GCC/Clang. A full current-repository CTest run is **not yet independently confirmed**.
+
+### Evidence and trust model
+
+Every inventory field additionally carries `DollyInventoryEvidence`:
+
+| Evidence | Meaning |
+|---|---|
+| `DECLARED` | Recorded on disk (MBR/RDB/PART); does **not** prove the device currently uses it |
+| `OBSERVED` | Measured or queried from a running device/system (future providers) |
+| `DERIVED` | Calculated from other metadata, with bounds checks |
+| `ESTIMATED` | Approximation that should be explicitly labelled |
+
+The current MBR/RDB providers emit **declared** and **derived** only. Active controller limits, mounted filesystem options and actual I/O capabilities will require dedicated, read-only AmigaOS providers.
