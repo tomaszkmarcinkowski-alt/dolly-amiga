@@ -48,19 +48,19 @@ static void notice(const DollyResourceNotice *n,void *context){
 }
 int main(void){
     const DollyResourceSpec files[]={
-      {"Plugins/Devices/Good.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
-      {"Plugins/Devices/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
-      {"Plugins/Devices/WrongABI.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
-      {"Plugins/Devices/NoMetadata.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
-      {"Plugins/Devices/Unreadable.profile",DOLLY_RESOURCE_DEVICE_DATABASE},
-      {"Catalogs/polish/dolly.catalog",DOLLY_RESOURCE_CATALOG}
+      {"Plugins/Devices/Good.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3},
+      {"Plugins/Devices/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3},
+      {"Plugins/Devices/WrongABI.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3},
+      {"Plugins/Devices/NoMetadata.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3},
+      {"Plugins/Devices/Unreadable.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3},
+      {"Catalogs/polish/dolly.catalog",DOLLY_RESOURCE_CATALOG,3}
     };
     const DollyResourceSpec wrong_directory[]={
-      {"Plugins/GUI/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE}
+      {"Plugins/GUI/Old.profile",DOLLY_RESOURCE_DEVICE_DATABASE,3}
     };
     Fixture f={0};
     DollyResourceScanResult r=dolly_resources_scan_optional(
-        files,sizeof(files)/sizeof(files[0]),"Dolly-0.1.7+abc123",3,
+        files,sizeof(files)/sizeof(files[0]),"Dolly-0.1.7+abc123",
         probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_OK);
     assert(f.calls==6&&f.notices==5);
@@ -72,16 +72,24 @@ int main(void){
     assert(!strcmp(dolly_resource_kind_directory(DOLLY_RESOURCE_DEVICE_DATABASE),
                    "Plugins/Devices/"));
     r=dolly_resources_scan_optional(wrong_directory,1,"Dolly-0.1.7+abc123",
-                                     3,probe,&f,notice,&f);
+                                     probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_INVALID&&f.calls==6);
     r=dolly_resources_scan_optional(NULL,0,"Dolly-0.1.7+abc123",3,
                                      probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_OK);
-    r=dolly_resources_scan_optional(files,1,NULL,3,probe,&f,notice,&f);
+    r=dolly_resources_scan_optional(files,1,NULL,probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
-    r=dolly_resources_scan_optional(files,1,"Dolly-0.1.7+abc123",0,
+    r=dolly_resources_scan_optional(files,1,"Dolly-0.1.7+abc123",
                                       probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
+    {
+        DollyResourceSpec invalid_schema={
+            "Plugins/Devices/Good.profile",DOLLY_RESOURCE_DEVICE_DATABASE,0
+        };
+        r=dolly_resources_scan_optional(&invalid_schema,1,
+                   "Dolly-0.1.7+abc123",probe,&f,notice,&f);
+        assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
+    }
     puts("Optional assets require exact release, schema and integrity checks");
     return 0;
 }
