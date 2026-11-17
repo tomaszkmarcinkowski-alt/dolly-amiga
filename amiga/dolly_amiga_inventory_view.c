@@ -110,7 +110,6 @@ static struct Gadget *create_list(struct Gadget *previous,
                         GTLV_Labels,(ULONG)&v->rows,
                         GTLV_ShowSelected,(ULONG)NULL,
                         GTLV_Selected,(ULONG)~0ul,
-                        GA_Disabled,TRUE,
                         TAG_DONE);
 }
 static void draw_text(struct Window *w,struct DrawInfo *info,
