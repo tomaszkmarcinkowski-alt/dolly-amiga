@@ -164,3 +164,26 @@ Known limitations: fixed 20x6 logical grid, no true device I/O or
 non-synthetic progress; font/geometry edge cases and repeated resize
 memory behavior need testing. When an actual operation is in progress,
 state must be preserved across all layout changes.
+
+## Sheep Counter Hide semantics (M1.7 decision)
+
+Sheep Counter is an **auxiliary progress view**, not the owner of the
+running imaging/recovery operation. Its action button is labelled **Hide**,
+not Cancel or Exit. The window close gadget has the same meaning.
+
+- **Hide/close** dismisses only the Sheep Counter view and returns focus
+  to the main Dolly window. The core-owned operation continues unchanged,
+  including progress, errors and retries.
+- The main window will offer a way to reopen Sheep Counter and show the
+  current operation state. Closing the view is not an operation cancellation.
+- Pausing, stopping, or canceling a running operation requires an explicit
+  control in the operation-management UI with its own confirmation/safety
+  rules, not the Sheep Counter Hide action.
+- Current `dolly-sheep-window` is a **standalone synthetic executable**;
+  hiding its sole window necessarily ends that demo process because there
+  is no main window or independent core task yet. This is **not** a tested
+  implementation of background continuation or view reopening.
+
+The user confirmed the earlier M1.7 WinUAE build and that the resizable
+GadTools appearance is an acceptable minimum on MC68000, 512 KiB Chip,
+Kickstart 2.04. The subsequent Hide-label change is not yet retested.
