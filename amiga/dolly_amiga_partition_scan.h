@@ -6,7 +6,7 @@ typedef struct DollyNativePartition {
     char label[40];     /* RDB drive name, or explicit MBR entry */
     char summary[160];  /* formatted from validated on-disk fields */
     uint64_t start_bytes,length_bytes;
-    ULONG low_cyl,high_cyl,fs_block_bytes,dos_type;
+    ULONG low_cyl,high_cyl,fs_block_bytes,sectors_per_block,dos_type;
     UBYTE mbr_type;
     unsigned char is_rdb;
 } DollyNativePartition;
