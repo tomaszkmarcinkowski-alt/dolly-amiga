@@ -17,6 +17,16 @@ static ULONG le32(const UBYTE *p) {
     return (ULONG)p[0]|((ULONG)p[1]<<8)|
            ((ULONG)p[2]<<16)|((ULONG)p[3]<<24);
 }
+static int mul_checked(uint64_t a,uint64_t b,uint64_t *out) {
+    if(b && a>UINT64_MAX/b)return 0;
+    *out=a*b;
+    return 1;
+}
+static int add_checked(uint64_t a,uint64_t b,uint64_t *out) {
+    if(a>UINT64_MAX-b)return 0;
+    *out=a+b;
+    return 1;
+}
 typedef struct Reader {
     struct IOExtTD *io;
     UBYTE *buffer;
@@ -124,12 +134,14 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
             strcpy(out->status,"Invalid RDB geometry");
             return -1;
         }
-        cyl_bytes=(uint64_t)heads*(uint64_t)spt*
-                  (uint64_t)blockwords*4u;
-        begin=(uint64_t)base_lba*BLK+
-              (uint64_t)low*cyl_bytes;
-        length=((uint64_t)high-(uint64_t)low+1u)*cyl_bytes;
-        if(begin>r->total_bytes || !length ||
+        if(!mul_checked(heads,spt,&cyl_bytes) ||
+           !mul_checked(cyl_bytes,blockwords,&cyl_bytes) ||
+           !mul_checked(cyl_bytes,4u,&cyl_bytes) ||
+           !mul_checked(low,cyl_bytes,&begin) ||
+           !add_checked((uint64_t)base_lba*BLK,begin,&begin) ||
+           !mul_checked((uint64_t)high-(uint64_t)low+1u,
+                        cyl_bytes,&length) ||
+           begin>r->total_bytes || !length ||
            length>r->total_bytes-begin) {
             strcpy(out->status,"RDB partition outside media");
             return -1;
