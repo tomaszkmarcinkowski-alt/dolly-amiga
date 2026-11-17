@@ -862,6 +862,7 @@ int main(void) {
         (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
     };
     dolly_operation_init(&operation);
+    puts("M1.18 BOOT: entered main");
     /* Open the main UI idle. Starting a synthetic operation is explicit. */
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
     if(!IntuitionBase)return 10;
@@ -878,11 +879,13 @@ int main(void) {
        (ULONG)public_screen->Height<256ul)goto cleanup;
     screen_info=GetScreenDrawInfo(public_screen);
     if(!screen_info)goto cleanup;
+    puts("M1.18 BOOT: public screen ready");
     if(!open_view(&main_view,1,"Dolly - Main window (demo)",
                   12,(ULONG)public_screen->BarHeight+1ul,600,213))
         goto cleanup;
     draw_full(&main_view,1);
     refresh_main_selection();
+    puts("M1.18 BOOT: main window ready");
     /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
         WaitTOF();
