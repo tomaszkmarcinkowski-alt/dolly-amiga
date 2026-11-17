@@ -999,3 +999,21 @@ A verified device (`scsi.device` unit 0, UAE-IDE image) returned `RDB: 0 partiti
 ### M1.45 regression — confirmed four-partition image, incorrect zero output
 
 User confirmed the tested UAE-IDE image has four partitions. Initial screenshot displayed four list entries as `0:` with damaged captions and `RDB: 0 partition(s) declared`. Thus the earlier empty-list hypothesis was wrong and did not explain the defect. The native inventory renderer used `%u` for its list indices/count while existing working Amiga GUI code uses `%lu` with `(unsigned long)`; the affected formatting is now consistent with the working code. Added diagnostic `INVENTORY:` lines for scanner result/count and each raw partition label in the Amiga Shell. RDB/MBR default partition labels also use `%lu`. Re-test the same four-partition disk: require count 4 and all four correct labels before closing the incident. If raw diagnostic labels are also corrupt, the partition parser needs a separate correction; never misreport the medium as empty.
+
+## AN. M1.46 — Sheep Inventory: selected partition details
+
+| ID | WinUAE test | Expected |
+|---|---|---|
+| GUI-198 | Open four-partition UAE-IDE HDF, Inventory | Four correctly named entries; initial prompt on right |
+| GUI-199 | Click each partition | Selection remains active; right panel updates without a new disk read |
+| GUI-200 | RDB DOSx partition | Hex DosType, signed BootPri, MaxTransfer and Mask from PART DosEnvec |
+| GUI-201 | RDB short DosEnvec | Missing optional values displayed as unavailable, not zero |
+| GUI-202 | RDB cylinders and block size | Low/high cylinder, filesystem block bytes, SectorPerBlock and size in MiB |
+| GUI-203 | MBR image | MBR type and size; RDB-only fields marked not in MBR |
+| GUI-204 | Refresh/close/reopen | Selected row and text stay consistent; no stale gadgets |
+| GUI-205 | Main Dolly window | M1.41 approved layout unchanged, SHINEPEN build marker Dolly M1.46 |
+
+No native compile/WinUAE regression has yet been performed for M1.46.
+The view uses a saved, bounded read-only scan result; selection never sends
+additional device I/O and all displayed RDB fields are *declared* metadata,
+not an assertion about active filesystem/controller configuration.
