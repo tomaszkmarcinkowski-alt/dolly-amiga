@@ -24,7 +24,7 @@ The AmigaOS `MEMF_24BITDMA` memory attribute requests an address usable by some 
 
 The program **does not set** `dma_profile_verified` from the on-disk `de_Mask` alone. RDB values are declarations, not proof of the driver's real DMA constraints. The feature is not exposed as a user-selectable device operation yet.
 
-After allocation, the adapter checks that the buffer's first address satisfies the mask and alignment, and the transfer does not spill beyond allowed high address bits. A rejected address fails the open operation and cleans up allocated resources.
+After allocation, the adapter checks that the buffer's first address satisfies the mask and alignment, and that **every address within the transfer** is permitted by the profile's address aperture. The second check is done using a constant-space range bit-OR calculation, not a per-byte runtime loop. A rejected address fails the open operation and cleans up allocated resources.
 
 ## Mask calculation note
 
@@ -54,3 +54,9 @@ These checks are **necessary, not sufficient**. DMA bus routing, controller firm
 - [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8)
 
 **Safety rule:** no automatic physical disk I/O or destructive operation is enabled by these checks alone.
+
+## Important bug found during validation: sparse masks
+
+The first implementation checked only the first and last addresses of a DMA buffer. That method can incorrectly accept a transfer crossing a **forbidden hole** in an irregular mask even if both endpoints appear valid. A concrete regression uses start `0x00000FF0`, length `0x1020` and mask `0x00002FFE`: the original algorithm returned `OK` while the transfer passes addresses with the prohibited bit 12 set.
+
+The corrected policy evaluates the OR of **all address bit patterns across the interval**, then rejects any prohibited bit. The algorithm's result was compared with a deliberately simple byte-by-byte reference implementation for **6000 deterministic random cases**. GCC and Clang passed; GCC ASan/UBSan with leak checking also passed locally. See [DJ-0040](ENGINEERING_JOURNAL.md).
