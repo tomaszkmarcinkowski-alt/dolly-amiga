@@ -4,7 +4,7 @@ void dolly_endpoint_clear(DollyEndpoint *e) {
     if(e)memset(e,0,sizeof(*e));
 }
 int dolly_endpoint_set_unit(DollyEndpoint *e,unsigned d,unsigned u) {
-    if(!e || d>1u || u>1u)return 0;
+    if(!e || d>15u || u>15u)return 0;
     dolly_endpoint_clear(e);
     e->kind=DOLLY_ENDPOINT_UNIT;
     e->device=(uint8_t)d;
@@ -75,8 +75,11 @@ int dolly_demo_can_start(DollyDemoOperation op,
         source->kind==DOLLY_ENDPOINT_PARTITION) &&
        (target->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_PARTITION) &&
-       source->device==target->device &&
-       source->unit==target->unit &&
+       ((source->path[0] && target->path[0] &&
+         strcmp(source->path,target->path)==0) ||
+        ((!source->path[0] || !target->path[0]) &&
+         source->device==target->device &&
+         source->unit==target->unit)) &&
        (source->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_UNIT ||
         source->partition==target->partition))
