@@ -412,18 +412,22 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
         GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->selection_display,TAG_DONE);
 }
-/* A physical unit can only be identified by reading the real driver.
- * M1.21 still uses synthetic Device/Unit data for these modes, so no
- * SCSI command can safely be attributed to that selection yet.
- * Report unknown rather than inventing INQUIRY or capacity results.
+/* DosList supplies registered driver/unit candidates, not proof that
+ * a disk is present. Only explicit Query opens the driver and probes
+ * device geometry. A vendor name alone is not a verified disk size.
  */
 static void update_disk_info(DollyEndpointPicker *p) {
     if(!physical_choice(p)) {
         strcpy(p->disk_info_display,"Select unit...");
         strcpy(p->disk_size_display,"Unknown");
     } else if(!p->query_attempted) {
-        strcpy(p->disk_info_display,"Press Query");
-        strcpy(p->disk_size_display,"Not queried");
+        strcpy(p->disk_info_display,"Registered; press Query");
+        strcpy(p->disk_size_display,"Not verified");
+    } else if(!p->media_geometry.capacity_valid) {
+        /* Do not mistake a successful INQUIRY for proof of media. */
+        strcpy(p->disk_size_display,"Unknown");
+        if(!p->queried)
+            strcpy(p->disk_info_display,"Query failed / no media");
     }
     /* Successful Query results remain in their own two fields
      * through a resize; they are invalidated by changing selection.
@@ -719,10 +723,12 @@ static void change_enabled(DollyEndpointPicker *p) {
                           TAG_DONE);
     if(p->choose_button) {
         int ready=(p->mode==DOLLY_MODE_PHYSICAL &&
-                   physical_choice(p) && p->queried) ||
+                   physical_choice(p) && p->queried &&
+                   p->media_geometry.capacity_valid) ||
                   (p->mode==DOLLY_MODE_LOGICAL && p->has_logical) ||
                   (p->mode==DOLLY_MODE_PARTITION &&
                    physical_choice(p) && p->queried &&
+                   p->media_geometry.capacity_valid &&
                    p->partition_scanned && p->has_partition &&
                    p->partition<p->partition_count) ||
                   (p->mode==DOLLY_MODE_FILE &&
