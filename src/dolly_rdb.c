@@ -75,6 +75,10 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
    memset(p,0,sizeof(*p));p->descriptor_block=current;
    p->low_cylinder=low;p->high_cylinder=high;p->dos_type=dos;
    /* de_TableSize describes the last valid DosEnvec index. */
+   p->block_size_longwords=size_block;
+   p->sectors_per_block=be32(buf+128+4*4);
+   p->reserved_blocks=be32(buf+128+6*4);
+   p->preallocated_blocks=be32(buf+128+7*4);
    p->buffer_count_present = env_table_size>=11;
    p->buffer_memory_type_present = env_table_size>=12;
    p->dma_mask_present = env_table_size>=14;
