@@ -1,28 +1,21 @@
 # Milestone M0 — foundation
 
-**Goal:** establish repository, CI, portable read-only image probing, then design and test 64-bit BlockSource interfaces.
+**Goal:** establish repository, CI, portable read-only image probing and safe partition parsing.
 
 ## Sprint backlog
-1. [x] Public repository created.
-2. [x] Initial host-side read-only header probing prepared.
-3. [x] Publish source and configure CI (workflow outcome not independently confirmed here).
-4. [x] Preliminary host BlockSource API with 64-bit offset and unit tests.
-5. [x] Initial bounded read-only RDB/PART parser, shifted-container support and synthetic regression tests.
-6. [ ] Validate overlap among partitions and RDB reserved regions; parse nested MBR 0x76 automatically.
-7. [ ] Document 68000 compiler/toolchain build and verify native executable.
-8. [ ] Expand malformed/truncated IFF FORM DOLY fixture coverage.
-9. [x] Adopt MIT license and contributor policy.
+1. [x] Public repository and MIT license.
+2. [x] Read-only host image probe, `BlockSource` and tests.
+3. [x] Bounded read-only RDB/PART inspector and tests.
+4. [x] Primary MBR scan + PiStorm-style MBR type 0x76 nested RDB, with containment and overlap detection.
+5. [ ] Review extra hybrid MBR/RDB variations, GPT and EBR (explicitly unsupported today).
+6. [ ] Verify native Motorola 68000 build and AmigaOS I/O adapter.
+7. [ ] Expand damaged IFF FORM DOLY fixture coverage.
+8. [ ] Verify GitHub Actions workflow status.
 
-## Local host validation
-- `cmake -S . -B build && cmake --build build`
-- `ctest --test-dir build --output-on-failure`
-- 3/3 local CTest suites passed after integrating RDB parser.
+## Current host checks
+`cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`
 
-## Scope clarification
-`dolly-rdb` currently scans only a supplied ordinary file; no native Amiga device I/O, filesystem check or disk repair. Shifted RDB requires a user-supplied **byte offset**.
+Local validation: **4/4 CTest suites passed**.
 
-## Definition of Done
-- Feature builds and automated tests pass on supported CI host.
-- No unreviewed writes or device access.
-- Error paths and input-size boundaries tested.
-- Docs reflect actual implemented scope, not planned behavior.
+## Limitations
+Only regular file images are supported; no AmigaOS device I/O. Not all RDB reserved structures are checked. GPT/extended-MBR are unsupported. No on-device writes. Native 68000 build remains unverified.
