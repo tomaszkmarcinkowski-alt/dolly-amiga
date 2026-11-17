@@ -13,7 +13,7 @@ int dolly_endpoint_set_unit(DollyEndpoint *e,unsigned d,unsigned u) {
 }
 int dolly_endpoint_set_partition(DollyEndpoint *e,unsigned d,
                                  unsigned u,unsigned p) {
-    if(p>1u || !dolly_endpoint_set_unit(e,d,u))return 0;
+    if(p>15u || !dolly_endpoint_set_unit(e,d,u))return 0;
     e->kind=DOLLY_ENDPOINT_PARTITION;
     e->partition=(uint8_t)p;
     return 1;
@@ -48,6 +48,33 @@ int dolly_demo_needs_target(DollyDemoOperation op) {
     return op==DOLLY_DEMO_COPY || op==DOLLY_DEMO_RESTORE ||
            op==DOLLY_DEMO_CREATE_IMAGE;
 }
+/* Physical and partition endpoint paths share a stable
+ * "driver.device / Unit N" prefix; the optional third component
+ * identifies a partition. Do not confuse unit 1 with unit 10.
+ */
+static int same_physical_unit(const DollyEndpoint *a,
+                              const DollyEndpoint *b) {
+    const char *ua,*ub,*enda,*endb;
+    size_t len_a,len_b;
+    if(a->path[0] && b->path[0]) {
+        ua=strstr(a->path," / Unit ");
+        ub=strstr(b->path," / Unit ");
+        if(!ua || !ub)return 0;
+        ua+=8;ub+=8;
+        if(*ua<'0' || *ua>'9' || *ub<'0' || *ub>'9')
+            return 0;
+        enda=ua;
+        while(*enda>='0' && *enda<='9')++enda;
+        endb=ub;
+        while(*endb>='0' && *endb<='9')++endb;
+        if(*enda && strncmp(enda," / ",3)!=0)return 0;
+        if(*endb && strncmp(endb," / ",3)!=0)return 0;
+        len_a=(size_t)(enda-a->path);
+        len_b=(size_t)(endb-b->path);
+        return len_a==len_b && strncmp(a->path,b->path,len_a)==0;
+    }
+    return a->device==b->device && a->unit==b->unit;
+}
 int dolly_demo_can_start(DollyDemoOperation op,
                          const DollyEndpoint *source,
                          const DollyEndpoint *target) {
@@ -75,11 +102,7 @@ int dolly_demo_can_start(DollyDemoOperation op,
         source->kind==DOLLY_ENDPOINT_PARTITION) &&
        (target->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_PARTITION) &&
-       ((source->path[0] && target->path[0] &&
-         strcmp(source->path,target->path)==0) ||
-        ((!source->path[0] || !target->path[0]) &&
-         source->device==target->device &&
-         source->unit==target->unit)) &&
+       same_physical_unit(source,target) &&
        (source->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_UNIT ||
         source->partition==target->partition))

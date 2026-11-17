@@ -44,16 +44,18 @@ static void capacity_string(char *out,unsigned cap,uint64_t bytes) {
 }
 int dolly_amiga_device_query(const char *driver,ULONG unit,
                             char *name,unsigned name_capacity,
-                            char *size,unsigned size_capacity) {
+                            char *size,unsigned size_capacity,
+                            DollyMediaGeometry *geometry) {
     struct MsgPort *port=NULL;
     struct IOExtTD *io=NULL;
     struct DriveGeometry geom;
     struct SCSICmd sc;
     UBYTE *data=NULL;
     LONG rc;
-    int opened=0,have_capacity=0;
+    int opened=0,have_capacity=0,have_name=0;
     if(!name || !size || !name_capacity || !size_capacity ||
        !driver || !*driver)return 0;
+    if(geometry)memset(geometry,0,sizeof(*geometry));
     assign_string(name,name_capacity,"Unavailable");
     assign_string(size,size_capacity,"Unavailable");
     /* The generic disk picker never opens floppy tracks. carddisk
@@ -79,6 +81,11 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             (uint64_t)geom.dg_TotalSectors*
             (uint64_t)geom.dg_SectorSize);
         have_capacity=1;
+        if(geometry) {
+            geometry->block_count=geom.dg_TotalSectors;
+            geometry->block_bytes=geom.dg_SectorSize;
+            geometry->capacity_valid=1;
+        }
     }
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
     if(data) {
@@ -102,8 +109,12 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             if(vendor[0] && product[0]) {
                 sprintf(combined,"%s %s",vendor,product);
                 assign_string(name,name_capacity,combined);
-            } else if(product[0])assign_string(name,name_capacity,product);
-            else if(vendor[0])assign_string(name,name_capacity,vendor);
+                have_name=1;
+            } else if(product[0]) {
+                assign_string(name,name_capacity,product);have_name=1;
+            } else if(vendor[0]) {
+                assign_string(name,name_capacity,vendor);have_name=1;
+            }
         }
         if(!have_capacity) {
             ULONG last,block;
@@ -125,9 +136,16 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 last=read_be32(data);
                 block=read_be32(data+4);
                 if(last!=0xfffffffful &&
-                   block>=128ul && block<=65536ul)
+                   block>=128ul && block<=65536ul) {
                     capacity_string(size,size_capacity,
                        ((uint64_t)last+1u)*(uint64_t)block);
+                    have_capacity=1;
+                    if(geometry) {
+                        geometry->block_count=(uint64_t)last+1u;
+                        geometry->block_bytes=block;
+                        geometry->capacity_valid=1;
+                    }
+                }
             }
         }
     }
@@ -136,5 +154,5 @@ cleanup:
     if(data)FreeMem(data,64);
     if(io)DeleteIORequest((struct IORequest *)io);
     if(port)DeleteMsgPort(port);
-    return opened;
+    return opened && (have_name || have_capacity);
 }

@@ -17,6 +17,9 @@ int main(void) {
     assert(src.kind==DOLLY_ENDPOINT_UNIT);
     assert(dolly_endpoint_set_partition(&src,0,0,0));
     assert(dolly_endpoint_set_partition(&dst,0,0,1));
+    assert(dolly_endpoint_set_partition(&dst,0,0,15));
+    assert(!dolly_endpoint_set_partition(&dst,0,0,16));
+    assert(dolly_endpoint_set_partition(&dst,0,0,1));
     assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(dolly_endpoint_set_file(&src,"RAM:test.img"));
     assert(dolly_endpoint_set_file(&dst,"RAM:test.img"));
@@ -59,6 +62,13 @@ int main(void) {
     strcpy(dst.path,"scsi.device / Unit 0");
     assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     strcpy(dst.path,"uaehf.device / Unit 0");
+    assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
+    assert(dolly_endpoint_set_partition(&dst,1,0,2));
+    strcpy(dst.path,"scsi.device / Unit 0 / DH0");
+    assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
+    strcpy(dst.path,"scsi.device / Unit 1 / DH0");
+    assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
+    strcpy(dst.path,"scsi.device / Unit 10 / DH0");
     assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(dolly_demo_needs_target(DOLLY_DEMO_COPY));
     assert(!dolly_demo_needs_target(DOLLY_DEMO_SCAN));

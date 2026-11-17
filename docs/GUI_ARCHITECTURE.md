@@ -1143,3 +1143,59 @@ synchronous without a driver timeout, so the GUI may block if a
 driver never responds. Test only in controlled WinUAE with a test
 HDF before using real hardware, especially carddisk/SRAM.
 No RTG or memory profiling yet.
+
+
+### M1.28 — explicit Query gate and read-only RDB/MBR selection
+
+**Double-click acceptance is entirely removed** from every picker
+mode (Physical, Logical, Partition, File). A single selection only
+updates the provisional highlighted row. The **Use selection** button
+on the Physical device view stays disabled until an explicitly
+invoked **Query** returned verified device identity and/or capacity.
+When the driver/unit selection changes, that authorization and all
+previous values are invalidated. Logical and File keep their
+explicit Use selection workflow, without any double-click shortcut.
+
+Partition mode uses the same manual Query button, but does **not**
+enable Use selection after device identity alone. After successful
+Query and capacity discovery, Dolly performs bounded read-only sector
+reads to inspect **Amiga RDB** (RDSK plus checksummed PART chain) or
+a simple **MBR** (four primary entries). It allows selecting a
+partition only when the map is fully validated and one partition
+is highlighted. RDB names from PART records populate the third
+LISTVIEW, and MBR entries are labelled by ordinal number because
+MBR primary entries have no volume-name field. Missing/invalid/
+overlapping layouts leave the list empty and Use disabled.
+
+The approved two inline recessed rows stay intact:
+Selected device / Selected partition plus Query at upper-right,
+followed by independent Device name and Size fields. **Partition**
+adds a third, bottom recessed row, labelled Partition info, ahead
+of the action buttons. It displays the selected RDB volume name,
+capacity, DosType metadata (with FFS/OFS hint where applicable),
+LowCyl and HighCyl, block size and sectors-per-block. For MBR
+it shows size, type code, start LBA/count and logical block size;
+cylinder range and volume name are absent in ordinary MBR and must
+not be manufactured. Data are clipped visually to fit classic
+640x256 but remain stored untruncated for the current selection.
+
+The partition scanner reads only after a user clicks Query. It
+uses CMD_READ on a verified driver/unit, a single 512-byte Chip
+RAM sector buffer, and bounded up-to-16-block RDB discovery / 16
+partition nodes. It checks RDB checksums, chains, device bounds
+and overlap, and MBR signatures/bounds/overlap. The first version
+supports 512-byte logical sectors and whole-disk RDB or simple
+MBR primary partitions. **GPT, extended MBR, nested RDB inside
+MBR 0x76, hybrid layouts, and devices with sector size other than
+512 bytes are not yet supported**; never silently interpret them
+as valid writable targets. This is a read-only preview, and no
+imaging, formatting or filesystem modification operation is
+added. Existing portable parsers remain the reference for later
+more complete backend integration.
+
+Hardware interactions are synchronous and currently lack an
+I/O timeout. This branch is **not yet cross-compiled or tested
+in WinUAE** and should be tested only with disposable HDF images
+before enabling tests on real physical Amigas. Keep trackdisk
+excluded; carddisk present but postpone its SRAM-specific
+hardware tests. RTG and profiling tests are still deferred.
