@@ -991,3 +991,7 @@ Native cross-build and WinUAE tests remain pending; this is not media-write cert
 | GUI-197 | Main window and picker | Approved M1.41 layout unchanged; only build label M1.45 |
 
 This code has not been cross-compiled or tested in WinUAE. Device reads occur only after pressing Inventory Start and are limited to the existing read-only query/partition scanner. Partition labels and RDB fields are *declared metadata*, not independently verified filesystem state.
+
+### M1.45 regression — empty partition list (WinUAE screenshot)
+
+A verified device (`scsi.device` unit 0, UAE-IDE image) returned `RDB: 0 partition(s) declared`, but the initial Inventory LISTVIEW showed repeated `0:` and corrupted text. The fix skips LISTVIEW creation when the validated partition count is zero and paints `No partitions to display` as ordinary text. A nonempty LISTVIEW is now explicitly noninteractive and retains its view-owned nodes for its entire lifetime. Validate both zero-partition and actual multipartition disk images in WinUAE; the latter remains unverified. No source or disk data is changed.
