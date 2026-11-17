@@ -789,7 +789,9 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             else if(id==MAIN_SOURCE_ID) {
                 dolly_picker_close(&target_picker);
                 if(!dolly_picker_open(&source_picker,public_screen,0,
-                                      &selected_source,DOLLY_MODE_PHYSICAL))
+                                      &selected_source,
+                                      selected_operation==DOLLY_DEMO_RESTORE ?
+                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL))
                     dolly_picker_close(&source_picker);
                 update_main_actions();
             } else if(id==MAIN_TARGET_ID &&
