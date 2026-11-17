@@ -244,3 +244,24 @@ Safety boundaries:
 listing and explicit safe probing, including at least one device and
 one unsupported/no-medium outcome. RTG and memory profiling remain
 deferred by the user.
+
+## I. M1.24 inline labels and independently recessed disk size
+
+Current UI refinement (source and destination) on the 640x256
+reference screen. This change is independent of the M1.23 console
+probe and does not issue any new device commands.
+
+| ID | Mode / action | Expected |
+|---|---|---|
+| GUI-38 | Physical device, select unit | Upper inline label "Selected device", followed by recessed chosen endpoint |
+| GUI-39 | Partition, select a partition | Upper inline label "Selected partition", followed by recessed chosen hierarchy |
+| GUI-40 | Logical device | Upper inline label "Selected device", no redundant disk-identification row |
+| GUI-41 | File source and destination | Upper inline label "Selected file", pathname field same row, ASL and Use selection unchanged |
+| GUI-42 | Physical/Partition bottom row | Left label "Device name" and inset value, right label "Size" and separate inset value |
+| GUI-43 | No real physical probe in GUI | Identity says "Not queried (demo)" and Size "Unavailable", with no invented capacity |
+| GUI-44 | Resize picker and change modes | Size box stays right anchored, name box expands, labels do not overlap fields |
+| GUI-45 | File source details / destination format | "File info" and "Image format" labels remain beside their respective fields |
+| GUI-46 | Source and Destination selection + double click | Previously accepted commit, rollback and double click behavior preserved |
+
+**Pending:** Docker m68k compile and WinUAE confirmation. RTG remains
+deferred.
