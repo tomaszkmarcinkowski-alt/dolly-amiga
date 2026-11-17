@@ -52,7 +52,7 @@ def image_file(path):
         out.write(part)
         out.truncate(8192 * BLOCK)
 
-def main(layout, iff):
+def main(layout, iff, inventory):
     with tempfile.TemporaryDirectory(prefix='dolly-cli-') as directory:
         disk = Path(directory) / 'sd.img'
         archive = Path(directory) / 'test.dly'
@@ -63,6 +63,12 @@ def main(layout, iff):
         assert 'type=0C' in result.stdout and 'RDB block' in result.stdout
         assert 'MaxTransfer 0x7FFFFFFF' in result.stdout
         assert 'ABOVE_REFERENCE' in result.stdout
+        result = subprocess.run([inventory, str(disk)], capture_output=True, text=True)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert 'Sheep Inventory' in result.stdout
+        assert 'DH0' in result.stdout
+        assert 'MaxTransfer' in result.stdout
+        assert '0x444F5301' in result.stdout
         anno = b'abc'
         archive.write_bytes(b'FORM' + struct.pack('>I', 16) + b'DOLY' +
                             b'ANNO' + struct.pack('>I', 3) + anno + b'\x00')
@@ -73,9 +79,9 @@ def main(layout, iff):
                             b'ANNO' + struct.pack('>I', 65536) + anno + b'\x00')
         result = subprocess.run([iff, str(archive)], capture_output=True, text=True)
         assert result.returncode != 0 and 'IFF:' in result.stderr
-    print('Synthetic layout and IFF CLI smoke tests passed')
+    print('Synthetic layout, inventory and IFF CLI smoke tests passed')
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        sys.exit('Usage: test_cli_smoke.py DOLLY_LAYOUT DOLLY_IFF')
+    if len(sys.argv) != 4:
+        sys.exit('Usage: test_cli_smoke.py DOLLY_LAYOUT DOLLY_IFF DOLLY_INVENTORY')
     main(*sys.argv[1:])
