@@ -11,7 +11,8 @@ if(DOLLY_NATIVE_ONLY)
   add_executable(dolly-native-smoke
     amiga/dolly_native_smoke.c
     src/dolly_block_source.c src/dolly_rdb.c src/dolly_rdb_audit.c
-    src/dolly_inventory.c src/dolly_io_plan.c src/dolly_maxtransfer.c)
+    src/dolly_inventory.c src/dolly_io_plan.c src/dolly_maxtransfer.c
+    src/dolly_dma_policy.c)
   target_include_directories(dolly-native-smoke PRIVATE
     ${PROJECT_SOURCE_DIR}/include)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
