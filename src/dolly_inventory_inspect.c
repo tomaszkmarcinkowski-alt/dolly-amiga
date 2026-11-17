@@ -1,7 +1,7 @@
 /* Sheep Inventory: host read-only prototype for RDB PART objects. */
 #include "dolly_partition_map.h"
 #include "dolly_inventory.h"
-#include "dolly_maxtransfer.h"
+#include "dolly_inventory_notices.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,18 +24,14 @@ static int emit_field(const DollyInventoryField *f,void *ctx){
     }else{
         fprintf(out,"  %-23s %" PRIu64 " %s (source: %s)\n",f->label,f->number,f->unit,source);
     }
-    if(!strcmp(f->key,"sectors_per_block") &&
-       f->availability==DOLLY_INV_PRESENT && f->number!=1)
-        fprintf(out,"    WARNING: nonstandard de_SectorPerBlock (expected 1); inspect geometry\n");
-    if(!strcmp(f->key,"max_transfer")){
-        DollyMaxTransferClass category=dolly_maxtransfer_classify(
-            (uint32_t)f->number,f->availability==DOLLY_INV_PRESENT);
-        if(category==DOLLY_MT_ABOVE_REFERENCE ||
-           category==DOLLY_MT_INVALID_ZERO ||
-           category==DOLLY_MT_BELOW_REFERENCE)
-            fprintf(out,"    WARNING/NOTE: %s\n",dolly_maxtransfer_guidance(category));
-    }
     /* Origin is on-disk metadata; evidence distinguishes observed from declared. */
+    return ferror(out)?1:0;
+}
+static int emit_notice(const DollyInventoryNotice *notice,void *ctx){
+    FILE *out=(FILE *)ctx;
+    fprintf(out,"    [%s] %s: %s\n",
+            dolly_notice_severity_name(notice->severity),
+            notice->code,notice->message);
     return ferror(out)?1:0;
 }
 static void show_rdb(const DollyRdb *r,const char *type){
@@ -47,6 +43,8 @@ static void show_rdb(const DollyRdb *r,const char *type){
         printf("PART #%u\n",i+1);
         if(dolly_inventory_partition(&r->partitions[i],emit_field,stdout)!=0)
             fprintf(stderr,"Inventory rendering stopped\n");
+        if(dolly_inventory_partition_notices(&r->partitions[i],emit_notice,stdout)!=0)
+            fprintf(stderr,"Inventory warnings rendering stopped\n");
     }
 }
 static int parse_block(const char *s,uint32_t *n){
