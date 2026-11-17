@@ -43,7 +43,8 @@ DollyGuiLayout dolly_gui_plan(DollyGuiView view,DollyGuiScreen s,
     if((unsigned)view>=DOLLY_GUI_VIEW_COUNT ||
        !s.screen_width||!s.screen_height||
        s.screen_width>8192||s.screen_height>8192||
-       s.reserved_top+s.reserved_bottom>=s.screen_height||
+       s.reserved_top>=s.screen_height ||
+       s.reserved_bottom>=s.screen_height-s.reserved_top||
        s.border_left>128||s.border_right>128||
        s.border_top>128||s.border_bottom>128 ||
        (!good_font(preferred)&&!good_font(topaz8)))
