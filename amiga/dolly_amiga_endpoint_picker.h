@@ -12,12 +12,15 @@ typedef struct DollyEndpointPicker {
     struct Gadget *gadgets;
     struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
+    struct Gadget *format_cycle,*file_info;
     struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[2],unit_nodes[2],partition_nodes[2];
     struct Node logical_nodes[2];
     DollyEndpoint result;
     DollyEndpoint pending_file;
     char file_display[256];
+    char file_details[160];
+    DollyImageFormat output_format;
     unsigned device,unit,partition,logical;
     DollyEndpointMode mode;
     unsigned has_device,has_unit,has_partition,has_logical;
