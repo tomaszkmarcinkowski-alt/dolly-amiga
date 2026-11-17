@@ -419,3 +419,67 @@ Docker m68k build or WinUAE runtime test.
 ### M1.13 GadTools TEXT_KIND compile correction
 
 The first Docker m68k build reported `GTST_Border` undeclared. The source accidentally used STRING_KIND (`GTST_*`) tags for read-only TEXT_KIND controls. Updated all affected creation and runtime attributes to `GTTX_Text` and `GTTX_Border` according to AmigaOS V36 GadTools documentation. Percent and `current / total` remain TEXT_KIND, with view-owned buffers; Errors remains NUMBER_KIND. Native rebuild and WinUAE verification are still outstanding.
+
+### M1.14 — prevent interim old-size gadget painting during resize (unverified)
+
+Tester clarified that main-window GadTools button geometry is **correct
+after resizing**, but while dragging smaller the old-size button is
+temporarily painted and overlaps the new frame. This is **not** an
+incorrect minimum window width. Do not change the accepted dimensions
+or font/layout calculations to compensate.
+
+On AmigaOS 2.x, `IDCMP_SIZEVERIFY` arrives before interactive
+window sizing and `IDCMP_NEWSIZE` when complete. The M1.14
+two-window prototype now detaches its GadTools list in
+`IDCMP_SIZEVERIFY`, replies immediately, and rebuilds + reattaches
+it after `IDCMP_NEWSIZE`. A detached-state flag prevents duplicate
+`RemoveGList` and an invalid geometry retains a reattach path.
+Full custom rendering remains limited to layout/refresh; routine
+progress is incremental.
+
+Keep `WA_SmartRefresh`: Intuition already preserves obscured
+window pixels where possible. `GT_RefreshWindow` is called only
+after gadget insertion/reinsertion, not on each progress tick.
+This specific change is intended to avoid old-size gadget redraw
+during drag; it must be cross-compiled and tested on WinUAE
+MC68000 / 512 KiB Chip / Kickstart 2.04. It has **not** been
+runtime-validated.
+
+### Minimum window geometry must be content-derived (GUI policy, 2026-11-17)
+
+The tester confirmed the M1.14 resize behavior in WinUAE, but one
+placeholder label ("Sheep Counter is an auxiliary window.") slightly
+overlaps the frame at the current minimum size. The placeholder itself
+does not require special treatment; the general constraint is now
+**mandatory for future Dolly GUI work**:
+
+1. Measure the actual displayed font and label widths using the
+   window RastPort's `TextLength()` (or equivalent graphics text
+   measurement). Do not estimate English text widths from character count
+   or assume Topaz/8 for labels when the screen font is configurable.
+2. Account for native gadget dimensions and text, internal separation,
+   requested content padding, and the actual window borders from
+   `BorderLeft/Right/Top/Bottom`. Use 4px horizontal and 2px vertical
+   padding for non-square pixels, or 2px/2px for square pixels.
+3. Derive the window's minimum **outer** width and height from the
+   tightest permissible content layout plus the actual window chrome,
+   including a size gadget if used. Update constraints when the layout,
+   font, localization, screen geometry or visible controls change.
+4. Before accepting an `IDCMP_NEWSIZE` reflow, ensure every visible
+   control and *all mandatory text* fit inside the client rectangle.
+   Treat optional explanatory text separately: wrap, abbreviate or hide
+   it when too narrow, rather than clipping across the border.
+5. Preserve the current content-derived minimum under subsequent
+   resizes. Test the smallest width, smallest height, both minima
+   simultaneously, system-font changes, and longer translated labels.
+6. Never silently discard actions such as Hide/Quit to make a window
+   smaller. Prefer a higher minimum or a well-defined responsive layout.
+7. Retain native GadTools gadgets and update values with their native
+   attributes. Do not substitute repeated manual painting of text
+   for controls whose sizes and content can be managed by GadTools.
+
+The current demonstrator still contains hard-coded `MAIN_MIN_W/H`
+and `SHEEP_MIN_W/H`; it is not evidence that this general measurement
+policy is implemented yet. Incorporate a measurable layout preflight
+and corresponding boundary tests before treating the full GUI as
+release-ready.
