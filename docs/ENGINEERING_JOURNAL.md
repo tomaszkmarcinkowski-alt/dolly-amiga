@@ -482,12 +482,38 @@
 **Źródła:** [AmigaDOS Notification](https://wiki.amigaos.net/wiki/Notification), [IDCMP_NEWPREFS](https://wiki.amigaos.net/wiki/Intuition_Input_and_Output_Methods), [Intuition Screens](https://wiki.amigaos.net/wiki/Intuition_Screens), [ScreenNotify10 (Aminet)](https://aminet.net/package/util/libs/ScreenNotify10).
 
 
+### DJ-0047 · 2026-11-17 · Zakres produktu / GUI · DECYZJA ZAAKCEPTOWANA
+**Temat:** ReAction oraz MUI w formie opcjonalnych backendów nie muszą blokować MVP.
+
+**Decyzja:** jedynym GUI MVP będzie GadTools (AmigaOS 2.04+, 68000). ReAction (DOL-066) i MUI (DOL-067) stają się niezależnymi modułami planowanymi wyłącznie po MVP. Zachowujemy kontrakt bez zależności od żadnego toolkitu w silniku. Żadne wydanie MVP nie wymaga bibliotek, implementacji ani testów ReAction/MUI. [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14).
+
+**Wpływ:** mniejszy zakres MVP i mniej zależności na klasycznym sprzęcie. Pozostaje możliwość późniejszej obsługi GUI przez oddzielne moduły, gdy natywne ABI i loader zostaną sprawdzone.
+
+### DJ-0048 · 2026-11-17 · Organizacja instalacji / Assign · KONTRAKT M0 WDROŻONY, INSTALLER OTWARTY
+**Temat:** Program Dolly powinien wykorzystywać jedno przypisanie AmigaDOS `DOLLY:` niezależnie od bieżącego katalogu użytkownika.
+
+**Decyzja:** `DOLLY:` to logiczny katalog główny plików programu, katalogów językowych, instrukcji, presetów i przyszłych pluginów. Instalator docelowo utworzy przypisanie dla bieżącej sesji i zapyta o zgodę na trwały wpis w `S:User-startup`. Instalator musi szanować istniejące przypisania i nie duplikować wierszy. Do AmigaOS 2.04+ projektujemy klasyczny skrypt **Commodore Installer**, a nie pythonową Installation Utility AmigaOS 4. Czysty OS 2.04 może nie zawierać polecenia Installer, więc pakiet powinien uwzględniać bezpieczną instalację ręczną.
+
+**Implementacja:** `dolly_paths` buduje ścieżki zasobów w formie `DOLLY:<relative>` bez alokacji, blokując `../`, `.`, obce urządzenia/Assign, białe segmenty, znaki sterujące, za długie nazwy. `tests/test_paths.c` dodano do buildów standardowego i native-only; `dolly-native-smoke` również sprawdza bezpieczny przykład ścieżki i odrzucenie traversal. **Nie ma jeszcze** operacji tworzenia lub weryfikacji Assign w prawdziwym AmigaDOS.
+
+**Wynik testów:** lokalnie przetestowany bieżący plik modułu z testem pod **GCC, Clang i GCC ASan/UBSan: PASS**. Nie jest to potwierdzenie pełnego checkoutu GitHub ani m68k/WinUAE. [Issue #16](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/16), [specyfikacja](INSTALLATION.md).
+
+### DJ-0049 · 2026-11-17 · Błąd w walidacji ścieżki · POTWIERDZONY I POPRAWIONY
+**Temat:** Nieprawidłowe odrzucenie poprawnej ścieżki z powodu kończącego bajtu NUL.
+
+**Objaw:** pierwszy test `dolly_path_resource("Catalogs/dolly.catalog",...)` nie przechodził, ponieważ walidacja znaków sterujących odrzucała także terminator C `'\\0'`. Pierwotny moduł nie akceptował żadnej poprawnie zakończonej ścieżki.
+
+**Poprawka:** warunek traktuje jako niedozwolone jedynie rzeczywiste znaki napisu (gdy `ch != 0`); terminator kończy iterację zgodnie z kontraktem. Regresja zawiera poprawne nazwy oraz segmenty `..`, dwukropki i przekroczenie bufora.
+
+**Test:** po zmianie **GCC PASS, Clang PASS, GCC ASan/UBSan PASS** na lokalnym dokładnym odpowiedniku kodu modułu. Zmiana opublikowana w `src/dolly_paths.c`. Brak weryfikacji na kompilatorze m68k.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0047 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0050 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
