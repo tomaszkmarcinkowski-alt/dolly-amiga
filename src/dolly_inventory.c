@@ -59,3 +59,23 @@ int dolly_inventory_partition(const DollyPartition *p,
 #undef EMIT_NUMBER
     return 0;
 }
+
+/* Read-only stream for a primary MBR entry. No additional disk accesses. */
+int dolly_inventory_mbr_partition(const DollyMbrPartition *p,
+                                 DollyInventoryEmit emit,void *user){
+    int r;
+    if(!p||!emit)return -1;
+#define MBR_FIELD(k,l,u,v) do { \
+    r=numeric(emit,user,k,l,u,(uint64_t)(v),DOLLY_INV_MBR,DOLLY_INV_PRESENT); \
+    if(r)return r; \
+} while(0)
+    MBR_FIELD("mbr_type","MBR partition type","hex32",p->type);
+    MBR_FIELD("mbr_bootable","MBR active flag","boolean",p->bootable);
+    MBR_FIELD("mbr_first_lba","First LBA","sector",p->first_lba);
+    MBR_FIELD("mbr_sectors","Sector count","sectors",p->sector_count);
+    MBR_FIELD("mbr_start","Byte offset","bytes",p->start_bytes);
+    MBR_FIELD("mbr_length","Length","bytes",p->length_bytes);
+    MBR_FIELD("mbr_contains_rdb","Nested RDB recognized","boolean",p->contains_rdb);
+#undef MBR_FIELD
+    return 0;
+}
