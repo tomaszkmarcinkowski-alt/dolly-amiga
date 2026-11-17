@@ -15,17 +15,20 @@
 - [x] Synthetic CLI integration smoke test
 - [x] Host CTest suite: 8/8 locally with GCC; 7/7 Clang before adding CLI smoke; 7/7 sanitizer suite before adding CLI smoke
 - [x] CI configuration: GCC, Clang and sanitizer jobs (actual GitHub run status unconfirmed)
+- [x] First RDB de_MaxTransfer classification and CLI warning, with 0x1FE00 as conservative reference
+- [x] Standalone MaxTransfer classifier tested locally with GCC/ASan/UBSan; full integration build remains to be confirmed
 
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
 - [ ] Verify physical capacity detection, DMA alignment and controller Mask/MaxTransfer
+- [ ] Compare RDB MaxTransfer to active mountlist/DosList and driver-specific limits
 - [ ] Finish TD64 fallback strategy and media-change handling
 - [ ] Handle hybrid MBR/RDB variants and full RDB reserved metadata
 - [ ] Avoid large stack RDB structures on low-memory machines
 - [ ] Implement OFS/FFS structure validation before Smart Clone or repair
 - [ ] Finish complete DOLY chunk payload schemas, checksums and segment manifest
-- [ ] Refine/import remainder of the 58-story product backlog into GitHub issues/projects
+- [ ] Refine/import remainder of the 59-story product backlog into GitHub issues/projects
 
 ## Repeatable local commands
 
