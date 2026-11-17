@@ -10,6 +10,8 @@
 #include "dolly_maxtransfer.h"
 #include "dolly_dma_policy.h"
 #include "dolly_paths.h"
+#include "dolly_version.h"
+#include "dolly_selfcheck.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,6 +98,10 @@ static int run_selftest(void){
     char resource_path[80];
     int success=0;
     smoke_stage=7;
+    if(strstr(dolly_version_text(),"$VER: Dolly ")==NULL ||
+       memcmp(dolly_selfcheck_record,DOLLY_SELF_MAGIC,
+              DOLLY_SELF_MAGIC_SIZE)!=0)
+        goto cleanup;
     if(dolly_path_resource("Docs/Help.guide",resource_path,sizeof(resource_path))
        !=DOLLY_PATH_OK || strcmp(resource_path,"DOLLY:Docs/Help.guide")!=0)
         goto cleanup;
@@ -158,7 +164,7 @@ cleanup:
 }
 int main(int argc,char **argv){
     if(argc==2 && strcmp(argv[1],"--version")==0){
-        puts("Dolly M0 native smoke (read-only)");return 0;
+        puts(dolly_version_text());return 0;
     }
     if(argc==2 && strcmp(argv[1],"--selftest")==0){
         int result=run_selftest();
