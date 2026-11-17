@@ -1440,3 +1440,20 @@ and capacity audits. Where SCSI INQUIRY did not identify the model,
 the Device info field shows the sector size and evidence source.
 No writes, enumeration of arbitrary unit numbers or auto-probing have
 been added. Native compilation and WinUAE validation remain pending.
+
+### M1.44 — read-only Physical device details
+
+The accepted main-window geometry is unchanged; build marker is now
+`Dolly M1.44`. The Physical picker uses three lower rows, just as the
+Partition picker already did: Selected device, Device name/Size, and
+Geometry. The Geometry row shows the validated sector size and the
+provenance of the capacity check (`TD_GETGEOMETRY` or
+`SCSI READ CAPACITY(10)`). Its string is owned by DollyEndpointPicker;
+it refreshes after explicit Query, clears when selecting a different
+unit, and clips within its recessed text gadget. Partition mode keeps
+its existing third row (Partition info), with no extra fourth row.
+
+The physical commit path independently rechecks `capacity_valid`,
+not only the GadTools enabled state. Query never writes media; it does
+not certify the controller for future imaging or repair operations.
+Cross-build and visual testing remain pending.
