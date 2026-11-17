@@ -10,6 +10,24 @@ option(DOLLY_NATIVE_M68000 "Pass -m68000 for classic Motorola 68000" OFF)
 # Optional NDK compile target for the AmigaDOS preferences notification adapter.
 # This does not yet create a working GadTools event loop or plugin loader.
 option(DOLLY_NATIVE_GUI_WATCH "Compile AmigaDOS screen/font notify adapter (NDK required)" OFF)
+# Portable operation state is independent of every GUI and disk adapter.
+# Both host and Amiga cross-builds compile the same C99 implementation.
+enable_testing()
+add_library(dollyoperation STATIC src/dolly_operation_session.c)
+target_include_directories(dollyoperation PUBLIC ${PROJECT_SOURCE_DIR}/include)
+add_executable(test-operation-session tests/test_operation_session.c)
+target_link_libraries(test-operation-session PRIVATE dollyoperation)
+add_test(NAME operation_session_hide_does_not_cancel COMMAND test-operation-session)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyoperation PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(test-operation-session PRIVATE -UNDEBUG)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyoperation PRIVATE -m68000)
+    target_compile_options(test-operation-session PRIVATE -m68000)
+    target_link_options(test-operation-session PRIVATE -m68000)
+  endif()
+endif()
+
 if(DOLLY_NATIVE_ONLY)
   enable_testing()
   add_executable(dolly-native-smoke
