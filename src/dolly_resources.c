@@ -57,12 +57,16 @@ DollyResourceScanResult dolly_resources_scan_optional(
         if(observed.state==DOLLY_RESOURCE_READABLE &&
            observed.integrity_ok==1 && observed.release_id &&
            strcmp(observed.release_id,required_release)==0 &&
-           observed.format_version==item->expected_format)continue;
+           observed.format_version==item->expected_format &&
+           observed.actual_bytes==item->expected_bytes &&
+           observed.actual_crc32==item->expected_crc32)continue;
         result.disabled_kinds|=UINT32_C(1)<<(unsigned)item->kind;
         notice.required_release=required_release;
         notice.found_release=observed.release_id;
         notice.expected_format=item->expected_format;
         notice.found_format=observed.format_version;
+        notice.expected_crc32=item->expected_crc32;
+        notice.found_crc32=observed.actual_crc32;
         notice.missing_path=path;
         notice.disabled_feature=disabled[item->kind];
         notice.suggested_action=actions[item->kind];
@@ -80,7 +84,8 @@ DollyResourceScanResult dolly_resources_scan_optional(
             result.unverified_files++;
             notice.code="DOLLY_OPTIONAL_RESOURCE_UNVERIFIED";
             notice.headline="Nieznany paszport pliku - Dolly go nie uruchomi!";
-        }else{
+        }else if(strcmp(observed.release_id,required_release)!=0 ||
+                 observed.format_version!=item->expected_format){
             result.incompatible_files++;
             if(strcmp(observed.release_id,required_release)!=0){
                 notice.code="DOLLY_OPTIONAL_RESOURCE_VERSION_MISMATCH";
@@ -89,6 +94,10 @@ DollyResourceScanResult dolly_resources_scan_optional(
                 notice.code="DOLLY_OPTIONAL_RESOURCE_API_MISMATCH";
                 notice.headline="Inny format pliku - te owce mowia innym jezykiem!";
             }
+        }else{
+            result.unverified_files++;
+            notice.code="DOLLY_OPTIONAL_RESOURCE_CHECKSUM_MISMATCH";
+            notice.headline="Owce odkryly uszkodzony plik - dodatek wylaczony!";
         }
         if(report)report(&notice,report_context);
     }
