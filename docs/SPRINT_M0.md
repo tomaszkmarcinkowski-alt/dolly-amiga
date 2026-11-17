@@ -34,7 +34,7 @@
 
 ## Early Sheep Inventory foundation (non-blocking M0 experiment)
 
-- [x] Read-only streaming field providers for RDB/PART (16), primary MBR (7) and RDSK header (7), with provenance and units.
+- [x] Read-only streaming field providers for RDB/PART (17), primary MBR (7) and RDSK header (7), with provenance and units.
 - [x] Preliminary host `dolly-inventory` CLI using MBR, RDSK and nested PART including de_Mask and de_NumBuffers.
 - [x] Local GCC, Clang and ASan/UBSan standalone unit checks, including absent fields, overflow and cancellation.
 - [ ] Full current-repository CTest/Actions validation after integration.
@@ -42,6 +42,7 @@
 
 - [x] Preliminary streaming Sheep Inventory advisory codes: MaxTransfer, RDB overlap, de_SectorPerBlock, zero Mask and missing DosType.
 - [x] Standalone GCC/Clang tests for RDB and partition notice feeds, including early stop.
+- [x] Signed BootPri from RDB and local GCC/Clang/ASan/UBSan unit tests of the Inventory stream.
 
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
