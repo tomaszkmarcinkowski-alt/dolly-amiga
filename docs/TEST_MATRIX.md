@@ -926,3 +926,14 @@ M1.39 is not yet cross-compiled or WinUAE-tested.
 | GUI-167 | Resize and reopen main | No overlap or clipped status box; Quit and disabled Stop unchanged |
 
 M1.40 has not been cross-compiled or checked in WinUAE.
+
+## AI. M1.41 — horizontal-only resize and system SHINEPEN
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-168 | Resize Dolly vertically | Height remains unchanged |
+| GUI-169 | Resize Dolly horizontally | Width changes, controls remain correctly aligned |
+| GUI-170 | Build label | `Dolly M1.41` uses active screen SHINEPEN |
+| GUI-171 | Open main | No measured-minimum failure; unchanged compact footer |
+
+Not yet cross-compiled or tested in WinUAE.
