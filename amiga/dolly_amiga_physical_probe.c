@@ -89,7 +89,14 @@ static int bstr_copy(char *dest,ULONG cap,BPTR b) {
     if(!valid_bptr(b,1))return 0;
     bytes=(const UBYTE *)BADDR(b);
     n=bytes[0];
-    if(!n || n>=cap || !valid_bptr(b,n+1u))return 0;
+    if(!n || !valid_bptr(b,n+1u))return 0;
+    /* Some filesystem startup records store a terminating NUL
+     * within the length-prefixed name. The real text is then one
+     * byte shorter than the BSTR length. Accept only a final NUL,
+     * never an embedded NUL or other control character.
+     */
+    if(bytes[n]==0u)--n;
+    if(!n || n>=cap)return 0;
     for(i=0;i<n;++i) {
         UBYTE ch=bytes[i+1u];
         if(ch<33u || ch>126u)return 0;
