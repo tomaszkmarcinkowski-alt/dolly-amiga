@@ -211,3 +211,32 @@ succeeds. A rejected transient geometry with a still-valid previous
 gadget list now reports a warning rather than closing the viewer.
 This fix must be cross-compiled and independently retested on MC68000,
 512 KiB Chip, Kickstart 2.04. No test success is claimed yet.
+
+## M1.8 — system bar clearance and recessed progress grid (unverified)
+
+Tester confirms M1.7 resize now works at minimum width. The next
+visual refinement changes the system-screen default window geometry to
+**Top = Screen.BarHeight + 1**, **Height = Screen.Height - Top**,
+keeping the window bottom at the screen edge while avoiding the
+screen title bar's last pixel. This is calculated from the actual
+screen, not a hard-coded 640x256 rectangle.
+
+The fixed 20x6 / 120 synthetic map becomes **24x8 / 192 cells**,
+while both cell dimensions remain adaptive to the window client area.
+The map sits in a classic system-coloured **recessed bevel box**
+using GadTools `DrawBevelBoxA(..., GTBB_Recessed, TRUE)`; it is *not*
+a `LISTVIEW_KIND` gadget. GadTools listview is for rows of items and
+would not natively render/refresh 192 rectangular progress cells.
+`DrawBevelBoxA` is available since V36 and does not require
+AmigaOS 3.x. All cells continue to be drawn directly to the window,
+without an extra bitmap or own screen.
+
+Normal progress still only updates the old/new active cell, the
+changed progress-bar segment, and the GadTools number gadget.
+Only resize/exposure rebuilds the full map and recessed frame.
+The symbol `*` remains a placeholder for Dolly.
+
+No compilation or WinUAE run of M1.8 has been confirmed yet.
+Test especially **both minimum dimensions**, grid-frame clipping,
+system bar bottom pixel, and the memory report on MC68000,
+512 KiB Chip RAM, Kickstart 2.04.
