@@ -504,12 +504,32 @@ static void captions(DollyEndpointPicker *p) {
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         Move(rp,20,g.list_label_y);
         Text(rp,(STRPTR)"Registered DOS devices (read-only)",34);
-    } else {
-        Move(rp,20,g.file_label_y);
-        Text(rp,(STRPTR)"Selected file:",14);
+    }
+    /* Labels and recessed fields share a row, not separate vertical
+     * lines. The same placement works on the reference 640x256 screen.
+     */
+    if(p->mode==DOLLY_MODE_FILE) {
+        Move(rp,g.left,(LONG)g.path_y+12);
+        Text(rp,(STRPTR)"Selected file",13);
         if(p->role) {
-            Move(rp,20,g.format_label_y);
-            Text(rp,(STRPTR)"Image format:",13);
+            Move(rp,g.left,(LONG)g.format_y+12);
+            Text(rp,(STRPTR)"Image format",12);
+        } else {
+            Move(rp,g.left,(LONG)g.detail_y+12);
+            Text(rp,(STRPTR)"File info",9);
+        }
+    } else {
+        Move(rp,g.left,(LONG)g.preview_y+12);
+        if(p->mode==DOLLY_MODE_PARTITION)
+            Text(rp,(STRPTR)"Selected partition",18);
+        else
+            Text(rp,(STRPTR)"Selected device",15);
+        if(p->mode==DOLLY_MODE_PHYSICAL ||
+           p->mode==DOLLY_MODE_PARTITION) {
+            Move(rp,g.left,(LONG)g.disk_info_y+12);
+            Text(rp,(STRPTR)"Device name",11);
+            Move(rp,g.size_label_x,(LONG)g.disk_info_y+12);
+            Text(rp,(STRPTR)"Size",4);
         }
     }
     if(info)FreeScreenDrawInfo(p->screen,info);
