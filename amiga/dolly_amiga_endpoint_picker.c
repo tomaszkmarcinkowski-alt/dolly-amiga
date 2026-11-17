@@ -1004,6 +1004,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             }
             populate_units(p);
             invalidate_query(p);
+            populate_partitions(p);
             if(!rebuild(p))close=1;
             if(close)dolly_picker_close(p);
             return; /* never use a stale gadget ID after a rebuild */
@@ -1020,6 +1021,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                 p->gadgets_detached=1;
             }
             populate_units(p);
+            populate_partitions(p);
             if(!rebuild(p)){dolly_picker_close(p);return;}
             return;
         } else if(id==PICK_UNIT &&
