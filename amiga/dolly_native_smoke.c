@@ -9,6 +9,7 @@
 #include "dolly_io_plan.h"
 #include "dolly_maxtransfer.h"
 #include "dolly_dma_policy.h"
+#include "dolly_paths.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,7 +93,15 @@ static int run_selftest(void){
     DollyIoReadPlan plan;
     DollyBlockStatus status;
     unsigned fields=0;
+    char resource_path[80];
     int success=0;
+    smoke_stage=7;
+    if(dolly_path_resource("Docs/Help.guide",resource_path,sizeof(resource_path))
+       !=DOLLY_PATH_OK || strcmp(resource_path,"DOLLY:Docs/Help.guide")!=0)
+        goto cleanup;
+    if(dolly_path_resource("../SYS:Startup-Sequence",resource_path,
+                           sizeof(resource_path))!=DOLLY_PATH_INVALID_RELATIVE)
+        goto cleanup;
     smoke_stage=1;
     build_fixture();
     status=dolly_block_open_backend(sizeof(disk_bytes),mem_read,mem_close,
