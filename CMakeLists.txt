@@ -89,7 +89,8 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME cli_synthetic_smoke
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_cli_smoke.py
-      $<TARGET_FILE:dolly-layout> $<TARGET_FILE:dolly-iff>)
+      $<TARGET_FILE:dolly-layout> $<TARGET_FILE:dolly-iff>
+      $<TARGET_FILE:dolly-inventory>)
 endif()
 
 # Read-only analysis of filesystem de_MaxTransfer (not raw device transfer limit).
