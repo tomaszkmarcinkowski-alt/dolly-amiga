@@ -635,12 +635,21 @@
 **Odnośnik:** [DOL-074 / Issue #23](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/23).
 
 
+### DJ-0062 · 2026-11-17 · Pierwszy pełny WSL2 CTest / GadTools · BŁĄD POTWIERDZONY I POPRAWIONY
+**Temat:** Użytkownik uruchomił pełną hostową kompilację M0 na Windows 11 / WSL2 Ubuntu. Po poprawieniu wcześniejszego ostrzeżenia inicjalizacji CRC32 cały projekt został zbudowany i CTest zgłosił **27/28 PASS**. Jedyny nieudany test: `gadtools_640x256_font_fallback`, asercja w `tests/test_gui_layout.c:66` — oczekiwano `DOLLY_GUI_NO_FIT`.
+
+**Diagnoza:** na poprawnym ekranie, gdy zadana czcionka Screen Font jest za duża, a Topaz/8 niedostępny, `dolly_gui_plan_with_fonts()` wywołuje `dolly_gui_plan()` z dwiema niedostępnymi czcionkami. Funkcja mieszała brak dostępnych czcionek z niepoprawną geometrią wejściową i zwracała `DOLLY_GUI_BAD_INPUT` zamiast `DOLLY_GUI_NO_FIT`. Pozostałe 27 testów, w tym RDB, DMA, CRC32 i Amiga mock, przeszły.
+
+**Poprawka:** rozdzielono weryfikację geometrii i czcionek. `BAD_INPUT` oznacza teraz rzeczywiście niepoprawny ekran/parametry; `NO_FIT` oznacza poprawną geometrię, ale brak nadającej się czcionki. Dodatkowy test sprawdza oba stany oraz brak przysłaniania błędu geometrii przez brak czcionek.
+
+**Weryfikacja:** poprawka opublikowana na GitHubie, ale **powtórny CTest po aktualizacji nie został jeszcze zgłoszony przez użytkownika**. Uruchomić `git pull && cmake --build build-host --parallel 2 && ctest --test-dir build-host --output-on-failure`. Nie twierdzić przed otrzymaniem wyniku, że 28/28 przeszło. Nadal brak native m68k/WinUAE.
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0062 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0063 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
