@@ -201,16 +201,7 @@ static int populate_partitions(DollyEndpointPicker *p) {
         dst[n]='\0';
         memset(node,0,sizeof(*node));
         node->ln_Name=dst;
-        /* Keep each stage separately visible in AmigaShell; a last
-         * marker here localizes corruption to list-link manipulation.
-         */
-        printf("DOLLY M1.33 %s row=%u text=%s before AddTail\n",
-               p->role?"DEST":"SOURCE",i,dst);
-        fflush(stdout);
         AddTail(items,node);
-        printf("DOLLY M1.33 %s row=%u linked\n",
-               p->role?"DEST":"SOURCE",i);
-        fflush(stdout);
     }
     p->partition_bank=bank;
     return 1;
@@ -1036,15 +1027,6 @@ static void release_picker_gadgets(DollyEndpointPicker *p) {
     p->gadgets=NULL;
     p->gadgets_detached=1;
 }
-/* Temporary M1.31 trace of the source/destination Query path.
- * Always flush because WinUAE may stop before buffered output
- * reaches the AmigaShell window.
- */
-static void picker_trace(const DollyEndpointPicker *p,const char *phase) {
-    printf("DOLLY M1.31 %s %s\n",
-           p->role?"DEST":"SOURCE",phase);
-    fflush(stdout);
-}
 /* Rebuild ONLY after draining and replying to all GadTools messages.
  * V39 GTLV_ShowSelected makes list gadgets retain extra selection state;
  * destroying/relinking an active LISTVIEW during its GADGETUP handler
@@ -1160,17 +1142,14 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
          * point. Detach BEFORE changing list nodes and label buffers.
          */
         if(deferred==4) {
-            unsigned i;
             /* GadTools requires detaching the LABELS themselves before
              * changing List/Node/ln_Name. No RemoveGList/FreeGadgets or
              * CreateGadget is needed after a Query. Keeping the current
              * LISTVIEW_KIND intact also preserves V39 selection state.
              */
-            picker_trace(p,"Query: detach partition labels");
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Labels,(ULONG)~0ul,TAG_DONE);
-            picker_trace(p,"Query: device commands begin");
             p->query_attempted=1;
             p->queried=(unsigned char)dolly_amiga_device_query(
                   p->physical_names[p->device],
@@ -1178,45 +1157,28 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                   p->disk_info_display,sizeof(p->disk_info_display),
                   p->disk_size_display,sizeof(p->disk_size_display),
                   &p->media_geometry);
-            picker_trace(p,"Query: device commands returned");
             p->has_partition=0;
             p->partition_scanned=0;
             p->partition_count=0;
             if(p->queried && p->media_geometry.capacity_valid) {
-                picker_trace(p,"Query: partition scan begin");
                 p->partition_scanned=(unsigned char)
                     dolly_amiga_partition_scan(
                         p->physical_names[p->device],
                         p->physical_units[p->unit],
                         &p->media_geometry,
                         &p->partition_map);
-                picker_trace(p,"Query: partition scan returned");
                 if(p->partition_scanned)
                     p->partition_count=p->partition_map.count;
             } else {
                 strcpy(p->partition_map.status,
                        "Capacity unavailable; no partition scan");
             }
-            picker_trace(p,"Query: before partition list build");
-            printf("DOLLY M1.33 %s count=%u limit=%u bank=%u\n",
-                   p->role?"DEST":"SOURCE",p->partition_count,
-                   (unsigned)DOLLY_PART_MAX,p->partition_bank);
-            fflush(stdout);
             if(!populate_partitions(p)) {
                 p->partition_count=0;
                 p->partition_scanned=0;
                 strcpy(p->partition_map.status,"Too many partitions");
                 (void)populate_partitions(p);
             }
-            picker_trace(p,"Query: partition list built");
-            for(i=0;i<p->partition_count;++i) {
-                printf("DOLLY M1.32 %s PART %u name=%s label=%s\n",
-                       p->role?"DEST":"SOURCE",i,
-                       p->partition_map.parts[i].label,
-                       p->partition_list_labels[p->partition_bank][i]);
-                fflush(stdout);
-            }
-            picker_trace(p,"Query: reattach partition labels");
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Labels,(ULONG)&p->partition_lists[p->partition_bank],
@@ -1225,10 +1187,8 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             refresh_selection_preview(p);
             refresh_partition_details(p);
             change_enabled(p);
-            picker_trace(p,"Query: in-place update completed");
             return;
         }
-        picker_trace(p,"Selection: gadgets teardown");
         release_picker_gadgets(p);
         if(deferred==1 || deferred==2) {
             invalidate_query(p);
@@ -1236,10 +1196,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         } else if(deferred==3) {
             invalidate_query(p);
         }
-        picker_trace(p,"Rebuild: begin");
-        if(!rebuild(p)) {
-            picker_trace(p,"Rebuild: failed");
+        if(!rebuild(p))
             dolly_picker_close(p);
-        } else picker_trace(p,"Rebuild: completed");
     }
 }

@@ -793,3 +793,32 @@ WinUAE configuration**. Not yet tested: repeated Query, selecting
 another driver/unit after Query, alternating chooser roles repeatedly,
 or invalid/empty RDB. These remain pending before removing
 diagnostic traces or declaring the whole picker robust.
+
+## AB. M1.33 repeat interaction verification; M1.34 diagnostics cleanup
+
+The user confirmed that multiple cycles of selecting items, closing
+the chooser and reopening it work correctly after the M1.33
+double-buffered partition LISTVIEW fix. This extends the previously
+verified single Destination Query path with repeated interaction
+and window lifecycle behavior. The exact repetitions and failure
+cases were not separately itemized, so keep untested media formats,
+unsupported device I/O and AmigaOS 2.04 as pending.
+
+M1.34 removes only temporary M1.31-M1.33 AmigaShell debug trace
+prints, including per-node and per-Query messages. The live
+double-buffered List/Node/text banks, explicit Query gating,
+GTLV_Labels detach/reattach, persistent selection, numbered RDB
+names, and separate Device name/Size boxes remain unchanged.
+
+| ID | Test | Status |
+|---|---|---|
+| GUI-104 | Destination Query displays correct numbered RDB partitions | PASS on user WinUAE A1200/OS3.1 |
+| GUI-106 | Repeated selecting/opening/closing chooser | PASS per user report |
+| GUI-110 | Rebuild without M1.31–M1.33 shell trace | Pending M1.34 build |
+| GUI-111 | Repeat Destination Query after trace removal | Pending WinUAE |
+| GUI-112 | Reopen/close Source and Destination repeatedly in M1.34 | Pending WinUAE |
+| GUI-113 | Invalid RDB, MBR, no media, OS2.04 | Not yet verified |
+
+This is a trace-only cleanup and is not yet cross-compiled or
+tested in WinUAE. Continue controlled test-HDF use; RTG and RAM
+profiling remain deferred.
