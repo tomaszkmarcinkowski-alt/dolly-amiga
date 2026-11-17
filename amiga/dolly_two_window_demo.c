@@ -108,9 +108,10 @@ static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
     if(e->kind==DOLLY_ENDPOINT_FILE){
         text_copy(out,cap,e->path);return;
     }
-    sprintf(tmp,"Demo device %u / unit %u",e->device,e->unit);
+    sprintf(tmp,"Demo device %u / unit %u",
+            (unsigned)e->device,(unsigned)e->unit);
     if(e->kind==DOLLY_ENDPOINT_PARTITION)
-        sprintf(tmp+strlen(tmp)," / partition %u",e->partition);
+        sprintf(tmp+strlen(tmp)," / partition %u",(unsigned)e->partition);
     else
         strcat(tmp," (whole)");
     text_copy(out,cap,tmp);
@@ -677,6 +678,7 @@ static void update_main_actions(void) {
     if(main_view.start)
         GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
                           GA_Disabled,(ULONG)(active ||
+                          source_picker.window || target_picker.window ||
                           !dolly_demo_can_start(
                             (DollyDemoOperation)selected_operation,
                             &selected_source,&selected_target)),TAG_DONE);
@@ -755,19 +757,24 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         if(main_window) {
             if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID)*quit=1;
             else if(id==MAIN_SOURCE_ID) {
+                dolly_picker_close(&target_picker);
                 if(!dolly_picker_open(&source_picker,public_screen,0,
                                       &selected_source))
                     dolly_picker_close(&source_picker);
+                update_main_actions();
             } else if(id==MAIN_TARGET_ID &&
                       dolly_demo_needs_target(
                         (DollyDemoOperation)selected_operation)) {
+                dolly_picker_close(&source_picker);
                 if(!dolly_picker_open(&target_picker,public_screen,1,
                                       &selected_target))
                     dolly_picker_close(&target_picker);
+                update_main_actions();
             } else if(id==MAIN_OPERATION_ID && code<4u) {
                 selected_operation=code;
                 refresh_main_selection();
             } else if(id==MAIN_START_ID &&
+                      !source_picker.window && !target_picker.window &&
                       dolly_demo_can_start(
                         (DollyDemoOperation)selected_operation,
                         &selected_source,&selected_target)) {
@@ -843,8 +850,14 @@ int main(void) {
     while(!quit) {
         WaitTOF();
         process_view(&main_view,1,&quit);
-        dolly_picker_pump(&source_picker);
-        dolly_picker_pump(&target_picker);
+        {
+            int was_open=source_picker.window!=NULL ||
+                         target_picker.window!=NULL;
+            dolly_picker_pump(&source_picker);
+            dolly_picker_pump(&target_picker);
+            if(was_open && !source_picker.window && !target_picker.window)
+                update_main_actions();
+        }
         if(source_picker.changed) {
             selected_source=source_picker.result;
             source_picker.changed=0;
