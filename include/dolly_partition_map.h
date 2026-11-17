@@ -20,11 +20,14 @@ typedef struct DollyPartitionMap {
  unsigned partition_count;
  DollyMbrPartition primary[DOLLY_MBR_MAX];
  uint8_t has_whole_disk_rdb;
+ uint8_t hybrid_mbr_rdb; /* Both MBR and disk-wide RDB found. */
+ uint8_t hybrid_mbr_overlap; /* RDB data overlaps primary MBR partition. */
  DollyRdb whole_disk_rdb;
 } DollyPartitionMap;
 /* Read-only primary MBR scan; LBA units equal logical device block size.
  * RDB pointers are interpreted relative to the containing partition.
- * GPT, EBR and shared-offset hybrid layouts remain unsupported. */
+ * Can report simultaneous MBR and whole-disk RDB as an ambiguous hybrid.
+ * GPT/EBR and writing any hybrid layout remain unsupported. */
 DollyMapStatus dolly_partition_map_scan(DollyBlockSource *source,
  uint32_t device_block_bytes,DollyPartitionMap *out);
 const char *dolly_map_status_name(DollyMapStatus status);
