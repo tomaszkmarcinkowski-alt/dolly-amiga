@@ -30,6 +30,14 @@ if(DOLLY_NATIVE_ONLY)
       target_compile_definitions(dolly-native-smoke PRIVATE DOLLY_AMIGAOS_MEMORY_PROFILING)
     endif()
   endif()
+  # Real Intuition screen smoke, AmigaOS 2.x+ only. No device I/O.
+  if(DOLLY_NATIVE_M68000)
+    add_executable(dolly-screen-smoke amiga/dolly_screen_smoke.c)
+    target_compile_options(dolly-screen-smoke PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-screen-smoke PRIVATE -m68000)
+    target_link_libraries(dolly-screen-smoke PRIVATE amiga)
+  endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice
     src/dolly_dma_advice_cli.c src/dolly_dma_advice.c src/dolly_dma_policy.c)
