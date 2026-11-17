@@ -485,3 +485,24 @@ physical UI selections until query results are verified under WinUAE.
 READ CAPACITY(10) does not support >2 TiB: those drives remain
 unavailable pending READ CAPACITY(16) support. Commands use
 synchronous DoIO without timeout, so run only with a test HDF.
+
+## R. M1.26 WinUAE verified — A1200 IDE HDF
+
+Observed in WinUAE (Amiga 1200, AmigaOS 3.1, internal IDE using
+`scsi.device`, unit 0), after `--probe-driver scsi.device 0`:
+
+- Candidates: 3: `carddisk.device` unit 0, `scsi.device` unit 0,
+  `uaehf.device` unit 0. `trackdisk.device` excluded as agreed.
+- `TD_GETGEOMETRY`: `rc=-1`, `error=-1`,
+  `sectors=0`, `sector_bytes=0` — unusable on this controller.
+- `INQUIRY`: `rc=0`, `scsi=0`, `actual=36`,
+  `Device name: UAE-IDE rafael.hdf`.
+- `READ CAPACITY(10)`: `rc=0`, `scsi=0`, `actual=8`;
+  `Size: 1881 MiB`.
+
+Therefore PHYS-42, PHYS-43 and PHYS-44 have been **verified
+in WinUAE** for this configuration. This proves read-only capacity
+fallback works; it does not prove TD_GETGEOMETRY behavior on other
+controllers or a safe automatic GUI probe. Continue with a separate,
+bounded hardware-discovery GUI integration, retaining the M1.24
+`Device name` and `Size` recessed fields as independent values.
