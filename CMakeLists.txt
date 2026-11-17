@@ -453,3 +453,8 @@ add_test(NAME rdb_media_capacity_audit COMMAND test-capacity-audit)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-capacity-audit PRIVATE -UNDEBUG)
 endif()
+
+# Same audited capacity model is displayed in the read-only CLI tools.
+target_link_libraries(dolly-layout PRIVATE dollycapacity)
+target_link_libraries(dolly-rdb PRIVATE dollycapacity)
+target_link_libraries(dolly-inventory PRIVATE dollycapacity)
