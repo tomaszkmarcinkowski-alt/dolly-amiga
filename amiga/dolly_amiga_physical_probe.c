@@ -53,6 +53,9 @@ typedef struct InspectRecord {
     ULONG env_surfaces;
     ULONG env_blocks_per_track;
     ULONG unit;
+    ULONG driver_bptr,driver_addr,driver_memtype,driver_length;
+    UBYTE driver_sample[8];
+    unsigned driver_sample_count;
     char driver[DRIVER_LEN];
 } InspectRecord;
 static InspectRecord inspect_records[MAX_INSPECT];
@@ -95,6 +98,27 @@ static int bstr_copy(char *dest,ULONG cap,BPTR b) {
     dest[n]='\0';
     return 1;
 }
+/* Record only bounded, independently validated bytes from the BSTR
+ * address. We do not dereference a candidate that fails TypeOfMem.
+ * This distinguishes a bad BPTR from a long/non-ASCII BSTR.
+ */
+static void inspect_driver_bstr(InspectRecord *record,BPTR b) {
+    const UBYTE *bytes;
+    unsigned i,n;
+    record->driver_bptr=(ULONG)b;
+    if(!b || ((ULONG)b&0xc0000000ul))return;
+    bytes=(const UBYTE *)BADDR(b);
+    record->driver_addr=(ULONG)bytes;
+    record->driver_memtype=(ULONG)TypeOfMem((APTR)bytes);
+    if(!record->driver_memtype)return;
+    n=(unsigned)bytes[0];
+    record->driver_length=n;
+    if(!n || !valid_bptr(b,n+1u))return;
+    if(n>8u)n=8u;
+    for(i=0;i<n;++i)
+        record->driver_sample[i]=bytes[i+1u];
+    record->driver_sample_count=n;
+}
 static int driver_suffix(const char *name) {
     ULONG n=(ULONG)strlen(name),i;
     static const char suffix[]=".device";
@@ -133,6 +157,7 @@ static ExtractReason extract(const struct DosList *entry,
     if(env->de_TableSize<10ul || env->de_TableSize>256ul ||
        env->de_SizeBlock<64ul || env->de_SizeBlock>4096ul)
         return EXTRACT_BAD_GEOMETRY;
+    inspect_driver_bstr(record,f->fssm_Device);
     if(!bstr_copy(out->driver,sizeof(out->driver),f->fssm_Device))
         return EXTRACT_BAD_DRIVER_BSTR;
     strcpy(record->driver,out->driver);
@@ -183,6 +208,20 @@ static void report_inspection(void) {
         const InspectRecord *r=&inspect_records[i];
         printf("  %s: %s",r->dos_name,
                extract_reason_names[r->reason]);
+        if(r->reason==EXTRACT_BAD_DRIVER_BSTR) {
+            unsigned j;
+            printf(" [bptr=%08lx addr=%08lx mem=%08lx len=%lu",
+                   (unsigned long)r->driver_bptr,
+                   (unsigned long)r->driver_addr,
+                   (unsigned long)r->driver_memtype,
+                   (unsigned long)r->driver_length);
+            if(r->driver_sample_count) {
+                printf(" bytes=");
+                for(j=0;j<r->driver_sample_count;++j)
+                    printf("%02lx",(unsigned long)r->driver_sample[j]);
+            }
+            printf("]");
+        }
         if(r->env_tablesize || r->env_sizeblock) {
             printf(" (table=%lu blockwords=%lu heads=%lu spt=%lu",
                    (unsigned long)r->env_tablesize,
