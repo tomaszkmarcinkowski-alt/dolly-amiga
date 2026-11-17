@@ -960,6 +960,10 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
              * while GadTools is still displaying the previous list.
              * Rebuild both listviews after changing the parent driver.
              */
+            if(p->gadgets && !p->gadgets_detached) {
+                RemoveGList(p->window,p->gadgets,-1);
+                p->gadgets_detached=1;
+            }
             populate_units(p);
             if(!rebuild(p)){dolly_picker_close(p);return;}
             return;
