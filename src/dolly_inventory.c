@@ -44,6 +44,14 @@ int dolly_inventory_partition(const DollyPartition *p,
                 DOLLY_INV_DERIVED,
                 p->length_bytes<=UINT64_MAX-p->start_bytes
                   ? DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
+    EMIT_NUMBER("size_block_longwords","Filesystem block size","32-bit words",
+                p->block_size_longwords,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
+    EMIT_NUMBER("sectors_per_block","Sectors per block","count",
+                p->sectors_per_block,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
+    EMIT_NUMBER("reserved_blocks","DOS reserved blocks","blocks",
+                p->reserved_blocks,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
+    EMIT_NUMBER("preallocated_blocks","DOS preallocated blocks","blocks",
+                p->preallocated_blocks,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
     EMIT_NUMBER("buffers","Initial DOS buffers","count",
                 p->buffer_count,DOLLY_INV_RDB_PART,
                 p->buffer_count_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
