@@ -51,6 +51,10 @@ See [project scope](docs/SPECIFICATION.md), the [58-story backlog](docs/BACKLOG.
 
 Read the chronological [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md) for confirmed bugs, open hypotheses, fixes, regressions, hardware quirks and project easter eggs.
 
+## MaxTransfer audit
+
+Dolly's experimental read-only RDB tools now report per-partition `de_MaxTransfer` values and flag settings above conservative `0x1FE00`. See [MaxTransfer diagnostics](docs/MAXTRANSFER.md); no setting is changed automatically.
+
 ## Licensing
 Dolly source code is licensed under the **[MIT License](LICENSE)**. Software will remain free of mandatory fees. Gifts of retro-computing hardware are wholly voluntary and confer no entitlement.
 
