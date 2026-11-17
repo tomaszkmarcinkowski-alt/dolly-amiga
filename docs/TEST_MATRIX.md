@@ -962,3 +962,17 @@ M1.42 code not cross-compiled or WinUAE-tested; no real media writes enabled.
 | GUI-182 | Main Dolly window | Same approved M1.41 geometry, `Dolly M1.43` SHINEPEN label |
 
 Source changes not yet cross-compiled or tested in WinUAE. Device selection is not permission to perform writes.
+
+## AL. M1.44 — Physical device information (read-only)
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-183 | Source picker / Physical, before Query | Three rows under LISTVIEW; Geometry says `Press Query` |
+| GUI-184 | Query device with TD_GETGEOMETRY | Device name and size retained; Geometry says `N B/sector \| TD_GETGEOMETRY` |
+| GUI-185 | Query device with READ CAPACITY(10) fallback | Geometry says `N B/sector \| SCSI READ CAPACITY(10)` |
+| GUI-186 | Query fails or no capacity | Geometry says `Unavailable`; Use selection disabled |
+| GUI-187 | Device/unit changes and picker reopen | Previous geometry not reused for a different unit; Query required again |
+| GUI-188 | Partition mode and 640x256 screen | Partition details remain on third row and no overlap with LISTVIEW or buttons |
+| GUI-189 | Main window | M1.41 layout remains frozen; SHINEPEN version reads `Dolly M1.44` |
+
+Native cross-build and WinUAE tests remain pending; this is not media-write certification.
