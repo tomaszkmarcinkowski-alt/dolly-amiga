@@ -1,0 +1,78 @@
+# Dolly GUI architecture — GadTools + optional backends
+
+**Status 2026-11-17:** architecture and portable layout/notification components are in the repository. There is **no native GadTools window, ReAction/MUI module loader, verified 68000 binary or WinUAE run** yet.
+
+## GUI backends
+
+| Backend | Delivery | Requirement |
+|---|---|---|
+| GadTools | Built in; **always available** | AmigaOS 2.04+, MC68000 |
+| ReAction | Optional external module | Only if its classes/libraries are installed; do not assume availability on OS 2.x |
+| MUI | Future independent optional module | Only if installed, never mandatory |
+
+The versioned toolkit-neutral contract lives in `include/dolly_gui_backend.h`. It defines a core-owned host interface and a backend table for events/main window/notice/window relayout. **It is a design contract, not an implemented dynamic loader**. We must verify actual AmigaOS shared-library/LoadSeg ABI, compiler calling conventions, symbol lifetime and packaging before describing modules as loadable plugins. Backend failure must show a brief message and revert to built-in GadTools, never fail to launch Dolly.
+
+## Screen resolution and font policy
+
+Mandatory **640x256, topaz.font/8** baseline for every built-in GadTools window and warning, considering outer dimensions (title, gadgets, borders, buttons). Prefer practical 640x200 compatibility. Existing `dolly_gui_layout` is a *portable geometry preflight*, not a real pixel-precise GadTools renderer.
+
+Font selection priority:
+
+1. Explicitly enabled **Dolly custom font**, if available and its measured content fits.
+2. Actual current **system Screen Font**, when the user has not selected a custom font or custom font does not fit.
+3. **topaz.font/8 fallback** if the screen or custom font would clip a view; use a compact, paginated layout if needed.
+
+The actual font of a public screen's title/menu is owned by Intuition and **cannot be changed by Dolly**. Use `Screen.Font` / `GetScreenDrawInfo(...)->dri_Font` as appropriate and real glyph measurements (e.g. `TextLength`, `TextExtent`) rather than assuming that a proportional font has fixed-width cells. The portable layout receives conservative measured cell/line metrics plus exact measured title and border dimensions. The renderer must **clip all text**, truncate/scroll/paginate lengthy diagnostics and reserve a permanently reachable button row. If even compact Topaz/8 cannot fit, do **not** open an inaccessible window; provide a safe alternative (CLI or short explanation on a usable screen).
+
+## Live screen/font change notifications — verified API distinctions
+
+### System preferences file changes
+
+AmigaDOS `StartNotify()` / `EndNotify()` is available from **V36 (AmigaOS 2.x)**. Monitor:
+- `ENV:sys/screenmode.prefs`
+- `ENV:sys/screenfont.prefs`
+
+This alerts Dolly when preferences files change. **It does not guarantee** that Intuition has already reopened Workbench or that the same `Screen*` is valid. `IDCMP_NEWPREFS` alone is insufficient for newer font/screen settings.
+
+Experimental adapter `amiga/dolly_amiga_pref_notify.c` uses a private Exec message port, `NRF_SEND_MESSAGE | NRF_WAIT_REPLY`, coalescing normalized events through `dolly_screen_watch_event()`. It replies to messages and calls EndNotify before releasing requests. StartNotify may fail when a particular prefs file does not exist; the failure leaves normal operation intact.
+
+**The adapter has not been compiled against AmigaOS NDK or exercised in WinUAE.**
+
+### Screen public lifecycle
+
+AmigaOS 3.1.4 does **not** have a confirmed built-in classic screen-open/close notification replacement for `screennotify.library`. Don't equate file change notifications with imminent screen closing.
+
+`screennotify.library` is a **separately installed optional third-party library** used by existing OS 2.x–3.x applications to track public-screen lifecycle events. Dolly should attempt to open it dynamically if installed; no hard dependency. Exact message protocol/function table and safe deregistration need confirmation from the library's SDK/source; **do not invent numeric function offsets**. Integrating it is still pending.
+
+When a public screen is about to close, close or detach Dolly windows promptly and **invalidate any old screen pointer**. After the screen is available, reacquire via `LockPubScreen()`, obtain real border/font metrics and rebuild views. Repeated notifications should be coalesced, and window state/operation progress retained, without recreating windows during partial screen reset.
+
+### Fallback when no ScreenNotify is available
+
+Revalidate current screen geometry on open, activation/resize, changes in Dolly font settings and ordinary preference notifications. For extra safety, a **bounded deferred retry** can attempt to reacquire the public screen on the UI task when a preference change is pending; avoid busy-polling and requester loops. If the screen is unavailable, keep the UI suspended and report status when a usable screen returns. This does *not* guarantee that every external screen close is detected in advance.
+
+## Planned native event loop
+
+1. On startup, subscribe using the available DOS notify adapter and optional ScreenNotify, then record the current screen/font geometry.
+2. Wait for Exec/Intuition/notification ports; drain all messages and reply to the appropriate owner.
+3. Feed `DollyScreenWatch`; reduce duplicate events.
+4. Before touching any screen, lock or otherwise validate it; no stale pointer use.
+5. Plan `custom -> Screen Font -> topaz/8` per view with real text/chrome measurements.
+6. Rebuild GadTools gadgets if necessary, preserve current task and window state.
+7. If no valid view fits, fail closed rather than create an off-screen requester.
+8. On shutdown, EndNotify active requests, drain/reply messages, deregister ScreenNotify, then close ports/libraries.
+
+## Verification required
+
+- Unit tests: `tests/test_gui_layout.c` checks all seven view types, 640x256 / 640x200, font preference order, oversized fonts and minimum bounds.
+- Unit tests: `tests/test_screen_watch.c` checks coalesced events, screen close/reopen, no rendering while invalid, and missing optional notification library.
+- **Not yet verified:** CTest of complete current `main`, actual gadget bounds, real window border/title size, proportional font strings, NDK build, and OS 2.04/3.1/3.1.4/3.2 WinUAE tests.
+- Critical acceptance: capture screenshots of every GadTools view and warning in 640x256/topaz8 without clipped text, unreachable buttons or windows exceeding screen bounds.
+
+### References
+
+- [AmigaOS Preferences](https://wiki.amigaos.net/wiki/Preferences)
+- [AmigaDOS file notification](https://wiki.amigaos.net/wiki/Notification)
+- [Intuition window IDCMP_NEW PREFS constraints](https://wiki.amigaos.net/wiki/Intuition_Input_and_Output_Methods)
+- [Intuition Screens font rules](https://wiki.amigaos.net/wiki/Intuition_Screens)
+- [ScreenNotify 1.0 (Aminet)](https://aminet.net/package/util/libs/ScreenNotify10)
+- [Issues #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14) and [#15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15)
