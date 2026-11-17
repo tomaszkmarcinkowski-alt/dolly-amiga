@@ -179,13 +179,15 @@ static void populate_partitions(DollyEndpointPicker *p) {
     unsigned i;
     init_list(&p->partitions);
     for(i=0;i<p->partition_count;++i) {
+        char volume[40];
         /* On-disk PART chain order is already preserved by scan_rdb.
-         * Prefix only the displayed LISTVIEW strings; keep the raw
-         * volume label for Selection, Partition info and endpoints.
-         * Neither the RDB itself nor its order is modified.
+         * Copy the original name outside the picker-owned structure
+         * before formatting, avoiding GCC -Wrestrict alias warnings.
+         * Prefix only the displayed LISTVIEW string; the volume
+         * name retained in the partition map is never modified.
          */
-        sprintf(p->partition_list_labels[i],"%u: %s",i+1u,
-                p->partition_map.parts[i].label);
+        strcpy(volume,p->partition_map.parts[i].label);
+        sprintf(p->partition_list_labels[i],"%u: %s",i+1u,volume);
         memset(&p->partition_nodes[i],0,sizeof(p->partition_nodes[i]));
         p->partition_nodes[i].ln_Name=p->partition_list_labels[i];
         AddTail(&p->partitions,&p->partition_nodes[i]);
