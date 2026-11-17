@@ -33,6 +33,10 @@ ctest --test-dir build --output-on-failure
 ## Plans and community
 See [project scope](docs/SPECIFICATION.md), [M0 sprint](docs/SPRINT_M0.md), [Retroware](RETROWARE.md) and [contributing](CONTRIBUTING.md).
 
+## Engineering journal
+
+Read the chronological [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md) for confirmed bugs, open hypotheses, fixes, regressions, hardware quirks and project easter eggs.
+
 ## Licensing
 Dolly source code is licensed under the **[MIT License](LICENSE)**. Software will remain free of mandatory fees. Gifts of retro-computing hardware are wholly voluntary and confer no entitlement.
 
