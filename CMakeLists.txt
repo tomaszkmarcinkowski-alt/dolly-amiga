@@ -15,7 +15,7 @@ target_link_libraries(test-probe PRIVATE dollyprobe)
 add_test(NAME file_probe COMMAND test-probe)
 
 # POSIX host backend; AmigaOS device backend will be separate.
-add_library(dollyblock STATIC src/dolly_block_source.c)
+add_library(dollyblock STATIC src/dolly_block_source.c src/dolly_file_source.c)
 target_include_directories(dollyblock PUBLIC ${PROJECT_SOURCE_DIR}/include)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyblock PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -47,3 +47,22 @@ endif()
 add_executable(test-partition-map tests/test_partition_map.c)
 target_link_libraries(test-partition-map PRIVATE dollymap)
 add_test(NAME partition_map_read_only COMMAND test-partition-map)
+
+# Plan device reads independently from actual driver backends.
+add_library(dollyioplan STATIC src/dolly_io_plan.c)
+target_include_directories(dollyioplan PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyioplan PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-io-plan tests/test_io_plan.c)
+target_link_libraries(test-io-plan PRIVATE dollyioplan)
+add_test(NAME io_64bit_planning COMMAND test-io-plan)
+
+# Fake Exec API catches adapter mistakes on host. This is NOT a 68000 build.
+add_executable(test-amiga-mock tests/test_amiga_device_mock.c
+  tests/amiga_mock/amiga_mock_exec.c amiga/dolly_amiga_source.c)
+target_compile_definitions(test-amiga-mock PRIVATE DOLLY_AMIGA_MOCK)
+target_include_directories(test-amiga-mock PRIVATE
+  ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan)
+add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
