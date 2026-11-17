@@ -607,12 +607,26 @@
 **Działanie:** poprawiono DOL-078 / [Issue #26](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/26) i powiązane [Issues #22, #24, #25](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues), backlog oraz dokumentację sprintu. **Zmiana jest polityką projektową: nie istnieje jeszcze implementacja i nie przeprowadzono testów natywnych.**
 
 
+### DJ-0060 · 2026-11-17 · AmigaOS 3.2 / montowanie obrazów · WYMAGANIA ZWERYFIKOWANE, BRAK IMPLEMENTACJI
+**Temat:** Montowanie plików obrazów Dolly przez wirtualne urządzenie AmigaOS bez dostarczania dodatkowego sterownika w MVP.
+
+**Weryfikacja:** Hyperion opisuje w AmigaOS 3.2 wbudowane **`trackfile.device`** i **`DAControl`** dla montowania, tworzenia, wymiany i wysuwania obrazów **ADF**. Dokumentacja nie potwierdza bezpośredniego montowania wszystkich RAW/HDF, archiwów XAD ani własnego IFF DOLY. XAD jest warstwą rozpakowania, zaś DOLY musi zostać zweryfikowany i — o ile reprezentuje obsługiwaną dyskietkę — przekonwertowany do tymczasowego ADF. Obrazy całych dysków z RDB/MBR nie są automatycznie kompatybilne z `trackfile.device`.
+
+**Decyzja:** DOL-079: montowanie w MVP wyłącznie na AmigaOS 3.2+ z natywnym mechanizmem ADF, bez narzucania zależności na AmigaOS 2.04. DOL-080: dopiero po MVP zbadamy rozwiązania dla starszych systemów, np. `fmsdisk.device` i `diskimage.device`; wydania tego drugiego mogą wymagać 68020+, czego nie wolno zakładać na docelowym 68000. Brak systemowej obsługi ma wyłączać tylko montowanie, nie pozostałe funkcje Dolly.
+
+**Bezpieczeństwo:** źródłowe IFF DOLY/XAD nie mogą być niepostrzeżenie zmieniane; przygotowywane ADF powinny być kopią roboczą. Montowanie i wysuwanie wymagają kontroli zajętej jednostki, zapisu/odmontowania, błędów obrazu i cyklu życia plików tymczasowych. W GUI GadTools wyświetlić powód niedostępności oraz sposób rozwiązania, także przy 640×256 Topaz/8.
+
+**Działanie:** [Issue #27](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/27), [Issue #28](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/28), Backlog DOL-079/080, Sprint M0. **Brak kodu montowania, natywnej kompilacji i testów WinUAE.**
+
+**Źródła:** [Hyperion AmigaOS 3.2](https://www.hyperion-entertainment.com/index.php/where-to-buy/direct-downloads/327-amigaos-32), [OpenAmiga diskimage.device](https://www.a500.org/main-menu/projects/diskimage-device.xhtml).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0060 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0061 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
