@@ -26,6 +26,7 @@ typedef struct DollyEndpointPicker {
     unsigned has_device,has_unit,has_partition,has_logical;
     unsigned role;
     unsigned char changed;
+    unsigned char gadgets_detached;
     char message[64];
 } DollyEndpointPicker;
 /* role: 0 source, 1 target. Two distinct, identical selectors. */
