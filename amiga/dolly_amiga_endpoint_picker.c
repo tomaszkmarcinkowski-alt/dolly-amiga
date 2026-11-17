@@ -37,6 +37,7 @@ extern struct DosLibrary *DOSBase;
 #define PICK_DISK_SIZE_TEXT 514u
 #define PICK_QUERY 515u
 #define PICK_PARTITION_INFO_TEXT 516u
+#define PICK_GEOMETRY_INFO_TEXT 517u
 
 static STRPTR image_formats[]={
     (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",NULL
@@ -86,6 +87,7 @@ typedef struct PickerGeometry {
     WORD left,right,full_width;
     WORD mode_x,mode_w;
     WORD list_y,list_h,action_y,preview_y,disk_info_y,partition_info_y;
+    WORD geometry_info_y;
     WORD browse_y,path_y,detail_y;
     WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
     WORD format_y;
@@ -111,7 +113,7 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
      * Logical: one panel. Give all reclaimed height to LISTVIEWs.
      */
     LONG preview=action-19;
-    LONG first=action-(p->mode==DOLLY_MODE_PARTITION?57:38);
+    LONG first=action-57;
     LONG list_top=66-lift;
     LONG height=(p->mode==DOLLY_MODE_PHYSICAL ||
                  p->mode==DOLLY_MODE_PARTITION ? first : preview)-
@@ -138,8 +140,10 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.preview_y=(WORD)(p->mode==DOLLY_MODE_PHYSICAL ||
                             p->mode==DOLLY_MODE_PARTITION ?
                             first:preview);
-    g.disk_info_y=(WORD)(p->mode==DOLLY_MODE_PARTITION ?
-                                 action-38:preview);
+    g.disk_info_y=(WORD)((p->mode==DOLLY_MODE_PARTITION ||
+                            p->mode==DOLLY_MODE_PHYSICAL) ?
+                            action-38:preview);
+    g.geometry_info_y=(WORD)preview;
     g.partition_info_y=(WORD)preview;
     g.browse_y=(WORD)list_top;
     g.path_y=(WORD)(105-lift);
@@ -245,6 +249,7 @@ static void invalidate_query(DollyEndpointPicker *p) {
     memset(&p->media_geometry,0,sizeof(p->media_geometry));
     memset(&p->partition_map,0,sizeof(p->partition_map));
     p->partition_info_display[0]='\0';
+    p->geometry_info_display[0]='\0';
     (void)populate_partitions(p);
 }
 static void make_logical_list(DollyEndpointPicker *p) {
@@ -429,8 +434,21 @@ static void update_disk_info(DollyEndpointPicker *p) {
         if(!p->queried)
             strcpy(p->disk_info_display,"Query failed / no media");
     }
-    /* Successful Query results remain in their own two fields
-     * through a resize; they are invalidated by changing selection.
+    if(!physical_choice(p))
+        strcpy(p->geometry_info_display,"Select unit...");
+    else if(!p->query_attempted)
+        strcpy(p->geometry_info_display,"Press Query");
+    else if(p->media_geometry.capacity_valid) {
+        const char *source=p->media_geometry.capacity_source==
+           DOLLY_GEOMETRY_TRACKDISK ? "TD_GETGEOMETRY" :
+           p->media_geometry.capacity_source==
+           DOLLY_GEOMETRY_SCSI_CAPACITY10 ? "SCSI READ CAPACITY(10)" :
+           "Unknown source";
+        sprintf(p->geometry_info_display,"%lu B/sector | %s",
+                (unsigned long)p->media_geometry.block_bytes,source);
+    } else strcpy(p->geometry_info_display,"Unavailable");
+    /* Successful Query results remain in view-owned buffers through
+     * resize; changing the selection invalidates them.
      */
 }
 static struct Gadget *disk_info_text(struct Gadget *last,
@@ -463,6 +481,21 @@ static struct Gadget *disk_size_text(struct Gadget *last,
                         GTTX_Text,(ULONG)p->disk_size_display,
                         GTTX_Border,TRUE,TAG_DONE);
 }
+static struct Gadget *geometry_info_text(struct Gadget *last,
+                                         DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    PickerGeometry g=picker_geometry(p);
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.geometry_info_y;
+    ng.ng_Width=g.value_w;ng.ng_Height=16;
+    ng.ng_GadgetID=PICK_GEOMETRY_INFO_TEXT;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTTX_Text,(ULONG)p->geometry_info_display,
+                        GTTX_Border,TRUE,GTTX_Clipped,TRUE,TAG_DONE);
+}
 static void refresh_disk_info(DollyEndpointPicker *p) {
     if(p->mode!=DOLLY_MODE_PHYSICAL &&
        p->mode!=DOLLY_MODE_PARTITION)return;
@@ -473,6 +506,9 @@ static void refresh_disk_info(DollyEndpointPicker *p) {
     if(p->disk_size_text && p->window)
         GT_SetGadgetAttrs(p->disk_size_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->disk_size_display,TAG_DONE);
+    if(p->geometry_info_text && p->window)
+        GT_SetGadgetAttrs(p->geometry_info_text,p->window,NULL,
+                          GTTX_Text,(ULONG)p->geometry_info_display,TAG_DONE);
 }
 static void update_partition_details(DollyEndpointPicker *p) {
     const char *text;
@@ -700,6 +736,10 @@ static void captions(DollyEndpointPicker *p) {
             Move(rp,g.size_label_x,(LONG)g.disk_info_y+12);
             Text(rp,(STRPTR)"Size",4);
         }
+        if(p->mode==DOLLY_MODE_PHYSICAL) {
+            Move(rp,g.left,(LONG)g.geometry_info_y+12);
+            Text(rp,(STRPTR)"Geometry",8);
+        }
         if(p->mode==DOLLY_MODE_PARTITION) {
             Move(rp,g.left,(LONG)g.partition_info_y+12);
             Text(rp,(STRPTR)"Partition info",14);
@@ -787,6 +827,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->disk_size_text=NULL;
     p->query_button=NULL;
     p->partition_info_text=NULL;
+    p->geometry_info_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -841,6 +882,11 @@ static int rebuild(DollyEndpointPicker *p) {
             if(!last)return 0;
             p->disk_size_text=last;
         }
+    }
+    if(p->mode==DOLLY_MODE_PHYSICAL) {
+        last=geometry_info_text(last,p);
+        if(!last)return 0;
+        p->geometry_info_text=last;
     }
     if(p->mode==DOLLY_MODE_PARTITION) {
         last=partition_info_text(last,p);
