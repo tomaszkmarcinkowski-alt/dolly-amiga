@@ -180,12 +180,24 @@
 **Test:** dodano syntetyczny rekord `PART` z `de_TableSize=12` do `tests/test_rdb.c`; pełny CTest po zmianach wciąż czeka na potwierdzenie. Nie przesądza to poprawności montowania takich partycji.
 
 
+### DJ-0020 · 2026-11-17 · RDB / zabezpieczenia · TESTY LOKALNE PASS; INTEGRACJA DO SPRAWDZENIA
+**Temat:** Niezależny audyt kolizji zakresów RDB obejmujący PART, RDSK i obszary partycji.
+
+**Problem:** poprzedni parser odczytywał poprawne checksumy i podstawowe granice, ale na poziomie całego dysku nie sprawdzał, czy dwie partycje RDB nakładają się lub obejmują blok nagłówka i deskryptora.
+
+**Działanie:** dodano `dolly_rdb_audit()`, flagi `OVERLAPPING_PARTS`, `HEADER_COLLISION`, `PART_COLLISION`, `OUTSIDE_CONTAINER` i `BAD_ARGUMENT`, testy oraz ostrzeżenia w `dolly-rdb` i `dolly-layout`. Sprawdzenia wykonywane wyłącznie na zakresach wcześniej zweryfikowanych; brak zapisów. Zob. [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
+
+**Testy:** odtworzony lokalnie wcześniejszy snapshot projektu + nowy moduł: GCC/CMake/CTest **5/5 PASS**; osobny test audytu na Clang z ASan/UBSan: **PASS**. Nie oznacza to weryfikacji całego aktualnego repozytorium po zmianach na GitHub.
+
+**Ograniczenia:** audyt nie interpretuje jeszcze `FSHD`, `LSEG`, `BADB`, `rdb_RDBBlocksLo/Hi` ani współdzielonych hybryd MBR/RDB. Zero flag nie jest certyfikatem zdrowego dysku.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0020 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0021 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
