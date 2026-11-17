@@ -233,3 +233,32 @@ and `SCREEN PASS/FAIL` output, or any compile/runtime error. A screen
 allocation can legitimately fail on a 512 KiB machine; record and analyze
 rather than increasing RAM. CloseScreen cleanup is mandatory. Do not claim
 a native PASS until the tester has run it under WinUAE.
+
+### M1.3 WinUAE screen result and fragmentation follow-up (2026-11-17)
+
+Tester reports native `dolly-screen-smoke` successfully opened and closed a
+320x256 two-bitplane Intuition screen on MC68000 / 512 KiB Chip /
+Kickstart 2.04. The first measured run was:
+
+```text
+SCREEN before chip=306760 largest=306160
+SCREEN opened chip=283800 largest=283712
+SCREEN closed chip=306760 largest=283544
+SCREEN PASS
+```
+
+The screen occupied **22960 bytes of free Chip RAM** while open;
+all 22960 bytes were returned after closing. However, the largest
+contiguous free block remained **22616 bytes smaller** than before
+the screen opened, despite unchanged total free memory. This
+may indicate fragmentation or other allocator/runtime behavior,
+not necessarily a leak. The first implementation's `SCREEN PASS`
+was based only on restoration of total free Chip RAM.
+
+The smoke tool now prints separate messages for free-RAM cleanup
+(PASS/FAIL) and largest-block changes (WARN/NOTE). Follow-up:
+run the screen test three times consecutively in the same WinUAE
+session and record `before/opened/closed` for each. Track whether
+the largest block stabilizes, shrinks repeatedly, or recovers.
+Do not treat an isolated `SCREEN PASS` as proof of fragmentation-free
+operation. No device or disk access is performed by this test.
