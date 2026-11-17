@@ -1308,3 +1308,29 @@ This is a main-window-only UI revision. Existing Source and
 Destination GadTools selection code, explicit Query, RDB/MBR,
 double-buffered partition nodes, and contextual Cycle lists are
 unchanged. Native cross-build and WinUAE layout verification pending.
+
+### M1.37 — compact main window and output image format
+
+The three-button row remains unchanged geometrically, but its middle
+button (ID MAIN_INVENTORY_ID) now has an **empty label** and remains
+permanently disabled. Inventory is already available as an Operation;
+the reserved button is a future placeholder, not a duplicate feature.
+
+Reduce the initial outer height of the Dolly main window from 213
+to **195 pixels** while retaining the accepted Operation/Info/
+Source/Destination/Progress positions and full recessed status panel.
+The main minimum client-height guard is 170 pixels, accounting for
+the status well ending at content offset 168. The window remains
+resizable and still uses the measured WindowLimits minimum.
+
+For **Create Image** only, when the selected Destination is a File,
+the recessed path field appends a display-only suffix from the
+committed endpoint image_format: (RAW), (HDF), (ADF), or (IFF DOLY).
+Example: `backup.hdf (HDF)`. This is format metadata selected
+in the Destination picker, never inferred from the extension.
+The committed file path remains unchanged. If the field is too
+narrow, trim its displayed path as needed to keep the suffix visible.
+Other operations and Source formatting remain unchanged.
+
+No changes to media I/O, operation eligibility or picker LISTVIEW
+lifetime. Native build and WinUAE visual verification pending.
