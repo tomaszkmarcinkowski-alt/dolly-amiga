@@ -262,3 +262,23 @@ session and record `before/opened/closed` for each. Track whether
 the largest block stabilizes, shrinks repeatedly, or recovers.
 Do not treat an isolated `SCREEN PASS` as proof of fragmentation-free
 operation. No device or disk access is performed by this test.
+
+### M1.3 follow-up native screen run (2026-11-17)
+
+A subsequent tester-supplied WinUAE screenshot shows:
+
+```text
+SCREEN before chip=306512 largest=283528
+SCREEN opened chip=283552 largest=283096
+SCREEN closed chip=306512 largest=283880
+SCREEN PASS: total free Chip RAM restored
+SCREEN NOTE: largest free block grew by 352 bytes
+```
+
+Total free Chip RAM returned to its initial value; transient
+screen allocation accounted for 22960 bytes. The largest free
+block increased by 352 bytes in this run, as opposed to the
+22616-byte decrease observed in the earlier run. Memory layout
+varies between runs, and these snapshots alone do not establish
+either an accumulating memory leak or absence of fragmentation.
+Further consecutive runs in the same emulator session are useful.
