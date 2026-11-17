@@ -259,3 +259,64 @@ separate possible enhancement and is not claimed here.
 Requires Docker m68k build and WinUAE verification (especially
 minimum-width/height resize and memory cleanup) on MC68000, 512 KiB
 Chip RAM, Kickstart 2.04. The prototype remains synthetic/no disk I/O.
+
+## DOL-004 — portable OperationSession groundwork (experimental)
+
+The new C99 `dolly_operation_session` module is independent of GUI,
+Intuition, POSIX, and disk/device I/O. It holds:
+- 64-bit total and completed block counters;
+- error and retry counters;
+- explicit idle/running/paused/completed/failed/cancelled state;
+- a separate `sheep_counter_visible` flag.
+
+`dolly_operation_hide_sheep_counter()` changes **only visibility**.
+It never pauses, cancels, or resets an active operation.
+When the view reopens it can read the same session's progress.
+Progress updates are monotonically bounded and disallowed while
+paused or after completion. Cancellation is exposed as a **separate**
+core control; no UI Hide event is allowed to call it.
+
+The module and its synthetic unit tests are included in ordinary and
+native-only CMake builds, with no physical device operations.
+A successful CTest run is still required before claiming native or host
+validation. The current standalone Sheep Counter demo is **not yet
+connected** to OperationSession. There is no background worker yet;
+continuing real operations after hiding the view remains future work.
+
+Next integration: construct the application's operation owner and shared
+session state, then feed the main window and Sheep Counter from that
+single source. Avoid creating a second operation when a view reopens.
+
+### Two-window execution model — explicit user decision (2026-11-17)
+
+**The main Dolly window remains open at all times when Sheep Counter
+is displayed.** Sheep Counter is opened as a **second Intuition
+window on the existing public screen** (not a replacement for the main
+view). It can be brought forward, hidden, then reopened without
+resetting or aborting the core-owned operation.
+
+Experimental native `dolly-two-window-demo` now exercises this
+architecture using a single `DollyOperationSession` in one process:
+the main window contains `Sheep Counter` (show) and `Quit demo`
+buttons; the auxiliary Sheep Counter has `Hide` and a close gadget.
+A shared synthetic 192-block operation progresses even while Sheep
+Counter is hidden. Reopening the view displays its latest progress.
+The main window remains allocated/open while the secondary view is
+shown or hidden. The user can terminate the test using `Quit demo`
+in the main window, not Hide in the auxiliary view.
+
+This early two-window diagnostic is intentionally **separate from**
+the accepted resizable GadTools Sheep Counter executable. The small
+auxiliary demonstration is not yet a transplant of the final scaled
+layout, and its progress repaint is preliminary. No disk/device I/O
+or real worker concurrency is involved; the operation progresses
+cooperatively in the main event loop. Cross-build and WinUAE native
+testing remain outstanding.
+
+Validation: MC68000 / 512 KiB Chip RAM / Kickstart 2.04 / Workbench
+640x256: open both views, Hide Sheep Counter, verify main counter
+continues, reopen Sheep Counter, verify it resumes at a nonzero
+current count, close Sheep Counter with its close gadget and finally
+Quit demo via main window. Check `Echo $RC` and absence of
+memory pressure/failures. Low-memory success must not be claimed
+before testing both windows open simultaneously.
