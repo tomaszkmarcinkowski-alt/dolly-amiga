@@ -36,6 +36,8 @@ int dolly_demo_can_start(DollyDemoOperation op,
                          const DollyEndpoint *target) {
     if((unsigned)op>3u || !source ||
        source->kind==DOLLY_ENDPOINT_NONE)return 0;
+    if(op==DOLLY_DEMO_RESTORE && source->kind!=DOLLY_ENDPOINT_FILE)
+        return 0;
     if(dolly_demo_needs_target(op) &&
        (!target || target->kind==DOLLY_ENDPOINT_NONE))return 0;
     if(dolly_demo_needs_target(op) && target &&
