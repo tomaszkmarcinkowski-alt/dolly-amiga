@@ -33,6 +33,7 @@ struct Library *GadToolsBase;
 #define MAIN_COUNT_ID 204u
 #define SHEEP_COUNT_ID 205u
 #define SHEEP_ERRORS_ID 206u
+#define SHEEP_PERCENT_ID 207u
 #define MAIN_MIN_W 300u
 #define MAIN_MIN_H 112u
 #define SHEEP_MIN_W 420u
@@ -41,7 +42,7 @@ struct Library *GadToolsBase;
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
     LONG pad_x, pad_y;
-    LONG controls_y, bar_y;
+    LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h;
     LONG grid_w, grid_h;
     LONG number_w, error_x, hide_x, hide_w;
@@ -49,7 +50,9 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *quit, *hide, *count, *errors;
+    struct Gadget *show, *quit, *hide, *count, *errors, *percent;
+    char block_label[40];
+    char percent_label[8];
     APTR visual;
     DemoLayout l;
 } DollyDemoView;
@@ -60,6 +63,32 @@ static struct TextFont *marker_font;
 static DollyOperationSession operation;
 static DollyDemoView main_view, sheep_view;
 
+/* Small bounded decimal rendering: avoids varargs/64-bit ABI formatting.
+ * GadTools copies/reads these stable view-owned strings as needed.
+ */
+static void append_u32(char **out,unsigned long n) {
+    char digits[11];
+    unsigned p=0;
+    do {
+        digits[p++]=(char)('0'+n%10ul);
+        n/=10ul;
+    } while(n && p<sizeof(digits));
+    while(p) *(*out)++=digits[--p];
+}
+static void update_labels(DollyDemoView *v) {
+    char *p=v->block_label;
+    unsigned long current=(unsigned long)operation.completed_blocks;
+    unsigned long total=(unsigned long)operation.total_blocks;
+    unsigned long percent=total ? current*100ul/total : 0ul;
+    append_u32(&p,current);
+    *p++=' '; *p++='/'; *p++=' ';
+    append_u32(&p,total);
+    *p='\0';
+    p=v->percent_label;
+    append_u32(&p,percent>100ul?100ul:percent);
+    *p++='%';
+    *p='\0';
+}
 static void fill(struct RastPort *rp,UWORD pen,
                  LONG x1,LONG y1,LONG x2,LONG y2) {
     if(x2<x1 || y2<y1)return;
@@ -104,6 +133,9 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         d.hide_x=d.right-d.hide_w+1;
         d.controls_y=d.bottom-15;
         d.bar_y=d.controls_y-26;
+        d.percent_w=46;
+        d.percent_x=d.right-d.percent_w+1;
+        d.bar_right=d.percent_x-7;
         grid_bottom=d.bar_y-7;
         d.grid_x=d.left+3;
         d.grid_y=d.top+19;
@@ -150,17 +182,35 @@ static struct Gadget *make_number(struct Gadget *last,DollyDemoView *v,
     return CreateGadget(NUMBER_KIND,last,&ng,
                         GTNM_Number,value,GTNM_Border,TRUE,TAG_DONE);
 }
+static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
+                                UWORD id,LONG x,LONG y,LONG width,
+                                char *value,ULONG border) {
+    struct NewGadget ng;
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=v->visual;
+    ng.ng_TextAttr=public_screen->Font;
+    ng.ng_LeftEdge=(WORD)x;
+    ng.ng_TopEdge=(WORD)y;
+    ng.ng_Width=(WORD)width;
+    ng.ng_Height=15;
+    ng.ng_GadgetID=id;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTST_String,(ULONG)value,
+                        GTST_Border,border,TAG_DONE);
+}
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     struct Gadget *last;
     DemoLayout *d=&v->l;
     LONG button_w;
     if(!calculate_layout(v,main_window))return 0;
+    update_labels(v);
     if(v->gadgets) {
         RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
         v->show=NULL;v->quit=NULL;v->hide=NULL;
-        v->count=NULL;v->errors=NULL;
+        v->count=NULL;v->errors=NULL;v->percent=NULL;
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
@@ -174,13 +224,13 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->controls_y,button_w,"Quit demo");
         if(!last)return 0;
         v->quit=last;
-        last=make_number(last,v,MAIN_COUNT_ID,d->left,d->bottom-15,
-                         d->number_w,(ULONG)operation.completed_blocks);
+        last=make_text(last,v,MAIN_COUNT_ID,d->left,d->bottom-15,
+                       d->number_w,v->block_label,TRUE);
         if(!last)return 0;
         v->count=last;
     } else {
-        last=make_number(last,v,SHEEP_COUNT_ID,d->left,d->controls_y,
-                         d->number_w,(ULONG)operation.completed_blocks);
+        last=make_text(last,v,SHEEP_COUNT_ID,d->left,d->controls_y,
+                       d->number_w,v->block_label,TRUE);
         if(!last)return 0;
         v->count=last;
         last=make_number(last,v,SHEEP_ERRORS_ID,d->error_x,d->controls_y,
@@ -191,6 +241,11 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->hide_w,"Hide");
         if(!last)return 0;
         v->hide=last;
+        last=make_text(last,v,SHEEP_PERCENT_ID,
+                       d->percent_x,d->bar_y-4,d->percent_w,
+                       v->percent_label,FALSE);
+        if(!last)return 0;
+        v->percent=last;
     }
     AddGList(v->window,v->gadgets,(ULONG)-1,-1,NULL);
     RefreshGList(v->gadgets,v->window,NULL,-1);
@@ -205,7 +260,7 @@ static void destroy_view(DollyDemoView *v) {
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
     v->show=NULL;v->quit=NULL;v->hide=NULL;
-    v->count=NULL;v->errors=NULL;
+    v->count=NULL;v->errors=NULL;v->percent=NULL;
 }
 static int open_view(DollyDemoView *v,int main_window,const char *title,
                      ULONG left,ULONG top,ULONG width,ULONG height) {
@@ -239,9 +294,13 @@ static void clear_client(DollyDemoView *v) {
 }
 static void update_numbers(DollyDemoView *v) {
     if(!v->window || !v->count)return;
-    /* No 64-bit truncation in the synthetic 192-block test. */
+    /* Keep both formatted strings in view-owned storage. */
+    update_labels(v);
     GT_SetGadgetAttrs(v->count,v->window,NULL,
-                      GTNM_Number,(ULONG)operation.completed_blocks,TAG_DONE);
+                      GTST_String,(ULONG)v->block_label,TAG_DONE);
+    if(v->percent)
+        GT_SetGadgetAttrs(v->percent,v->window,NULL,
+                          GTST_String,(ULONG)v->percent_label,TAG_DONE);
     if(v->errors)
         GT_SetGadgetAttrs(v->errors,v->window,NULL,
                           GTNM_Number,(ULONG)operation.errors,TAG_DONE);
@@ -296,12 +355,12 @@ static void draw_cell(unsigned idx,int active) {
 static void draw_progress_bar(void) {
     DemoLayout *d=&sheep_view.l;
     struct RastPort *rp=sheep_view.window->RPort;
-    LONG bar_w=d->right-d->left+1;
+    LONG bar_w=d->bar_right-d->left+1;
     LONG filled=(LONG)(operation.completed_blocks*
                        (unsigned long)(bar_w-2)/GRID_TOTAL);
-    fill(rp,system_pen(SHADOWPEN),d->left,d->bar_y,d->right,d->bar_y+7);
+    fill(rp,system_pen(SHADOWPEN),d->left,d->bar_y,d->bar_right,d->bar_y+7);
     fill(rp,system_pen(BACKGROUNDPEN),
-         d->left+1,d->bar_y+1,d->right-1,d->bar_y+6);
+         d->left+1,d->bar_y+1,d->bar_right-1,d->bar_y+6);
     if(filled>0)
         fill(rp,system_pen(FILLPEN),
              d->left+1,d->bar_y+1,d->left+filled,d->bar_y+6);
@@ -362,7 +421,7 @@ static void progress_view_update(unsigned old) {
     if(old<GRID_TOTAL)draw_cell(old,0);
     if(operation.completed_blocks<GRID_TOTAL)
         draw_cell((unsigned)operation.completed_blocks,1);
-    bar_w=d->right-d->left-1;
+    bar_w=d->bar_right-d->left-1;
     old_pixels=(LONG)(old*(unsigned long)bar_w/GRID_TOTAL);
     new_pixels=(LONG)(operation.completed_blocks*
                       (unsigned long)bar_w/GRID_TOTAL);
