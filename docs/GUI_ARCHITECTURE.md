@@ -662,3 +662,22 @@ discovery; the model cannot authorize physical writes.
 **Unverified:** M1.18 requires a fresh host endpoint regression test,
 m68k cross-build using the NDK in Docker, and WinUAE interaction tests.
 Do not claim that the user has already tested this version.
+
+### M1.18 repaint fix — changing endpoint type
+
+Confirmed user regression: switching the mode Cycle in Source or
+Destination removed the previous LISTVIEW_KIND gadgets from the
+Intuition gadget list, but **left their old pixels in the window
+RastPort**, causing overlapping graphical remnants. Removing a
+GadTools gadget does not automatically clear its last-drawn area.
+
+Before creating or attaching the next mode's gadgets, the picker now
+clears the actual client rectangle (bounded by the live
+`Window.BorderLeft/Right/Top/Bottom`) with the public screen
+`BACKGROUNDPEN`. The window's native title bar/borders are untouched.
+Afterwards it attaches and refreshes GadTools, re-evaluates enabled
+controls, and redraws mode labels. This happens only on initial view
+creation and type transitions, **not** on every progress tick. The same
+function handles both source and destination picker windows.
+
+Pending Docker m68k compilation and WinUAE runtime confirmation.
