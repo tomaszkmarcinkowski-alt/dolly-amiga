@@ -1,5 +1,6 @@
 /* Read-only host CLI for primary MBR and nested Amiga RDB inspection. */
 #include "dolly_partition_map.h"
+#include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -21,6 +22,18 @@ static void show_rdb(const DollyRdb *r,const char *indent){
   printf("%s  %-12s start=%" PRIu64 " bytes, length=%" PRIu64
          " bytes, DOS type=%08" PRIX32 "\n",indent,p->name,p->start_bytes,
          p->length_bytes,p->dos_type);
+  {
+   DollyMaxTransferClass level=
+       dolly_maxtransfer_classify(p->max_transfer_bytes,p->max_transfer_present);
+   if(p->max_transfer_present)
+    printf("%s    MaxTransfer 0x%08" PRIX32 " (%" PRIu32 " B): %s\n",
+           indent,p->max_transfer_bytes,p->max_transfer_bytes,
+           dolly_maxtransfer_class_name(level));
+   else printf("%s    MaxTransfer: unavailable\n",indent);
+   if(level==DOLLY_MT_ABOVE_REFERENCE ||
+      level==DOLLY_MT_INVALID_ZERO || level==DOLLY_MT_BELOW_REFERENCE)
+    printf("%s    %s\n",indent,dolly_maxtransfer_guidance(level));
+  }
  }
 }
 int main(int argc,char **argv){
