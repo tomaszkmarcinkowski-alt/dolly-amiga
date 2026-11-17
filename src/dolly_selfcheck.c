@@ -1,60 +1,27 @@
 #include "dolly_selfcheck.h"
-#include "dolly_checksum.h"
-#include <string.h>
-DollySelfCheckReport dolly_selfcheck_stream(
-    DollySelfRead reader,void *ctx,DollySelfCheckExpected expected){
-    DollySelfCheckReport report={0};
-    DollyChecksum checksum;
-    unsigned char chunk[1024];
-    if(!reader || !expected.running_release || !expected.manifest_release ||
-       !expected.running_release[0] || !expected.manifest_release[0] ||
-       expected.size==0){
-        report.result=DOLLY_SELF_INVALID;return report;
-    }
-    if(strcmp(expected.running_release,expected.manifest_release)!=0){
-        report.result=DOLLY_SELF_VERSION_MISMATCH;return report;
-    }
-    dolly_checksum_init(&checksum);
-    for(;;){
-        long count=reader(ctx,chunk,sizeof(chunk));
-        if(count<0 || (unsigned long)count>sizeof(chunk)){
-            report.result=DOLLY_SELF_READ_FAILED;return report;
-        }
-        if(count==0)break;
-        if(dolly_checksum_update(&checksum,chunk,(size_t)count)!=0){
-            report.result=DOLLY_SELF_READ_FAILED;return report;
-        }
-        if(checksum.bytes>expected.size){
-            report.actual_size=checksum.bytes;
-            report.result=DOLLY_SELF_SIZE_MISMATCH;return report;
-        }
-    }
-    report.actual_size=checksum.bytes;
-    report.actual_crc32=dolly_checksum_final(&checksum);
-    if(report.actual_size!=expected.size)
-        report.result=DOLLY_SELF_SIZE_MISMATCH;
-    else if(report.actual_crc32!=expected.crc32)
-        report.result=DOLLY_SELF_CRC_MISMATCH;
-    else report.result=DOLLY_SELF_OK;
-    return report;
-}
 const char *dolly_selfcheck_message(DollySelfCheckResult result){
     switch(result){
     case DOLLY_SELF_OK:
-        return "Dolly executable CRC32 and version match.";
+        return "Dolly version and embedded CRC32 passed.";
     case DOLLY_SELF_INVALID:
-        return "Missing or invalid Dolly checksum metadata. Disk functions disabled.";
+        return "Dolly integrity check is unavailable. Disk functions disabled.";
     case DOLLY_SELF_OPEN_FAILED:
-        return "Cannot open the running Dolly executable for checking. Disk functions disabled.";
+        return "Cannot locate/open the running Dolly executable. Disk functions disabled.";
     case DOLLY_SELF_READ_FAILED:
         return "Cannot read the Dolly executable completely. Disk functions disabled.";
     case DOLLY_SELF_VERSION_MISMATCH:
-        return "Dolly executable and release manifest are from different versions. Disk functions disabled.";
+        return "Dolly executable release does not match its embedded version.";
     case DOLLY_SELF_SIZE_MISMATCH:
-        return "Dolly executable file size differs from this release. Disk functions disabled.";
+        return "Dolly executable size does not match its expected structure.";
     case DOLLY_SELF_CRC_MISMATCH:
-        return "Wilki pogryzly Dolly! Executable checksum differs. Reinstall this release.";
+        return "Wilki pogryzly Dolly! Program file CRC32 is invalid. Reinstall Dolly.";
+    case DOLLY_SELF_RECORD_MISSING:
+        return "Dolly CRC32 record missing. Please reinstall the complete program.";
+    case DOLLY_SELF_RECORD_INVALID:
+        return "Dolly CRC32 record is invalid or inconsistent. Disk functions disabled.";
+    case DOLLY_SELF_RECORD_UNSTAMPED:
+        return "Dolly has not been stamped with its release CRC32. Disk functions disabled.";
     default:
-        return "Unknown self-check result. Disk functions disabled.";
+        return "Unknown Dolly self-check result. Disk functions disabled.";
     }
 }
