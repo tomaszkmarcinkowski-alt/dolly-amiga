@@ -82,8 +82,11 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.left=(WORD)left;
     g.right=(WORD)right;
     g.full_width=(WORD)(right-left);
-    g.mode_x=122;
-    g.mode_w=(WORD)(right-122);
+    /* Both role-specific captions are longer than the former
+     * "Select type:"; reserve space before the CYCLE gadget.
+     */
+    g.mode_x=250;
+    g.mode_w=(WORD)(right-250);
     g.list_y=66;
     g.list_h=(WORD)height;
     g.action_y=(WORD)action;
@@ -427,7 +430,10 @@ static void captions(DollyEndpointPicker *p) {
     SetDrMd(rp,JAM1);
     SetAPen(rp,info?info->dri_Pens[TEXTPEN]:1u);
     Move(rp,20,36);
-    Text(rp,(STRPTR)"Select type:",12);
+    if(p->role)
+        Text(rp,(STRPTR)"Select Destination Medium",25);
+    else
+        Text(rp,(STRPTR)"Select Source Medium",20);
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
         WORD x,w;
         unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
