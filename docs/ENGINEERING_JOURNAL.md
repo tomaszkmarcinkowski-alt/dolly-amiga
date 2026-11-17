@@ -644,12 +644,19 @@
 
 **Weryfikacja:** poprawka opublikowana na GitHubie, ale **powtórny CTest po aktualizacji nie został jeszcze zgłoszony przez użytkownika**. Uruchomić `git pull && cmake --build build-host --parallel 2 && ctest --test-dir build-host --output-on-failure`. Nie twierdzić przed otrzymaniem wyniku, że 28/28 przeszło. Nadal brak native m68k/WinUAE.
 
+### DJ-0063 · 2026-11-17 · M0 / pełny WSL2 CTest · 28/28 PASS — POTWIERDZONE PRZEZ UŻYTKOWNIKA
+**Wynik:** po aktualizacji źródeł zawierających poprawkę planera GadTools użytkownik potwierdził, że ponowny hostowy CTest pod Windows 11 / WSL2 Ubuntu **przeszedł w całości**. Zgłoszony poprzednio wynik 27/28 i błąd `NO_FIT` vs `BAD_INPUT` nie występuje już w tej konfiguracji. Przed poprawką jedynym nieudanym testem był `gadtools_640x256_font_fallback`.
+
+**Zakres:** pełna bieżąca konfiguracja hostowego `build-host` z **28 testami**, wykonywana przez użytkownika po `git pull` i przebudowie. Nie jest to dowód kompilacji m68k ani zgodności runtime AmigaOS.
+
+**Następny krok:** niezależne `DOLLY_NATIVE_ONLY=ON` na hoście, następnie `m68k-amigaos-gcc` i WinUAE/AmigaOS 2.04. Zapis wyników cross-build i wykonania native smoke osobno.
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0063 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0064 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
