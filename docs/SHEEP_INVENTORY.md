@@ -5,7 +5,7 @@
 ## Why a streaming model?
 Classic Amigas may have little free Fast RAM and very limited stack space. The first implementation emits one `DollyInventoryField` at a time via a callback; the GUI or CLI consumes each field immediately without allocating an inventory list or copying the entire RDB layout again.
 
-`dolly_inventory_partition()` currently emits 16 fields:
+`dolly_inventory_partition()` currently emits 17 fields:
 - Partition name and PART descriptor block;
 - DosType, low and high cylinder;
 - Start offset, byte length and end-exclusive offset;
@@ -40,7 +40,7 @@ The standalone `dolly_inventory_partition` C99 source and test passed local GCC 
 
 ## Incremental providers added (November 2026)
 
-The common callback now supports three provenance types beyond computed values: `RDB PART`, `MBR`, and `RDSK` header. The MBR provider emits 7 fields; the RDB header provider emits 7; and the partition provider emits 16. These are **preliminary**, not exhaustive.
+The common callback now supports three provenance types beyond computed values: `RDB PART`, `MBR`, and `RDSK` header. The MBR provider emits 7 fields; the RDB header provider emits 7; and the partition provider emits 17. These are **preliminary**, not exhaustive.
 
 Availability states distinguish `present`, `not present`, `not queried`, `unsupported` and `inconsistent`. Only `present` is currently generated from parsed header fields; the others are reserved for deeper inspection providers and are not substitutes for observed failures.
 
@@ -70,3 +70,9 @@ The current MBR/RDB providers emit **declared** and **derived** only. Active con
 `DollyInventoryNotice.code` is stable and nonlocalized, whereas the English message is provisional; localization and tailored suggestions will be added for GadTools. The warning feed is distinct from the raw `InventoryField` data stream, so clients can filter, group and display severity consistently.
 
 Local standalone compiler checks: C99 GCC + Clang **PASS**, ASan/UBSan for partition notices **PASS**, and GCC/Clang after adding RDB collision notices **PASS**. Full current GitHub Actions and native AmigaOS tests remain unverified.
+
+### Signed values and boot configuration
+
+The `PART` provider now reads `de_BootPri` (index 15), preserving its signed 32-bit interpretation. The field stream supports `DOLLY_INV_I64` with an explicit `signed_number` slot; it does not coerce a negative priority into a huge unsigned value. Absent fields remain marked as unavailable.
+
+Example test fixture: `de_BootPri=-5` appears as `-5 priority` in `dolly-inventory`. This value is **declared in RDB**, not proof of the current boot selection order. Host unit tests under GCC/Clang/ASan/UBSan passed locally.
