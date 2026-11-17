@@ -66,3 +66,16 @@ target_include_directories(test-amiga-mock PRIVATE
   ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan)
 add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
+
+# Strict streaming IFF FORM DOLY envelope inspection.
+add_library(dollyiff STATIC src/dolly_iff.c)
+target_include_directories(dollyiff PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(dollyiff PUBLIC dollyblock)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyiff PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-iff tests/test_iff.c)
+target_link_libraries(test-iff PRIVATE dollyiff)
+add_test(NAME iff_form_doly COMMAND test-iff)
+add_executable(dolly-iff src/dolly_iff_inspect.c)
+target_link_libraries(dolly-iff PRIVATE dollyiff)
