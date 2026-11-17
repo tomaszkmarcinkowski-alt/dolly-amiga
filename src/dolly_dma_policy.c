@@ -2,7 +2,7 @@
 #include <stdint.h>
 DollyDmaStatus dolly_dma_check_buffer(uint64_t addr,uint64_t bytes,
                                     uint32_t mask,uint32_t alignment){
-    uint64_t end,range_mask;
+    uint64_t end,range_mask,difference,low_bits;
     if(!mask||alignment<2||alignment>4096 ||
        (alignment&(alignment-1))!=0 || !bytes)
         return DOLLY_DMA_BAD_PROFILE;
@@ -14,7 +14,12 @@ DollyDmaStatus dolly_dma_check_buffer(uint64_t addr,uint64_t bytes,
     /* Mask low bits indicate start-alignment constraints. They must
      * not reject the final odd byte of an otherwise valid transfer. */
     range_mask=(uint64_t)mask | ((uint64_t)alignment-1u);
-    if(end & ~range_mask)return DOLLY_DMA_OUTSIDE_MASK;
+    /* OR of all addresses in [addr,end]. Checking endpoints alone would
+     * miss a forbidden bit crossed inside an irregular memory mask. */
+    difference=addr^end;
+    low_bits=0;
+    while(difference){low_bits=(low_bits<<1)|1u;difference>>=1;}
+    if((end|low_bits)&~range_mask)return DOLLY_DMA_OUTSIDE_MASK;
     return DOLLY_DMA_OK;
 }
 const char *dolly_dma_status_name(DollyDmaStatus s){
