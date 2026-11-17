@@ -42,9 +42,10 @@ static void capacity_string(char *out,unsigned cap,uint64_t bytes) {
     sprintf(buffer,"%lu MiB",(unsigned long)(bytes/1048576u));
     assign_string(out,cap,buffer);
 }
-int dolly_amiga_device_query(const char *driver,ULONG unit,
-                            char *name,unsigned name_capacity,
-                            char *size,unsigned size_capacity) {
+int dolly_amiga_device_query_ex(const char *driver,ULONG unit,
+                               char *name,unsigned name_capacity,
+                               char *size,unsigned size_capacity,
+                               DollyDeviceQueryInfo *info) {
     struct MsgPort *port=NULL;
     struct IOExtTD *io=NULL;
     struct DriveGeometry geom;
@@ -52,6 +53,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
     UBYTE *data=NULL;
     LONG rc;
     int opened=0,have_capacity=0;
+    if(info)memset(info,0,sizeof(*info));
     if(!name || !size || !name_capacity || !size_capacity ||
        !driver || !*driver)return 0;
     assign_string(name,name_capacity,"Unavailable");
@@ -79,6 +81,12 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             (uint64_t)geom.dg_TotalSectors*
             (uint64_t)geom.dg_SectorSize);
         have_capacity=1;
+        if(info) {
+            info->capacity_bytes=
+                 (uint64_t)geom.dg_TotalSectors*geom.dg_SectorSize;
+            info->sector_bytes=geom.dg_SectorSize;
+            info->capacity_valid=1;
+        }
     }
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
     if(data) {
@@ -97,6 +105,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
         io->iotd_Req.io_Flags=0;
         rc=DoIO((struct IORequest *)io);
         if(rc==0 && sc.scsi_Status==0 && sc.scsi_Actual>=36) {
+            if(info)info->identity_valid=1;
             ascii_trim(vendor,sizeof(vendor),data+8,8);
             ascii_trim(product,sizeof(product),data+16,16);
             if(vendor[0] && product[0]) {
@@ -125,9 +134,16 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 last=read_be32(data);
                 block=read_be32(data+4);
                 if(last!=0xfffffffful &&
-                   block>=128ul && block<=65536ul)
-                    capacity_string(size,size_capacity,
-                       ((uint64_t)last+1u)*(uint64_t)block);
+                   block>=128ul && block<=65536ul) {
+                    uint64_t bytes=((uint64_t)last+1u)*(uint64_t)block;
+                    capacity_string(size,size_capacity,bytes);
+                    have_capacity=1;
+                    if(info) {
+                        info->capacity_bytes=bytes;
+                        info->sector_bytes=block;
+                        info->capacity_valid=1;
+                    }
+                }
             }
         }
     }
@@ -137,4 +153,11 @@ cleanup:
     if(io)DeleteIORequest((struct IORequest *)io);
     if(port)DeleteMsgPort(port);
     return opened;
+}
+
+int dolly_amiga_device_query(const char *driver,ULONG unit,
+                            char *name,unsigned name_capacity,
+                            char *size,unsigned size_capacity) {
+    return dolly_amiga_device_query_ex(driver,unit,name,name_capacity,
+                                      size,size_capacity,NULL);
 }

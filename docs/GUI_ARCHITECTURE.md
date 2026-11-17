@@ -1143,3 +1143,61 @@ synchronous without a driver timeout, so the GUI may block if a
 driver never responds. Test only in controlled WinUAE with a test
 HDF before using real hardware, especially carddisk/SRAM.
 No RTG or memory profiling yet.
+
+### M1.28 — Query-gated selection, verified RDB/MBR and compact partition details
+
+User decision: remove **all** list double-click acceptance, including
+Physical, Partition and Logical. GadTools selection events only update
+highlighting and the recessed selection preview; **Use selection**
+is now the *only* way to commit any endpoint.
+
+In Physical device, **Use selection remains disabled until the user
+presses Query for the currently selected driver/unit and at least one
+identity or capacity query returns usable data**. Changing a driver,
+unit or selection mode clears the previous result and locks Use again.
+Query never automatically runs while listing, clicking, reopening,
+resizing or rendering.
+
+In Partition, the same explicit Query button first obtains device
+identity and capacity. Given a trustworthy capacity and 512-byte
+sectors, Query opens the chosen driver with a read-only IOExtTD
+CMD_READ backend and calls the **existing portable DollyPartitionMap
+parser**, which recognizes primary MBR, whole-disk RDB, and nested
+RDB within MBR type 0x76. The parser checks partition bounds,
+overlaps, RDB checksums and pointer cycles and fails closed on
+unsupported GPT/EBR/hybrid ambiguity. There are no CMD_WRITE,
+TD_FORMAT, filesystem mount changes or bootblock writes.
+
+The third LISTVIEW is populated **after Query**, from up to 16
+validated partitions. For RDB entries it uses the partition name
+stored in the PART descriptor; this is not necessarily the live
+filesystem volume title. For ordinary MBR entries it uses the index
+and partition-type byte rather than inventing a filesystem name.
+The panel row below the independently recessed **Device name** and
+**Size** fields is now a third recessed **Partition info** text
+gadget. It presents partition name, MiB, RDB DosType (e.g. FFS),
+LowCyl, HighCyl and filesystem block size. An MBR-only partition
+shows its partition type, size and device sector size; cylinder
+coordinates are explicitly N/A. Details are deliberately compact
+on the native 640x256 screen.
+
+Only selecting a detected partition **after** Query enables Use.
+Physical Query does not trigger partition reads: the partition
+parser is run solely when the chooser is in Partition mode.
+All Query calls are synchronous, with **no device timeout**;
+this stage is for controlled WinUAE test HDFs only. The read backend
+currently supports **only 512-byte sectors** and offsets addressable
+through 32-bit CMD_READ. Out-of-range requests return failure; the
+native RDB/MBR scan is capped to 16 visible entries and allocates
+parser state on the heap, not on the small Amiga Shell stack.
+
+Important write-safety caveat: the main window's operations remain
+demonstrative. We have not yet solved all cross-mode logical versus
+physical aliases, and no result of Query is authorization to write
+to a disk. trackdisk.device remains filtered from generic discovery;
+carddisk.device stays in the inventory for eventual PCMCIA SRAM
+validation on actual Amiga hardware.
+
+See GUI-62..78 in docs/TEST_MATRIX.md. The branch is **pending native
+m68k compilation and WinUAE testing**. RTG and memory profiling are
+still deferred.

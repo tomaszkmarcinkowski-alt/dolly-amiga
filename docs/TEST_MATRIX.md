@@ -533,3 +533,32 @@ resizing, switching modes, cancelling) must remain free of OpenDevice
 and DoIO. Synchronous commands currently have no timeout, so test
 this build on WinUAE disposable images only. RTG and memory testing
 are still deferred.
+
+## T. M1.28 Query-only approval and RDB/MBR partition list
+
+| ID | Reference scenario | Expected result |
+|---|---|---|
+| GUI-62 | Double-click Unit in Physical | Remains in chooser; never commits |
+| GUI-63 | Double-click volume in Logical | Remains in chooser; never commits |
+| GUI-64 | Double-click partition in Partition | Remains in chooser; never commits |
+| GUI-65 | Select scsi.device / Unit 0 without Query | Use selection disabled; name/size remain unqueried |
+| GUI-66 | Press Query on A1200 IDE HDF | Device name UAE-IDE rafael.hdf, Size 1881 MiB; Physical Use enabled |
+| GUI-67 | Change driver or unit after Query | Old device identity and capacity cleared, Use disabled again |
+| GUI-68 | Resize / refresh after Query | Values retained, zero additional device requests |
+| GUI-69 | Open Partition without Query | Third LISTVIEW empty/disabled, Use disabled |
+| GUI-70 | Partition Query on Amiga RDB HDF | Third list displays PART descriptor names; no invented volumes |
+| GUI-71 | Select RDB partition | Partition info displays name, MiB, DosType, LowCyl, HighCyl, block size; Use enabled |
+| GUI-72 | Partition Query on MBR HDF | Primary MBR type/number listed; volume names and cylinder geometry not invented |
+| GUI-73 | MBR type 0x76 nested RDB | Valid nested RDB entries appear; reject corrupt nested metadata |
+| GUI-74 | Unsupported GPT/EBR or overlapping layout | No unsafe selection, error shown |
+| GUI-75 | No usable capacity or non-512-byte sector | No partition scan or Use; explanatory status |
+| GUI-76 | Query another unit after successful scan | Previous partition nodes removed before GadTools rebuilt |
+| GUI-77 | Physical Use versus one of its own partitions as target | Reject same-driver/unit overlap in demo safety check |
+| GUI-78 | Normal File/Logical usage | No Query requirement; Use still commits explicitly |
+
+Device block-sector CMD_READ is only issued after a **manual Query**
+in Partition mode. On the reference A1200/OS3.1 IDE disk, verify all
+sizes and RDB names before attempting real hardware or release.
+Synchronous DoIO currently has no timeout and may block on a
+malfunctioning driver. Use only a disposable WinUAE HDF.
+No native WinUAE/RTG/memory result has yet been recorded for M1.28.

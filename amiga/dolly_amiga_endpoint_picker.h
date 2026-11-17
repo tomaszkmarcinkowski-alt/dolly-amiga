@@ -3,6 +3,8 @@
 #include "dolly_endpoint.h"
 #include "dolly_amiga_dos_devices.h"
 #include "dolly_amiga_physical_catalog.h"
+#include "dolly_amiga_device_query.h"
+#include "dolly_amiga_partition_query.h"
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <libraries/gadtools.h>
@@ -15,16 +17,18 @@ typedef struct DollyEndpointPicker {
     struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
-    struct Gadget *disk_size_text,*query_button;
+    struct Gadget *disk_size_text,*query_button,*partition_info_text;
     struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX];
-    struct Node partition_nodes[2];
+    struct Node partition_nodes[DOLLY_GUI_PARTITIONS];
     char physical_names[DOLLY_PHYS_MAX][DOLLY_PHYS_DRIVER_LEN];
     char unit_names[DOLLY_PHYS_MAX][20];
     ULONG physical_units[DOLLY_PHYS_MAX];
     unsigned device_count,unit_count;
     unsigned char queried;
     unsigned char query_attempted;
+    DollyDeviceQueryInfo query_info;
+    DollyGuiPartitionResult partition_scan;
     DollyPhysicalCatalog physical_catalog;
     struct Node logical_nodes[DOLLY_DOS_MAX_DEVICES];
     DollyDosDevices dos_devices;
@@ -35,6 +39,7 @@ typedef struct DollyEndpointPicker {
     char selection_display[160];
     char disk_info_display[160];
     char disk_size_display[40];
+    char partition_details[160];
     DollyImageFormat output_format;
     unsigned device,unit,partition,logical;
     DollyEndpointMode mode;
@@ -43,9 +48,6 @@ typedef struct DollyEndpointPicker {
     unsigned role;
     unsigned char changed;
     unsigned char gadgets_detached;
-    UWORD last_click_id,last_click_code;
-    ULONG last_click_seconds,last_click_micros;
-    unsigned char last_click_valid;
     char message[64];
 } DollyEndpointPicker;
 /* role: 0 source, 1 target. Two distinct, identical selectors. */
