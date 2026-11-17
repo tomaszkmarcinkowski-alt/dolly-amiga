@@ -1000,6 +1000,28 @@ static int commit_picker(DollyEndpointPicker *p) {
     if(ok)p->changed=1;
     return ok;
 }
+/* Release GadTools' references to LISTVIEW node chains BEFORE
+ * repopulating lists. Removing gadgets from the Window alone does
+ * not terminate the references held by the LISTVIEW objects.
+ * This helper is invoked after all queued IDCMP messages are replied.
+ */
+static void release_picker_gadgets(DollyEndpointPicker *p) {
+    if(!p->gadgets)return;
+    if(!p->gadgets_detached)
+        RemoveGList(p->window,p->gadgets,-1);
+    FreeGadgets(p->gadgets);
+    p->gadgets=NULL;
+    p->gadgets_detached=1;
+}
+/* Temporary M1.31 trace of the source/destination Query path.
+ * Always flush because WinUAE may stop before buffered output
+ * reaches the AmigaShell window.
+ */
+static void picker_trace(const DollyEndpointPicker *p,const char *phase) {
+    printf("DOLLY M1.31 %s %s\\n",
+           p->role?"DEST":"SOURCE",phase);
+    fflush(stdout);
+}
 /* Rebuild ONLY after draining and replying to all GadTools messages.
  * V39 GTLV_ShowSelected makes list gadgets retain extra selection state;
  * destroying/relinking an active LISTVIEW during its GADGETUP handler
@@ -1114,16 +1136,16 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         /* No IntuiMessage can refer to the old gadgets after this
          * point. Detach BEFORE changing list nodes and label buffers.
          */
-        if(p->gadgets && !p->gadgets_detached) {
-            RemoveGList(p->window,p->gadgets,-1);
-            p->gadgets_detached=1;
-        }
+        picker_trace(p,deferred==4?"Query: gadgets teardown":
+                       "Selection: gadgets teardown");
+        release_picker_gadgets(p);
         if(deferred==1 || deferred==2) {
             invalidate_query(p);
             populate_units(p);
         } else if(deferred==3) {
             invalidate_query(p);
         } else {
+            picker_trace(p,"Query: device commands begin");
             p->query_attempted=1;
             p->queried=(unsigned char)dolly_amiga_device_query(
                   p->physical_names[p->device],
@@ -1131,24 +1153,33 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                   p->disk_info_display,sizeof(p->disk_info_display),
                   p->disk_size_display,sizeof(p->disk_size_display),
                   &p->media_geometry);
+            picker_trace(p,"Query: device commands returned");
             p->has_partition=0;
             p->partition_scanned=0;
             p->partition_count=0;
             if(p->queried && p->media_geometry.capacity_valid) {
+                picker_trace(p,"Query: partition scan begin");
                 p->partition_scanned=(unsigned char)
                     dolly_amiga_partition_scan(
                         p->physical_names[p->device],
                         p->physical_units[p->unit],
                         &p->media_geometry,
                         &p->partition_map);
+                picker_trace(p,"Query: partition scan returned");
                 if(p->partition_scanned)
                     p->partition_count=p->partition_map.count;
             } else {
                 strcpy(p->partition_map.status,
                        "Capacity unavailable; no partition scan");
             }
+            picker_trace(p,"Query: populate partition nodes");
             populate_partitions(p);
+            picker_trace(p,"Query: partition nodes ready");
         }
-        if(!rebuild(p))dolly_picker_close(p);
+        picker_trace(p,"Rebuild: begin");
+        if(!rebuild(p)) {
+            picker_trace(p,"Rebuild: failed");
+            dolly_picker_close(p);
+        } else picker_trace(p,"Rebuild: completed");
     }
 }
