@@ -15,6 +15,7 @@ typedef struct DollyPartition {
  uint32_t low_cylinder, high_cylinder, dos_type;
  uint32_t max_transfer_bytes; /* DosEnvec de_MaxTransfer, not raw I/O limit */
  uint8_t max_transfer_present;
+ uint8_t dos_type_present; /* Distinguish absent DosType from value zero */
  uint64_t start_bytes, length_bytes;
  char name[32];
 } DollyPartition;
