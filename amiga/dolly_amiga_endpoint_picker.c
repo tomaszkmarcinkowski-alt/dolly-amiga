@@ -1000,8 +1000,15 @@ static int commit_picker(DollyEndpointPicker *p) {
     if(ok)p->changed=1;
     return ok;
 }
+/* Rebuild ONLY after draining and replying to all GadTools messages.
+ * V39 GTLV_ShowSelected makes list gadgets retain extra selection state;
+ * destroying/relinking an active LISTVIEW during its GADGETUP handler
+ * can leave old gadget/list pointers in pending messages.
+ */
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
+    /* 1 = mode, 2 = device, 3 = unit, 4 = partition Query. */
+    unsigned deferred=0;
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
@@ -1009,11 +1016,15 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         int close=0;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
+        /* All messages still refer to the existing gadget context.
+         * Drain and reply without acting on further, now-stale choices.
+         */
+        if(deferred) {
+            GT_ReplyIMsg(msg);
+            continue;
+        }
         if(cls==IDCMP_SIZEVERIFY && p->gadgets &&
            !p->gadgets_detached) {
-            /* Prevent old-size gadgets from flashing during drag.
-             * Intuition must receive the SIZEVERIFY reply promptly.
-             */
             RemoveGList(p->window,p->gadgets,-1);
             p->gadgets_detached=1;
         }
@@ -1023,17 +1034,10 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         GT_ReplyIMsg(msg);
         if(cls==IDCMP_NEWSIZE) {
-
-            /* Resize completed: discard old pixel positions, build
-             * fresh GadTools gadgets at the newly measured geometry.
-             */
             if(!rebuild(p))dolly_picker_close(p);
             return;
         }
         if(cls==IDCMP_REFRESHWINDOW && !p->gadgets_detached) {
-            /* Redraw after refresh using exactly the same order
-             * as mode changes; no stale LISTVIEW pixel remnants.
-             */
             clear_picker_client(p);
             RefreshGList(p->gadgets,p->window,NULL,-1);
             GT_RefreshWindow(p->window,NULL);
@@ -1044,37 +1048,15 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->mode=(DollyEndpointMode)code;
             p->has_device=0;p->has_unit=0;
             p->has_partition=0;p->has_logical=0;
-            if(p->gadgets && !p->gadgets_detached) {
-                RemoveGList(p->window,p->gadgets,-1);
-                p->gadgets_detached=1;
-            }
-            populate_units(p);
-            invalidate_query(p);
-            if(!rebuild(p))close=1;
-            if(close)dolly_picker_close(p);
-            return; /* never use a stale gadget ID after a rebuild */
+            deferred=1;
         } else if(id==PICK_DEVICE && (unsigned)code<p->device_count) {
-            /* Detach before replacing nodes still owned by LISTVIEW. */
-            if(p->gadgets && !p->gadgets_detached) {
-                RemoveGList(p->window,p->gadgets,-1);
-                p->gadgets_detached=1;
-            }
             p->device=code;p->has_device=1;
             p->has_unit=0;p->has_partition=0;
-            invalidate_query(p);
-            populate_units(p);
-            if(!rebuild(p)){dolly_picker_close(p);return;}
-            return;
+            deferred=2;
         } else if(id==PICK_UNIT &&
                   (unsigned)code<p->unit_count && p->has_device) {
-            if(p->gadgets && !p->gadgets_detached) {
-                RemoveGList(p->window,p->gadgets,-1);
-                p->gadgets_detached=1;
-            }
             p->unit=code;p->has_unit=1;
-            invalidate_query(p);
-            if(!rebuild(p)){dolly_picker_close(p);return;}
-            return;
+            deferred=3;
         } else if(id==PICK_PARTITION &&
                   p->mode==DOLLY_MODE_PARTITION &&
                   (unsigned)code<p->partition_count &&
@@ -1087,46 +1069,24 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);
-
         } else if(id==PICK_QUERY &&
                   (p->mode==DOLLY_MODE_PHYSICAL ||
                    p->mode==DOLLY_MODE_PARTITION) &&
                   physical_choice(p)) {
-            if(p->gadgets && !p->gadgets_detached &&
-               p->mode==DOLLY_MODE_PARTITION) {
-                RemoveGList(p->window,p->gadgets,-1);
-                p->gadgets_detached=1;
-            }
-            p->query_attempted=1;
-            p->queried=(unsigned char)dolly_amiga_device_query(
-                  p->physical_names[p->device],
-                  p->physical_units[p->unit],
-                  p->disk_info_display,sizeof(p->disk_info_display),
-                  p->disk_size_display,sizeof(p->disk_size_display),
-                  &p->media_geometry);
             if(p->mode==DOLLY_MODE_PARTITION) {
-                p->has_partition=0;
-                p->partition_scanned=0;
-                p->partition_count=0;
-                if(p->queried && p->media_geometry.capacity_valid) {
-                    p->partition_scanned=(unsigned char)
-                        dolly_amiga_partition_scan(
-                            p->physical_names[p->device],
-                            p->physical_units[p->unit],
-                            &p->media_geometry,
-                            &p->partition_map);
-                    if(p->partition_scanned)
-                        p->partition_count=p->partition_map.count;
-                } else {
-                    strcpy(p->partition_map.status,
-                           "Capacity unavailable; no partition scan");
-                }
-                populate_partitions(p);
-                if(!rebuild(p)){dolly_picker_close(p);return;}
-                return;
+                /* Partition Query will change LISTVIEW labels: defer. */
+                deferred=4;
+            } else {
+                p->query_attempted=1;
+                p->queried=(unsigned char)dolly_amiga_device_query(
+                      p->physical_names[p->device],
+                      p->physical_units[p->unit],
+                      p->disk_info_display,sizeof(p->disk_info_display),
+                      p->disk_size_display,sizeof(p->disk_size_display),
+                      &p->media_geometry);
+                refresh_disk_info(p);
+                change_enabled(p);
             }
-            refresh_disk_info(p);
-            change_enabled(p);
         } else if(id==PICK_SELECT) {
             close=commit_picker(p);
         } else if(id==PICK_IMAGE_FORMAT && p->role && code<4u) {
@@ -1149,5 +1109,46 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             }
         }
         if(close){dolly_picker_close(p);return;}
+    }
+    if(deferred && p->window) {
+        /* No IntuiMessage can refer to the old gadgets after this
+         * point. Detach BEFORE changing list nodes and label buffers.
+         */
+        if(p->gadgets && !p->gadgets_detached) {
+            RemoveGList(p->window,p->gadgets,-1);
+            p->gadgets_detached=1;
+        }
+        if(deferred==1 || deferred==2) {
+            invalidate_query(p);
+            populate_units(p);
+        } else if(deferred==3) {
+            invalidate_query(p);
+        } else {
+            p->query_attempted=1;
+            p->queried=(unsigned char)dolly_amiga_device_query(
+                  p->physical_names[p->device],
+                  p->physical_units[p->unit],
+                  p->disk_info_display,sizeof(p->disk_info_display),
+                  p->disk_size_display,sizeof(p->disk_size_display),
+                  &p->media_geometry);
+            p->has_partition=0;
+            p->partition_scanned=0;
+            p->partition_count=0;
+            if(p->queried && p->media_geometry.capacity_valid) {
+                p->partition_scanned=(unsigned char)
+                    dolly_amiga_partition_scan(
+                        p->physical_names[p->device],
+                        p->physical_units[p->unit],
+                        &p->media_geometry,
+                        &p->partition_map);
+                if(p->partition_scanned)
+                    p->partition_count=p->partition_map.count;
+            } else {
+                strcpy(p->partition_map.status,
+                       "Capacity unavailable; no partition scan");
+            }
+            populate_partitions(p);
+        }
+        if(!rebuild(p))dolly_picker_close(p);
     }
 }
