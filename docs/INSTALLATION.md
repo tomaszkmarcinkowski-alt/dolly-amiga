@@ -89,3 +89,7 @@ Example contextual error text:
 > Rozwiązanie: zainstaluj pakiet profili przeznaczony dla tego samego wydania Dolly.
 
 The details must be paged or wrapped to fit the mandatory 640×256 Topaz/8 GadTools layout.
+
+## Main executable self-check (no bootstrap executable)
+
+Dolly performs the CRC32/version check of its **own actual executable file** after startup, before enabling disk operations. Expected values are stored in the release manifest. The Installer only packages these files and creates the `DOLLY:` assign; **it does not install an extra verifier program**. This detects accidental file damage but cannot protect code before it starts executing. See [Integrity](INTEGRITY.md).
