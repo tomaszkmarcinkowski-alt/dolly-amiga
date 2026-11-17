@@ -41,5 +41,9 @@ int main(void){char path[]="/tmp/dolly-mbr-XXXXXX";int fd=mkstemp(path);FILE *f;
  make_part(part,4,5);store(f,2ULL*BS,part);
  assert(scan(path,&map)==DOLLY_MAP_OK&&map.hybrid_mbr_rdb);
  assert(!map.hybrid_mbr_overlap);
+ /* A corrupt whole-device RDB remains visible while MBR is valid. */
+ rdb[40]^=1;store(f,BS,rdb);
+ assert(scan(path,&map)==DOLLY_MAP_OK);
+ assert(map.has_mbr && map.suspect_whole_disk_rdb && !map.has_whole_disk_rdb);
  assert(fclose(f)==0);assert(unlink(path)==0);
  puts("MBR/nested RDB test cases passed");return 0;}
