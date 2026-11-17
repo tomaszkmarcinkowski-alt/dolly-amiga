@@ -29,6 +29,7 @@ const char *dolly_dma_status_name(DollyDmaStatus s){
     case DOLLY_DMA_OUTSIDE_MASK:return "Buffer outside configured DMA mask";
     case DOLLY_DMA_MISALIGNED:return "DMA buffer misaligned";
     case DOLLY_DMA_ADDRESS_OVERFLOW:return "DMA buffer address overflow";
+    case DOLLY_DMA_NO_COMPATIBLE_MEMORY:return "No compatible DMA memory";
     default:return "Unknown DMA status";
     }
 }
@@ -51,6 +52,9 @@ const char *dolly_dma_user_message(DollyDmaStatus status){
     case DOLLY_DMA_ADDRESS_OVERFLOW:
         return "DMA buffer address range is invalid or overflows. "
                "Device access was stopped. Verify the controller profile.";
+    case DOLLY_DMA_NO_COMPATIBLE_MEMORY:
+        return "Cannot allocate memory suitable for the controller DMA requirements. "
+               "Device access was stopped. Check free compatible RAM and controller settings.";
     default:
         return "Unknown DMA diagnostic. Device access should remain disabled.";
     }
