@@ -9,6 +9,8 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
        m.line_height<6 || m.line_height>64 ||
        m.padding_x>64 || m.padding_y>64 ||
        m.heading_width>8192 ||
+       m.main_content_height>8192 ||
+       m.main_build_label_width>8192 ||
        m.show_button_text_width>8192 ||
        m.quit_button_text_width>8192 ||
        m.hide_button_text_width>8192 ||
@@ -27,9 +29,14 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
          * description, two action rows, blocks, bottom status strip.
          * Minimum vertical client area follows the actual last control.
          */
-        client_w=max_u32(client_w,320u);
-        client_h=max_u32(175u,
-                 m.line_height+20u+20u+20u+22u+19u+19u+35u);
+        /* Progress at x=86, 66px well, build label with 6px
+         * clearance at each side, 70px Stop/Quit with 6px gap. */
+        client_w=max_u32(client_w,86u+66u+12u+
+                         m.main_build_label_width+70u*2u+6u);
+        /* The caller derives the bottommost extent from actual GUI
+         * positions and widget sizes, not a historical fixed height. */
+        client_h=max_u32(m.main_content_height,
+                         m.line_height+4u);
     } else {
         /* 24x8 grid, minimum 10x9 pixels per cell; labels and Hide remain. */
         client_w=max_u32(m.heading_width,24u*10u+8u);
