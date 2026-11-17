@@ -393,3 +393,23 @@ the same bounded function.
 Do not automatically send read-only hardware commands merely because
 candidate enumeration now succeeds. Keep the approved GUI's
 Device name and Size in **separate fields**.
+
+## O. Device support decision: trackdisk only excluded
+
+- `trackdisk.device`: excluded from the normal Physical/Partition
+  picker and generic imaging; floppy support is reserved for a future
+  filesystem repair module
+- `carddisk.device`: **keep** in discovery and normal selection;
+  study PCMCIA SRAM-specific behavior with real hardware later
+- `scsi.device`, `uaehf.device`: current controlled WinUAE targets
+
+| ID | Scenario | Expected |
+|---|---|---|
+| PHYS-30 | Enumerate with DF0: | trackdisk.device reported as excluded, absent from probeable candidates |
+| PHYS-31 | Enumerate with CC0: | carddisk.device remains a candidate (not silently filtered) |
+| PHYS-32 | Reference GUI | No trackdisk entry; carddisk is retained in synthetic picker until real discovery replaces it |
+| PHYS-33 | Later SRAM card hardware test | Record carddisk-specific geometry / errors without assuming SCSI behavior |
+| PHYS-34 | Future filesystem repair | Floppy-specific handling independent from generic disk workflow |
+
+Following the filter, do not reuse an old --probe INDEX; run the
+enumeration again and confirm the driver/unit identity first.
