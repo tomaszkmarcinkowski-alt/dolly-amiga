@@ -28,6 +28,11 @@ int main(void) {
     assert(dolly_endpoint_set_unit(&dst,1,0));
     assert(!dolly_demo_can_start(DOLLY_DEMO_CREATE_IMAGE,&src,&dst));
     assert(dolly_endpoint_set_file(&dst,"RAM:created.img"));
+    assert(dst.image_format==DOLLY_IMAGE_RAW);
+    dst.image_format=DOLLY_IMAGE_IFF_DOLY;
+    assert(dst.kind==DOLLY_ENDPOINT_FILE);
+    assert(dst.image_format==DOLLY_IMAGE_IFF_DOLY);
+    assert(dolly_demo_can_start(DOLLY_DEMO_CREATE_IMAGE,&src,&dst));
     assert(dolly_endpoint_set_logical(&src,0));
     assert(dolly_endpoint_mode(&src)==DOLLY_MODE_LOGICAL);
     assert(dolly_demo_can_start(DOLLY_DEMO_CREATE_IMAGE,&src,&dst));
