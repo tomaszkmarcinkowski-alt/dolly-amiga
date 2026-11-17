@@ -344,12 +344,35 @@
 **Granica interpretacji:** zero ostrzeżeń nie oznacza braku błędów na nośniku. W szczególności nadal nie kontrolujemy `FSHD`, `LSEG`, `BADB` ani wszystkich hybryd.
 
 
+### DJ-0035 · 2026-11-17 · AmigaOS / etap pierwszego uruchomienia · OPUBLIKOWANY PROTOTYP; NATIVE BUILD OTWARTY
+**Temat:** Pierwszy test 68000 można wykonać bez dostępu do żadnego fizycznego dysku.
+
+**Decyzja:** zamiast od razu włączać `OpenDevice()` do nowej aplikacji, utworzyliśmy `dolly-native-smoke`. Generuje on niewielki `RDSK/PART` w pamięci, testuje podstawowy parser, audyt kolizji RDB, Sheep Inventory, MaxTransfer oraz planowanie odczytu 64-bitowego. Dodano też celowe uszkodzenie checksum RDSK i PART, które powinno być odrzucone.
+
+**Bezpieczeństwo:** test ma jedynie pamięciowy `DollyBlockSource`; nie zawiera kodu otwierania dysków ani żadnego polecenia zapisu. Dzięki temu stanowi pierwszy etap testów w WinUAE, bez ryzyka dla dysku hosta.
+
+**Kompilacja:** osobna opcja CMake `DOLLY_NATIVE_ONLY=ON` odcina źródła POSIX i adapter fizycznego dysku. `cmake/toolchains/amigaos-m68k.cmake` wskazuje wymagany zewnętrzny `m68k-amigaos-gcc` z flagą `-m68000`. W CI dodano hostowy dry-run dla tej ścieżki; **nie zastępuje on m68k/AmigaOS**.
+
+**Wynik:** publikacja kodu i dokumentacji potwierdzona w repozytorium. W tym środowisku **brak kompilatora m68k-amigaos-gcc i NDK**, dlatego nie powstał jeszcze zweryfikowany natywny plik wykonywalny. Nie podajemy `PASS` dla WinUAE ani prawdziwego sprzętu.
+
+**Dalsze kroki:** kompilacja cross, uruchomienie `--version` i `--selftest` w WinUAE (68000, OS 2.04), pomiar pamięci i stosu, zgłoszenie wszelkich różnic ABI i bibliotek. Zob. [instrukcja](NATIVE_SMOKE.md) i [Issue #3](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/3).
+
+### DJ-0036 · 2026-11-17 · AmigaOS / dane testowe · WYKRYTE I POPRAWIONE PRZED PUBLIKACJĄ
+**Temat:** Łatwo pomylić offsety `DosEnvec` (indeks tablicy razy 4 plus offset `pb_Environment`).
+
+**Wykrycie:** w pierwotnym szkicu syntetycznego `PART` parametry `de_NumBuffers` i `de_BufMemType` były adresowane przez błędne numery bajtów; dodatkowo dwa wpisy mogły nadpisywać `de_MaxTransfer` i `de_Mask`.
+
+**Działanie:** przed dalszym użyciem fixtury poprawiono adresowanie przez jawne wyrażenia `128 + index * 4` dla indeksów 11, 12, 13 i 14. Każde pole ma teraz osobny, czytelny offset.
+
+**Weryfikacja:** poprawione wartości zapisano i ponownie odczytano ze źródła na GitHub. Pełna kompilacja docelowa oraz testy runtime czekają na pierwszy toolchain AmigaOS.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0035 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0037 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
