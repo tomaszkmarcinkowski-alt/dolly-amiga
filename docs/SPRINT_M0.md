@@ -40,6 +40,9 @@
 - [ ] Full current-repository CTest/Actions validation after integration.
 - [ ] Native 68000 / GadTools window and broader device/volume field providers (future UX milestone M5; Issue #13).
 
+- [x] Preliminary streaming Sheep Inventory advisory codes: MaxTransfer, RDB overlap, de_SectorPerBlock, zero Mask and missing DosType.
+- [x] Standalone GCC/Clang tests for RDB and partition notice feeds, including early stop.
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
