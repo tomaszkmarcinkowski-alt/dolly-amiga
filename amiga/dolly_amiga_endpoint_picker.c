@@ -1065,7 +1065,7 @@ void dolly_picker_close(DollyEndpointPicker *p) {
 static int commit_picker(DollyEndpointPicker *p) {
     int ok=0;
     if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p) &&
-       p->queried) {
+       p->queried && p->media_geometry.capacity_valid) {
         ok=dolly_endpoint_set_unit(&p->result,p->device,p->unit);
         if(ok)sprintf(p->result.path,"%s / Unit %lu",
                       p->physical_names[p->device],
