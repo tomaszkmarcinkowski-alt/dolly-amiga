@@ -81,6 +81,9 @@ def main(layout, iff, inventory):
         assert 'MBR partition type' in result.stdout
         assert 'RDB block size' in result.stdout
         assert 'MAXTRANSFER_ABOVE_REFERENCE' in result.stdout
+        assert 'Suggested check:' in result.stdout
+        assert 'Identify the controller and driver' in result.stdout
+
 
 
         anno = b'abc'
