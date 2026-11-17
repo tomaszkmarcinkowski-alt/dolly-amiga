@@ -127,12 +127,30 @@
 **Działanie:** w fazie natywnej przenieść wyniki na stertę lub scratch, z czasem rozważyć strumieniowe wyliczanie partycji. Rozmiary i zużycie pamięci muszą zostać zmierzone na docelowym sprzęcie.
 
 
+
+### DJ-0015 · 2026-11-17 · RDB / diagnostyka · POPRAWIONE I PRZETESTOWANE LOKALNIE
+**Temat:** Uszkodzony `RDSK` był zgłaszany jako „nie znaleziono RDB”.
+
+**Wykrycie:** pierwotny skaner pomijał nagłówki `RDSK` z niepoprawnym checksumem, a po wyczerpaniu zakresu zwracał `DOLLY_RDB_NOT_FOUND`. Użytkownik nie wiedział, że istnieje uszkodzony kandydat.
+
+**Zmiana:** skaner zapamiętuje błędną sumę kontrolną i niezgodny rozmiar bloku; jeśli nie znajdzie później poprawnej kopii `RDSK`, zwraca odpowiednio `BAD_CHECKSUM` lub `BAD_BLOCK`. Gdy znajdzie późniejszy prawidłowy nagłówek, korzysta z niego.
+
+**Test:** fixture z uszkodzonym RDSK bez kopii oraz z późniejszą poprawną kopią; 7/7 standardowych hostowych CTest po zmianie. Kontrola zapasowych RDSK w rzeczywistych nośnikach nadal wymaga testów.
+
+### DJ-0016 · 2026-11-17 · QA / ciekawostka · POTWIERDZONE LOKALNIE
+**Temat:** Syntetyczna karta SD z MBR `0x76` umożliwia testować całą ścieżkę CLI bez ryzykowania prawdziwego dysku.
+
+**Rozwiązanie:** `tests/test_cli_smoke.py` generuje w katalogu tymczasowym MBR, zagnieżdżony RDB/PART, prawidłowy `FORM DOLY` z nieparzystym `ANNO` i uszkodzony wariant IFF. Sprawdza działanie `dolly-layout` i `dolly-iff`.
+
+**Test:** lokalny CTest: 8/8 zestawów; Clang/ASan dla nowego ósmego zestawu wymagają dodatkowego przebiegu CI. Dane w całości fikcyjne; brak dostępu do urządzeń fizycznych.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0009 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0017 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
