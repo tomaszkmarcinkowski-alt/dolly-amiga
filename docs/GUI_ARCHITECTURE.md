@@ -728,3 +728,36 @@ when the third column was absent.
 
 This revision is committed but needs m68k Docker compilation and WinUAE
 confirmation in both Source and Destination pickers.
+
+### M1.18 — touching columns, image format and source-file inspection
+
+Per user instruction, Physical device's two LISTVIEW_KIND columns and
+Partition's three columns now have **zero intentional inter-column
+gutter**, sharing the full client width, with proportional widths
+derived from the actual Intuition window border sizes.
+
+File-mode behavior differs by endpoint role:
+
+- **Destination**: beneath Browse file and its recessed path preview,
+  a native `CYCLE_KIND` now chooses **RAW / HDF / ADF / IFF DOLY**.
+  The selected format is stored in `DollyEndpoint.image_format` and
+  preserved when the selection is committed. RAW is the prototype
+  default. This is a *parameter only*: no output file encoding or IFF
+  DOLY format serializer exists yet.
+- **Source**: beneath Browse file and the recessed filename/path preview,
+  another recessed `TEXT_KIND` shows basic file metadata. The size
+  is obtained from AmigaDOS `Lock` + `Examine` (`fib_Size`), using
+  read-only directory metadata, with a clear 'unavailable' fallback.
+  The type label is a **filename-extension hint only** (ADF, HDF,
+  RAW/IMG, possible IFF), *not* content sniffing or format validation.
+  On filename selection, `GT_SetGadgetAttrs` updates this field.
+  File paths that are relative to the current AmigaDOS directory remain
+  valid inputs, and no physical disk block access is introduced.
+
+The two views reuse the same picker window and native GadTools
+rendering; the output-format control is specific to the Destination
+File mode. A new portable endpoint regression assertion checks
+format metadata attached to the committed file endpoint.
+
+**Awaiting Docker/WinUAE verification.** Memory profiling remains
+deferred per the user's earlier request.
