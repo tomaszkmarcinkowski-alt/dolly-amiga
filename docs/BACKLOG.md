@@ -530,10 +530,13 @@
 **User story:** Jako użytkownik Dolly chcę otrzymać jasne, widoczne ostrzeżenie, kiedy program wykryje nieznany profil DMA, bufor poza maską adresową, niewłaściwe wyrównanie lub brak odpowiedniej pamięci, aby wiedzieć, dlaczego operacja została zatrzymana i co należy sprawdzić.
 
 **Akceptacja:**
-- Dla każdej odmowy operacji z powodu DMA: kod diagnostyczny + zrozumiały komunikat + bezpieczna wskazówka.
+- Dla każdej odmowy operacji z powodu DMA: **kod diagnostyczny + zrozumiały komunikat + możliwa przyczyna + 1–3 konkretne, bezpieczne kroki rozwiązania problemu**.
+- Jeśli rozwiązanie zależy od kontrolera i sterownika, komunikat ma wyraźnie wskazać co sprawdzić i nie podawać niezweryfikowanej wartości `Mask`, `MaxTransfer` czy `Alignment`.
+- Wspólne wskazówki naprawcze wykorzystywane przez CLI, przyszłe GadTools i logi; brak automatycznej zmiany ustawień.
+- Wersje EN/PL, z zachowaniem kodu błędu do wyszukiwania w dokumentacji; docelowo lokalizacja przez katalog Locale.
 - Ostrzeżenie jest dostępne w CLI i przyszłym oknie GadTools; nie może ginąć jako anonimowe `EINVAL` lub `EUNSUPPORTED`.
 - Program **zatrzymuje operację**, nie podejmuje samodzielnie ryzykownych prób innych masek, wyrównań ani zmiany ustawień.
 - Komunikat odróżnia *niepotwierdzoną zgodność DMA* od *faktycznego uszkodzenia danych*; nie twierdzi, że dane są uszkodzone.
 - W logu zachować urządzenie/unit oraz kod problemu, a adresy/maski ujawniać tylko w diagnostyce zaawansowanej, bez prywatnych danych.
 - Przewidzieć lokalizację PL/EN (Locale), testy poprawności callbacku także na fake Exec, przypadki braku bufora.
-- **Status:** przenośne komunikaty i wymagany callback diagnostyczny w eksperymentalnym backendzie są wstępnie zaimplementowane; realne UI i testy AmigaOS pozostają otwarte.
+- **Status:** wdrożono strukturalny katalog przyczyn i podpowiedzi, przenośne `dolly-dma-advice` CLI (w tym cel do kompilacji m68k), testy katalogu i ścieżki CLI dodane do CMake. Rzeczywiste okno GadTools, pełny CI i test AmigaOS pozostają otwarte.
