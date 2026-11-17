@@ -156,6 +156,18 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         p->fs_block_bytes=blockwords*4u;
         p->sectors_per_block=be32(r->buffer+144);
         p->dos_type=dos;
+        /* de_TableSize is the last available DosEnvec index.
+         * Never show absent optional fields as literal zeroes. */
+        p->dos_type_present=(unsigned char)(envwords>=16u);
+        p->boot_priority_present=(unsigned char)(envwords>=15u);
+        p->max_transfer_present=(unsigned char)(envwords>=13u);
+        p->dma_mask_present=(unsigned char)(envwords>=14u);
+        if(p->boot_priority_present)
+            p->boot_priority=(int32_t)be32(r->buffer+188);
+        if(p->max_transfer_present)
+            p->max_transfer=be32(r->buffer+180);
+        if(p->dma_mask_present)
+            p->dma_mask=be32(r->buffer+184);
         dos_name(type,dos);
         strcpy(label_copy,p->label);
         /* DosType is RDB filesystem metadata, not a filesystem
