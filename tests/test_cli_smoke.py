@@ -47,6 +47,7 @@ def image_file(path):
     put_be32(part, 128 + 11 * 4, 30)  # de_NumBuffers
     put_be32(part, 128 + 12 * 4, 0)   # de_BufMemType
     put_be32(part, 128 + 14 * 4, 0x00FFFFFE)  # de_Mask
+    put_be32(part, 128 + 15 * 4, 0xFFFFFFFB)  # de_BootPri = -5
     put_be32(part, 128 + 13 * 4, 0x7FFFFFFF)  # de_MaxTransfer
     checksum(part)
     with path.open('wb') as out:
@@ -76,6 +77,7 @@ def main(layout, iff, inventory):
         assert 'Memory address mask' in result.stdout
         assert '0x00FFFFFE' in result.stdout
         assert 'Initial DOS buffers' in result.stdout
+        assert 'Boot priority' in result.stdout and '-5 priority' in result.stdout
         assert 'MBR partition type' in result.stdout
         assert 'RDB block size' in result.stdout
         assert 'MAXTRANSFER_ABOVE_REFERENCE' in result.stdout
