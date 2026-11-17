@@ -5,12 +5,21 @@
 ## Sprint backlog
 1. [x] Public repository created.
 2. [x] Initial host-side read-only header probing prepared.
-3. [x] Publish source and configure CI (workflow results need checking separately).
-4. [x] Define preliminary BlockSource I/O API with explicit error semantics and host-side unit tests.
-5. [ ] Document 68000 compiler/toolchain build and verify native executable.
-6. [ ] Add malformed/truncated IFF FORM DOLY fixtures and tests beyond current envelope checks.
-7. [ ] Begin non-destructive RDB discovery with boundary checks.
-8. [x] Adopt MIT license; contributions policy documented.
+3. [x] Publish source and configure CI (workflow outcome not independently confirmed here).
+4. [x] Preliminary host BlockSource API with 64-bit offset and unit tests.
+5. [x] Initial bounded read-only RDB/PART parser, shifted-container support and synthetic regression tests.
+6. [ ] Validate overlap among partitions and RDB reserved regions; parse nested MBR 0x76 automatically.
+7. [ ] Document 68000 compiler/toolchain build and verify native executable.
+8. [ ] Expand malformed/truncated IFF FORM DOLY fixture coverage.
+9. [x] Adopt MIT license and contributor policy.
+
+## Local host validation
+- `cmake -S . -B build && cmake --build build`
+- `ctest --test-dir build --output-on-failure`
+- 3/3 local CTest suites passed after integrating RDB parser.
+
+## Scope clarification
+`dolly-rdb` currently scans only a supplied ordinary file; no native Amiga device I/O, filesystem check or disk repair. Shifted RDB requires a user-supplied **byte offset**.
 
 ## Definition of Done
 - Feature builds and automated tests pass on supported CI host.
