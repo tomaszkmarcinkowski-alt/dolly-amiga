@@ -87,6 +87,31 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
 /* Read-only GadTools text field with the same inset border convention as
  * the other Dolly controls. The string lives in the picker until close.
  */
+/* Display may truncate, but the committed endpoint keeps the FULL path.
+ * Use the actual window font metrics, not an assumed character width.
+ */
+static void preview_file(DollyEndpointPicker *p) {
+    ULONG len;
+    struct RastPort *rp;
+    if(p->pending_file.kind!=DOLLY_ENDPOINT_FILE) {
+        p->file_display[0]='\0';
+        return;
+    }
+    memcpy(p->file_display,p->pending_file.path,
+           sizeof(p->file_display));
+    if(!p->window)return;
+    rp=p->window->RPort;
+    len=(ULONG)strlen(p->file_display);
+    while(len>3u &&
+          (LONG)TextLength(rp,(STRPTR)p->file_display,len)>552) {
+        p->file_display[--len]='\0';
+    }
+    if(len<(ULONG)strlen(p->pending_file.path) && len>=3u) {
+        p->file_display[len-3u]='.';
+        p->file_display[len-2u]='.';
+        p->file_display[len-1u]='.';
+    }
+}
 static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
@@ -177,6 +202,7 @@ static void clear_picker_client(DollyEndpointPicker *p) {
 static int rebuild(DollyEndpointPicker *p) {
     struct Gadget *last;
     if(!p->window)return 0;
+    preview_file(p);
     if(p->gadgets) {
         RemoveGList(p->window,p->gadgets,-1);
         FreeGadgets(p->gadgets);
@@ -366,8 +392,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             DollyEndpoint selected={0};
             if(pick_file(&selected,p->role)) {
                 p->pending_file=selected;
-                memcpy(p->file_display,selected.path,
-                       sizeof(p->file_display));
+                preview_file(p);
                 if(p->file_text)
                     GT_SetGadgetAttrs(p->file_text,p->window,NULL,
                                       GTTX_Text,(ULONG)p->file_display,
