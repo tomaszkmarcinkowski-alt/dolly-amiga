@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**77 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**78 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -721,3 +721,20 @@
 **Wymagania:** analizować osobno deklarowane granice `PART`, zakres bitmapy, bloki oznaczone jako zajęte, rzeczywiste odwołania z nagłówków plików/katalogów/list rozszerzeń oraz bloki metadanych i samej bitmapy. Raportować stany: `alokacja poza granicą`, `referencja poza granicą`, `bitmapa niespójna`, `nie można zbadać`. **Sama bitmapa z wolnymi bitami nie dowodzi braku danych**, zwłaszcza przy błędach lub nieobsługiwanym filesystemie. Brak zapisu w pierwszym etapie, testy na syntetycznych OFS/FFS i uszkodzonych obrazach, ostrzeżenia o niepewności.
 
 **Status:** backlog, **brak implementacji**.
+
+
+### DOL-078 — Proponowanie obrazu bezpieczeństwa przed każdą operacją destruktywną
+
+**Priorytet:** P0 dla wszystkich przyszłych funkcji zapisujących · **Etap:** M0 — kontrakt, później integracja z operacjami zapisu · [Issue #26](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/26)
+
+**User story:** Przed potencjalnie destruktywną zmianą Dolly proponuje wykonanie kopii/obrazu **modyfikowanego obiektu**: RDB, partycji, wolumenu, kontenera MBR lub całego dysku — z wyjaśnieniem, co dokładnie obejmuje kopia i co będzie można z niej odtworzyć.
+
+**Kryteria akceptacji:**
+- Określić rzeczywisty zakres modyfikacji (LBA, bajty, urządzenie) i minimalny **wystarczający** zakres kopii. Dla zmiany metadanych RDB kopia RDB; dla redukcji/relokacji danych — pełny obraz danych, których zmiana może dotknąć.
+- W komunikacie podać szacowaną wielkość i miejsce zapisu; nie dopuścić do zapisu kopii na obszar, który operacja nadpisze. Gdy nie da się ustalić niezależności celu — odmówić ryzykownej operacji.
+- Tworzyć kopię strumieniowo, weryfikować jej długość i CRC32 (w miarę możliwości ponownie odczytać plik z nośnika docelowego). Błąd, brak miejsca, przerwanie, niezgodna suma albo niekompletny obraz **blokują późniejszą operację destruktywną**.
+- Użytkownik może odrzucić propozycję tylko w przypadkach, w których odrębna polityka danej operacji dopuszcza świadomą rezygnację. **Restore RDB, przebudowa RDB i relokacja/redukcja partycji wymagają zweryfikowanej kopii**.
+- Komunikaty wyjaśniają konsekwencje, zawierają instrukcję odzyskania danych, są dostępne w CLI oraz GadTools (640×256, Topaz/8) i nie pozwalają przypadkowo pominąć ostrzeżenia.
+- Działa jako wspólny mechanizm dla wszystkich przyszłych zapisów; **nie przerywa ani nie opóźnia operacji wyłącznie odczytowych**.
+
+**Stan:** wymaganie i Issue zapisane; **brak implementacji oraz testów sprzętowych**. Nie włączać zapisu na urządzeniach w M0.
