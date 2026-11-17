@@ -59,6 +59,13 @@
 - [x] Native-only memory smoke extended with DMA policy checks; reconstructed subset passes GCC/Clang/ASan/UBSan locally.
 - [ ] Complete current-`main` CTest/Actions verification and native m68k/AmigaOS execution.
 
+## Guided DMA troubleshooting (2026-11-17)
+
+- [x] Structured cause + up to three safe next steps, stable code and blocked-operation status for DMA failures.
+- [x] Portable `dolly-dma-advice` CLI available in host and native-only build configuration; EN / PL ASCII fallback catalogs.
+- [x] Added catalog unit tests and Python CLI smoke tests; complete current-main CTest execution still requires verification.
+- [ ] Display these steps automatically in native CLI/GadTools with proper PL/EN Locale support.
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
