@@ -527,12 +527,35 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         int close=0;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
+        if(cls==IDCMP_SIZEVERIFY && p->gadgets &&
+           !p->gadgets_detached) {
+            /* Prevent old-size gadgets from flashing during drag.
+             * Intuition must receive the SIZEVERIFY reply promptly.
+             */
+            RemoveGList(p->window,p->gadgets,-1);
+            p->gadgets_detached=1;
+        }
         if(cls==IDCMP_REFRESHWINDOW) {
             GT_BeginRefresh(p->window);
-            captions(p);
             GT_EndRefresh(p->window,TRUE);
         }
         GT_ReplyIMsg(msg);
+        if(cls==IDCMP_NEWSIZE) {
+            /* Resize completed: discard old pixel positions, build
+             * fresh GadTools gadgets at the newly measured geometry.
+             */
+            if(!rebuild(p))dolly_picker_close(p);
+            return;
+        }
+        if(cls==IDCMP_REFRESHWINDOW && !p->gadgets_detached) {
+            /* Redraw after refresh using exactly the same order
+             * as mode changes; no stale LISTVIEW pixel remnants.
+             */
+            clear_picker_client(p);
+            RefreshGList(p->gadgets,p->window,NULL,-1);
+            GT_RefreshWindow(p->window,NULL);
+            captions(p);
+        }
         if(cls==IDCMP_CLOSEWINDOW || id==PICK_CANCEL)close=1;
         else if(id==PICK_MODE && code<4u) {
             p->mode=(DollyEndpointMode)code;
