@@ -165,7 +165,7 @@ static void probe(const ProbeCandidate *c) {
         uint64_t bytes=(uint64_t)geom.dg_TotalSectors*
                        (uint64_t)geom.dg_SectorSize;
         unsigned long mib=(unsigned long)(bytes/1048576u);
-        snprintf(size,sizeof(size),"%lu MiB",mib);
+        sprintf(size,"%lu MiB",mib);
     }
     /* Both the SCSI CDB and data buffer are in Chip RAM for old DMA
      * controllers. No physical sectors are read or changed.
@@ -190,11 +190,11 @@ static void probe(const ProbeCandidate *c) {
             sanitize(vendor,sizeof(vendor),data+8,8);
             sanitize(product,sizeof(product),data+16,16);
             if(vendor[0] && product[0])
-                snprintf(name,sizeof(name),"%s %s",vendor,product);
+                sprintf(name,"%s %s",vendor,product);
             else if(product[0])
-                snprintf(name,sizeof(name),"%s",product);
+                strcpy(name,product);
             else if(vendor[0])
-                snprintf(name,sizeof(name),"%s",vendor);
+                strcpy(name,vendor);
         }
     }
 done:
