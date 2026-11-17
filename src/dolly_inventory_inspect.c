@@ -35,6 +35,7 @@ static int emit_field(const DollyInventoryField *f,void *ctx){
            category==DOLLY_MT_BELOW_REFERENCE)
             fprintf(out,"    WARNING/NOTE: %s\n",dolly_maxtransfer_guidance(category));
     }
+    /* Origin is on-disk metadata; evidence distinguishes observed from declared. */
     return ferror(out)?1:0;
 }
 static void show_rdb(const DollyRdb *r,const char *type){
