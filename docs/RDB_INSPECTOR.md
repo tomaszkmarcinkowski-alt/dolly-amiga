@@ -1,22 +1,11 @@
-# M0 — read-only RDB inspector
+# M0 — experimental read-only RDB inspector
 
-`dolly-rdb IMAGE [BASE_OFFSET_BYTES] [DEVICE_BLOCK_BYTES]` operates on an ordinary **file**. It never opens a physical Amiga device and does not write.
+`dolly-rdb IMAGE [BASE_OFFSET_BYTES] [DEVICE_BLOCK_BYTES]` scans a regular file. The offset is specified in **bytes**.
 
-- The base offset specifies the beginning of the RDB container, **in bytes**, not a physical disk LBA.
-- For an MBR partition containing RDB, the user must currently supply the container's byte offset manually; automatic MBR parsing is not yet implemented.
-- The scan checks the first 16 logical blocks relative to the specified base, accepting only a checksummed `RDSK` whose declared block size matches the provided device block size.
-- `PART` blocks are followed with checksum verification, a 128-entry list limit, cycle detection, geometry checks and end-of-image range validation.
-- Only `PART` structures are parsed. `FSHD`, `LSEG`, `BADB`, RDB boot behavior and overlap among *valid* partitions are **not** yet validated. A successful parse must not be taken as proof that a disk is healthy, bootable or safe to modify.
-- The host scanner has a 512–32768 byte power-of-two device-block size limit. It makes no claim of native Amiga support yet.
-- Synthetic fixture tests cover correct shifted RDB, wrong checksum, cyclic PART list and out-of-range PART.
+In addition, the internal `dolly_partition_map_scan()` API now recognizes primary MBR entries and scans for RDB in type `0x76` containers. It checks MBR range overlap, bounds, RDB checksum/list cycles, nested PART extents, RDB header and PART descriptor overlap.
 
-## Examples
+**Important limits:** `dolly-rdb` CLI is still the manual-offset inspector; there is no new MBR-aware CLI yet. GPT and EBR chains are deliberately rejected as unsupported. Shared-offset legacy hybrid RDB/MBR layouts are not yet handled. RDB FSHD/LSEG/BADB and all reserved-block rules are not yet verified. There is no disk write support.
 
-```sh
-./build/dolly-rdb backup.hdf
-./build/dolly-rdb pistorm.img 1048576 512
-```
+The MBR parser assumes the selected logical block size for LBA units; verify device block size if used with non-512 logical sectors.
 
-The second example means an RDB container beginning at byte 1,048,576; it does not automatically determine whether the MBR actually places such a container there.
-
-Next tasks: MBR bounds parser, overlapping ranges, RDB reserved-block validity, error reporting per partition, API abstraction compatible with Amiga 68000 native build.
+Local CTest covers good nested RDB, overlapping primary entries, child outside its container, bad PART checksum, protective GPT record, and image truncation.
