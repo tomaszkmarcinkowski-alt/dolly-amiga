@@ -449,3 +449,39 @@ This opt-in diagnostic still uses synchronous DoIO without a
 timeout; run only in controlled WinUAE, on a test image. Automatic
 GUI probing remains disabled pending test verification. The M1.24
 GUI uses two distinct recessed fields: Device name and Size.
+
+## Q. M1.26 WinUAE: SCSI INQUIRY succeeds but Size unavailable
+
+Confirmed on A1200/OS3.1/WinUAE with \`scsi.device unit 0\`:
+- Discovery shows carddisk.device 0, scsi.device 0 and uaehf.device 0;
+  trackdisk.device is deliberately excluded.
+- SCSI INQUIRY returns real virtual identity **UAE-IDE rafael.hdf**.
+- Original TD_GETGEOMETRY path reported **Size: Unavailable**.
+  This alone is not evidence of a zero-sized drive.
+
+Next build:
+- Allocate a full \`struct IOExtTD\` for the block-device request
+  (rather than a smaller \`IOStdReq\`).
+- Print TD_GETGEOMETRY return status, io_Error and actual geometry.
+- If geometry fails or reports zero size, send optional read-only
+  SCSI READ CAPACITY(10), opcode 0x25, with a 10-byte CDB and 8-byte
+  result in Chip RAM. Interpret big-endian last-LBA-plus-one and
+  block size as capacity, with explicit 0xFFFFFFFF limit handling.
+- Preserve independent **Device name** (INQUIRY) and **Size**
+  (TD_GETGEOMETRY or READ CAPACITY) outputs.
+
+| ID | Test | Expected |
+|---|---|---|
+| PHYS-42 | \`--probe-driver scsi.device 0\` | INQUIRY still identifies virtual UAE-IDE; geometry status printed |
+| PHYS-43 | TD_GETGEOMETRY unavailable | Optional READ CAPACITY(10) attempted and result printed |
+| PHYS-44 | READ CAPACITY succeeds | Size computed from (last LBA + 1) * bytes/block |
+| PHYS-45 | READ CAPACITY unavailable | Device name retained, Size: Unavailable, no false value |
+| PHYS-46 | \`--probe-driver trackdisk.device 0\` | Not in candidates; no OpenDevice |
+| PHYS-47 | Plain listing | No disk I/O, no geometry or INQUIRY commands |
+
+No automatic GUI probe yet. M1.24 still presents Device name and
+Size in **two separate recessed boxes**. Do not connect commands to
+physical UI selections until query results are verified under WinUAE.
+READ CAPACITY(10) does not support >2 TiB: those drives remain
+unavailable pending READ CAPACITY(16) support. Commands use
+synchronous DoIO without timeout, so run only with a test HDF.
