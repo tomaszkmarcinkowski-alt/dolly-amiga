@@ -98,9 +98,10 @@ static int run_selftest(void){
     char resource_path[80];
     int success=0;
     smoke_stage=7;
+    /* Refer to the global record without emitting a second magic string:
+     * the post-link stamping tool requires a unique record marker. */
     if(strstr(dolly_version_text(),"$VER: Dolly ")==NULL ||
-       memcmp(dolly_selfcheck_record,DOLLY_SELF_MAGIC,
-              DOLLY_SELF_MAGIC_SIZE)!=0)
+       ((volatile const unsigned char *)dolly_selfcheck_record)[0]!='D')
         goto cleanup;
     if(dolly_path_resource("Docs/Help.guide",resource_path,sizeof(resource_path))
        !=DOLLY_PATH_OK || strcmp(resource_path,"DOLLY:Docs/Help.guide")!=0)
