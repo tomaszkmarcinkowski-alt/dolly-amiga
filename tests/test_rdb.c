@@ -36,6 +36,8 @@ int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;
  assert(r.partitions[0].sectors_per_block==1);
  assert(r.partitions[0].reserved_blocks==0);
  assert(r.partitions[0].preallocated_blocks==0);
+ assert(r.partitions[0].boot_priority_present);
+ assert(r.partitions[0].boot_priority==0);
  assert(r.partitions[0].buffer_count_present);
  assert(r.partitions[0].buffer_memory_type_present);
  assert(r.partitions[0].dma_mask_present);
