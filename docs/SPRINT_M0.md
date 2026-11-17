@@ -44,6 +44,13 @@
 - [x] Standalone GCC/Clang tests for RDB and partition notice feeds, including early stop.
 - [x] Signed BootPri from RDB and local GCC/Clang/ASan/UBSan unit tests of the Inventory stream.
 
+## First native-only milestone — 2026-11-17
+
+- [x] Separate `DOLLY_NATIVE_ONLY` CMake source list with no POSIX file adapter or physical-device backend.
+- [x] Memory-only `dolly-native-smoke --selftest` source and M68k cross-compiler toolchain preset.
+- [x] Host CI job added for the native-only source subset (GitHub run result not yet confirmed).
+- [ ] Actual m68k AmigaOS compiler/NDK build, WinUAE run and hardware resource measurements.
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
