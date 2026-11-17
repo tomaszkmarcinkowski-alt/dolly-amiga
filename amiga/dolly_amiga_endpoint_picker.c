@@ -58,7 +58,7 @@ static STRPTR mode_names[]={
 typedef struct PickerGeometry {
     WORD left,right,full_width;
     WORD mode_x,mode_w;
-    WORD list_y,list_h,action_y,preview_y,disk_info_y;
+    WORD list_y,list_h,action_y,preview_y,disk_info_y,partition_info_y;
     WORD browse_y,path_y,detail_y;
     WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
     WORD format_y;
@@ -84,7 +84,7 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
      * Logical: one panel. Give all reclaimed height to LISTVIEWs.
      */
     LONG preview=action-19;
-    LONG first=action-38;
+    LONG first=action-(p->mode==DOLLY_MODE_PARTITION?57:38);
     LONG list_top=66-lift;
     LONG height=(p->mode==DOLLY_MODE_PHYSICAL ||
                  p->mode==DOLLY_MODE_PARTITION ? first : preview)-
@@ -111,7 +111,9 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.preview_y=(WORD)(p->mode==DOLLY_MODE_PHYSICAL ||
                             p->mode==DOLLY_MODE_PARTITION ?
                             first:preview);
-    g.disk_info_y=(WORD)preview;
+    g.disk_info_y=(WORD)(p->mode==DOLLY_MODE_PARTITION ?
+                                 action-38:preview);
+    g.partition_info_y=(WORD)preview;
     g.browse_y=(WORD)list_top;
     g.path_y=(WORD)(105-lift);
     g.detail_y=(WORD)(132-lift);
@@ -173,8 +175,13 @@ static void populate_units(DollyEndpointPicker *p) {
     }
 }
 static void populate_partitions(DollyEndpointPicker *p) {
-    /* Partition selection will be enabled only with verified RDB/MBR. */
+    unsigned i;
     init_list(&p->partitions);
+    for(i=0;i<p->partition_count;++i) {
+        memset(&p->partition_nodes[i],0,sizeof(p->partition_nodes[i]));
+        p->partition_nodes[i].ln_Name=p->partition_map.parts[i].label;
+        AddTail(&p->partitions,&p->partition_nodes[i]);
+    }
 }
 static int physical_choice(const DollyEndpointPicker *p) {
     return p->has_device && p->device<p->device_count &&
@@ -183,6 +190,13 @@ static int physical_choice(const DollyEndpointPicker *p) {
 static void invalidate_query(DollyEndpointPicker *p) {
     p->queried=0;
     p->query_attempted=0;
+    p->has_partition=0;
+    p->partition_count=0;
+    p->partition_scanned=0;
+    memset(&p->media_geometry,0,sizeof(p->media_geometry));
+    memset(&p->partition_map,0,sizeof(p->partition_map));
+    p->partition_info_display[0]='\0';
+    populate_partitions(p);
 }
 static void make_logical_list(DollyEndpointPicker *p) {
     struct List *l=&p->logical_devices;
@@ -289,7 +303,15 @@ static void update_selection_preview(DollyEndpointPicker *p) {
     } else if(!p->has_unit) {
         sprintf(full,"%s / select unit...",dev);
     } else if(p->mode==DOLLY_MODE_PARTITION) {
-        sprintf(full,"%s / %s / partitions unavailable",dev,unit);
+        if(p->has_partition && p->partition<p->partition_count)
+            sprintf(full,"%s / %s / %s",dev,unit,
+                    p->partition_map.parts[p->partition].label);
+        else if(p->partition_scanned && p->partition_count)
+            sprintf(full,"%s / %s / select partition...",dev,unit);
+        else if(p->query_attempted)
+            sprintf(full,"%s / %s / %s",dev,unit,
+                    p->partition_map.status);
+        else sprintf(full,"%s / %s / press Query",dev,unit);
     } else {
         sprintf(full,"%s / %s (whole unit)",dev,unit);
     }
@@ -578,16 +600,20 @@ static void change_enabled(DollyEndpointPicker *p) {
                                       !p->unit_count,TAG_DONE);
     if(p->partition_list)
         GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
-                          GA_Disabled,TRUE,TAG_DONE);
+                          GA_Disabled,(ULONG)!p->partition_count,
+                          TAG_DONE);
     if(p->query_button)
         GT_SetGadgetAttrs(p->query_button,p->window,NULL,
                           GA_Disabled,(ULONG)!physical_choice(p),
                           TAG_DONE);
     if(p->choose_button) {
         int ready=(p->mode==DOLLY_MODE_PHYSICAL &&
-                   physical_choice(p)) ||
+                   physical_choice(p) && p->queried) ||
                   (p->mode==DOLLY_MODE_LOGICAL && p->has_logical) ||
-                  /* Partition selection disabled until actual RDB/MBR. */
+                  (p->mode==DOLLY_MODE_PARTITION &&
+                   physical_choice(p) && p->queried &&
+                   p->partition_scanned && p->has_partition &&
+                   p->partition<p->partition_count) ||
                   (p->mode==DOLLY_MODE_FILE &&
                    p->pending_file.kind==DOLLY_ENDPOINT_FILE);
         GT_SetGadgetAttrs(p->choose_button,p->window,NULL,
@@ -642,6 +668,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->disk_info_text=NULL;
     p->disk_size_text=NULL;
     p->query_button=NULL;
+    p->partition_info_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -663,7 +690,7 @@ static int rebuild(DollyEndpointPicker *p) {
         if(columns==3u) {
             column_geometry(p,columns,2u,&x,&w);
             last=list(last,p,PICK_PARTITION,x,g.list_y,w,
-                      &p->partitions,1);
+                      &p->partitions,!p->partition_count);
             if(!last)return 0;
             p->partition_list=last;
         }
@@ -695,6 +722,11 @@ static int rebuild(DollyEndpointPicker *p) {
             if(!last)return 0;
             p->disk_size_text=last;
         }
+    }
+    if(p->mode==DOLLY_MODE_PARTITION) {
+        last=partition_info_text(last,p);
+        if(!last)return 0;
+        p->partition_info_text=last;
     }
     if(p->mode==DOLLY_MODE_FILE) {
         /* Reuse the otherwise empty LISTVIEW area. Full client width. */
@@ -857,16 +889,24 @@ void dolly_picker_close(DollyEndpointPicker *p) {
  */
 static int commit_picker(DollyEndpointPicker *p) {
     int ok=0;
-    if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p)) {
+    if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p) &&
+       p->queried) {
         ok=dolly_endpoint_set_unit(&p->result,p->device,p->unit);
         if(ok)sprintf(p->result.path,"%s / Unit %lu",
                       p->physical_names[p->device],
                       (unsigned long)p->physical_units[p->unit]);
     }
     else if(p->mode==DOLLY_MODE_PARTITION &&
-            p->has_device && p->has_unit && p->has_partition)
+            physical_choice(p) && p->queried &&
+            p->partition_scanned && p->has_partition &&
+            p->partition<p->partition_count) {
         ok=dolly_endpoint_set_partition(&p->result,p->device,
                                         p->unit,p->partition);
+        if(ok)sprintf(p->result.path,"%s / Unit %lu / %s",
+                       p->physical_names[p->device],
+                       (unsigned long)p->physical_units[p->unit],
+                       p->partition_map.parts[p->partition].label);
+    }
     else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
         if(p->logical<p->logical_count) {
             ok=dolly_endpoint_set_logical(&p->result,p->logical);
@@ -882,32 +922,12 @@ static int commit_picker(DollyEndpointPicker *p) {
     if(ok)p->changed=1;
     return ok;
 }
-/* DoubleClick() uses timestamps from GT_GetIMsg BEFORE GT_ReplyIMsg.
- * A click on a different row, different list, or stale event cannot
- * commit the previous selection. A parent Device click never commits.
- */
-static int picker_double_click(DollyEndpointPicker *p,UWORD id,UWORD code,
-                               ULONG seconds,ULONG micros) {
-    int is_double=p->last_click_valid &&
-                  p->last_click_id==id &&
-                  p->last_click_code==code &&
-                  DoubleClick(p->last_click_seconds,
-                              p->last_click_micros,
-                              seconds,micros);
-    p->last_click_id=id;
-    p->last_click_code=code;
-    p->last_click_seconds=seconds;
-    p->last_click_micros=micros;
-    p->last_click_valid=1;
-    return is_double;
-}
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
         UWORD id=0,code=msg->Code;
-        ULONG seconds=msg->Seconds,micros=msg->Micros;
         int close=0;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
@@ -925,7 +945,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         GT_ReplyIMsg(msg);
         if(cls==IDCMP_NEWSIZE) {
-            p->last_click_valid=0;
+
             /* Resize completed: discard old pixel positions, build
              * fresh GadTools gadgets at the newly measured geometry.
              */
@@ -973,8 +993,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             return;
         } else if(id==PICK_UNIT &&
                   (unsigned)code<p->unit_count && p->has_device) {
-            if(p->mode==DOLLY_MODE_PARTITION)
-                p->last_click_valid=0;
+
             p->unit=code;p->has_unit=1;p->has_partition=0;
             invalidate_query(p);
             if(p->partition_list)
@@ -983,15 +1002,12 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             change_enabled(p);
             refresh_selection_preview(p);
             refresh_disk_info(p);
-            if(p->mode==DOLLY_MODE_PHYSICAL &&
-               picker_double_click(p,id,code,seconds,micros))
-                close=commit_picker(p);
+
         } else if(id==PICK_LOGICAL && (unsigned)code<p->logical_count) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);
-            if(picker_double_click(p,id,code,seconds,micros))
-                close=commit_picker(p);
+
         } else if(id==PICK_QUERY &&
                   (p->mode==DOLLY_MODE_PHYSICAL ||
                    p->mode==DOLLY_MODE_PARTITION) &&
