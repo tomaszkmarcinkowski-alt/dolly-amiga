@@ -641,11 +641,11 @@
 
 **Decyzja:** wyłącznie **identyfikator bieżącego wydania + suma kontrolna CRC32**, bez obowiązkowych podpisów cyfrowych czy rozbudowanego systemu kryptograficznego. W paczce wydania manifest zawiera ścieżkę, numer wydania, długość i CRC32 każdego pliku. Dodatki dodatkowo weryfikują format/API.
 
-**Program główny:** pakiet jest sprawdzany przed dystrybucją, a docelowy natywny bootstrap uruchamia kontrolę pliku wykonywalnego *przed* startem właściwego Dolly. Program nie może samodzielnie udowodnić autentyczności własnego pliku; manifest z tej samej paczki chroni jedynie przed **przypadkowym uszkodzeniem** lub przypadkową podmianą, nie celowym atakiem.
+**Program główny:** pakiet jest sprawdzany przed dystrybucją, a **sam główny program Dolly** po rozpoczęciu działania odczytuje swój rzeczywisty plik wykonywalny i sprawdza wersję, długość oraz CRC32 **przed udostępnieniem operacji dyskowych**. Program nie może samodzielnie udowodnić autentyczności własnego pliku; manifest z tej samej paczki chroni jedynie przed **przypadkowym uszkodzeniem** lub przypadkową podmianą, nie celowym atakiem.
 
 **Dodatki:** błędne CRC32, inny rozmiar, niezgodne wydanie i niezgodne API skutkują wyłączeniem tylko zależnej funkcji oraz dokładnym ostrzeżeniem: ścieżka, przyczyna, konsekwencje i sposób naprawy. GadTools i core nadal startują. Baza urządzeń odrzucona za błąd CRC nie może ustawiać parametrów DMA.
 
-**Stan:** przenośny streaming CRC32, generator i offline weryfikator manifestu, testy oraz logika odmowy użycia niezgodnych plików dodane do źródeł. Brak jeszcze natywnej integracji czytania plików, prawdziwego startowego bootstrapu i testu WinUAE.
+**Stan:** przenośny streaming CRC32, generator i offline weryfikator manifestu, testy oraz logika odmowy użycia niezgodnych plików dodane do źródeł. Brak jeszcze natywnej integracji odnajdywania własnego pliku wykonywalnego, odczytu plików AmigaDOS i testu WinUAE; oddzielny bootstrap nie jest planowany.
 
 ### DOL-071 — Minimalna dyskietka ratunkowa Dolly z GadTools
 
