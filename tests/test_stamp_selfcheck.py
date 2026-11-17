@@ -33,8 +33,12 @@ def main(tool):
         stamped[-1] ^= 1
         file.write_bytes(stamped)
         assert run(tool, file, "--verify").returncode != 0
-        file.write_bytes(b"x" + RECORD + b"y" + RECORD)
+        file.write_bytes(b"x" + RECORD + b"y" + RECORD +
+                         b"\0$VER: Dolly 0.1 (17.11.2026)\0")
         assert run(tool, file, "--release", "Dolly-M0-test").returncode != 0
+        file.write_bytes(b"x" + RECORD + b"y")
+        no_version = run(tool, file, "--release", "Dolly-M0-test")
+        assert no_version.returncode != 0 and "$VER" in no_version.stderr
     print("Post-link embedded CRC32 stamping/verification tests passed")
 
 if __name__ == "__main__":
