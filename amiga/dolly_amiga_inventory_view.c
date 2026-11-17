@@ -55,8 +55,7 @@ static int parse_unit(const DollyEndpoint *source,char *driver,
     marker=strstr(source->path," / Unit ");
     if(!marker)return 0;
     n=(size_t)(marker-source->path);
-    if(!n || n>=capacity || n<7u ||
-       strcmp(marker-7,"") == 0)return 0;
+    if(!n || n>=capacity || n<7u)return 0;
     /* Verify the driver suffix, no implicit device-name guesses. */
     if(strncmp(marker-7,".device",7)!=0)return 0;
     memcpy(driver,source->path,n);
@@ -153,7 +152,6 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     ULONG unit=0;
     LONG top=(LONG)screen->BarHeight+1;
     struct Gadget *last;
-    struct NewGadget ng;
     unsigned i;
     if(!v || !screen || !source)return 0;
     if(v->window)return 1;
@@ -222,14 +220,13 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     if(!v->window){dolly_inventory_view_close(v);return 0;}
     last=CreateContext(&v->gadgets);
     if(!last){dolly_inventory_view_close(v);return 0;}
-    last=create_list(last,v,screen,20,top? (LONG)v->window->BorderTop+47:47,
-                     548,93);
+    last=create_list(last,v,screen,20,
+                     (LONG)v->window->BorderTop+47,548,93);
     if(!last){dolly_inventory_view_close(v);return 0;}
     last=create_button(last,v,screen,392,
                        (LONG)v->window->Height-(LONG)v->window->BorderBottom-19,
                        176);
     if(!last){dolly_inventory_view_close(v);return 0;}
-    (void)ng;
     AddGList(v->window,v->gadgets,(ULONG)-1,-1,NULL);
     paint(v,screen);
     return 1;
