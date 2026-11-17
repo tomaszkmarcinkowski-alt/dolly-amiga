@@ -45,6 +45,7 @@ typedef struct DollyResourceNotice {
     const char *suggested_action;
     const char *required_release;
     const char *found_release; /* may be NULL */
+    uint32_t expected_format,found_format;
 } DollyResourceNotice;
 typedef void (*DollyResourceReport)(const DollyResourceNotice *,void *context);
 typedef enum DollyResourceScanStatus {
