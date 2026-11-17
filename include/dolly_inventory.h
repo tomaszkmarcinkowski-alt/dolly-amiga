@@ -8,10 +8,12 @@ typedef enum DollyInventoryValueKind {
     DOLLY_INV_U64 = 0, DOLLY_INV_TEXT
 } DollyInventoryValueKind;
 typedef enum DollyInventoryAvailability {
-    DOLLY_INV_PRESENT = 0, DOLLY_INV_UNAVAILABLE
+    DOLLY_INV_PRESENT = 0, DOLLY_INV_UNAVAILABLE,
+    DOLLY_INV_NOT_QUERIED, DOLLY_INV_UNSUPPORTED, DOLLY_INV_INCONSISTENT
 } DollyInventoryAvailability;
 typedef enum DollyInventoryOrigin {
-    DOLLY_INV_RDB_PART = 0, DOLLY_INV_DERIVED, DOLLY_INV_MBR
+    DOLLY_INV_RDB_PART = 0, DOLLY_INV_DERIVED, DOLLY_INV_MBR,
+    DOLLY_INV_RDB_HEADER
 } DollyInventoryOrigin;
 typedef struct DollyInventoryField {
     const char *key;
@@ -30,4 +32,7 @@ int dolly_inventory_partition(const DollyPartition *partition,
                               DollyInventoryEmit emit, void *user);
 int dolly_inventory_mbr_partition(const DollyMbrPartition *partition,
                                   DollyInventoryEmit emit, void *user);
+int dolly_inventory_rdb_header(const DollyRdb *rdb,
+                               DollyInventoryEmit emit, void *user);
+const char *dolly_inventory_availability_name(DollyInventoryAvailability availability);
 #endif
