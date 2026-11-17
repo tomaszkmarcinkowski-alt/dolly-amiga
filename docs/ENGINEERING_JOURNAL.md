@@ -454,12 +454,40 @@
 **Wniosek architektoniczny:** docelowo kod, prawdopodobna przyczyna, proponowane kroki oraz poziom pewnosci powinny byc rozdzielone, aby translacje PL/EN i GadTools nie musialy implementowac logiki diagnostycznej osobno. [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
 
 
+### DJ-0044 · 2026-11-17 · GUI / modułowość · KONTRAKT OPUBLIKOWANY, NATYWNE MODUŁY OTWARTE
+**Temat:** GadTools powinien być domyślnym GUI bez zależności od ReAction/MUI; pozostałe GUI mogą być ładowanymi opcjonalnie modułami.
+
+**Decyzja:** wbudowany GadTools dla 68000/AmigaOS 2.04+, a ReAction i później MUI jako niezależne backendy. Wspólny silnik i modele Sheep Inventory/ostrzeżeń/operacji są niezależne od toolkitów. Opublikowano `include/dolly_gui_backend.h` z wersjonowanym kontraktem API; nie jest on jeszcze natywnym, zweryfikowanym mechanizmem ładowania modułów.
+
+**Ograniczenia:** faktyczne ładowanie backendów, ABI AmigaOS, zachowanie przy brakujących bibliotekach oraz implementacja GUI wymagają cross-kompilacji i testów WinUAE. Opcjonalny backend nie może uniemożliwiać użycia podstawowego GadTools. [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14).
+
+### DJ-0045 · 2026-11-17 · GUI / rozdzielczość i font · PLANER W KODZIE, PIXELOWA WALIDACJA OTWARTA
+**Temat:** Wszystkie widoki, dialogi i komunikaty muszą pozostać dostępne w 640×256 z Topaz/8 i prawdziwymi ramkami okna.
+
+**Decyzja:** hierarchia fontów: własny font Dolly, jeśli wybrany i pasujący; następnie aktualny systemowy **Screen Font**; w razie potrzeby **Topaz/8** + kompaktowy układ i stronicowanie. Długi Sheep Inventory, podpowiedzi błędów i logi nie mogą wypychać przycisków poza ekran. Nieotwieranie okna jest bezpieczniejsze niż otwarcie niedostępnego requestera.
+
+**Działanie:** `dolly_gui_layout` oblicza zewnętrzny rozmiar i zawartość dla siedmiu rodzajów okien. W `tests/test_gui_layout.c` zapisano scenariusze 640×256, 640×200, duże fonty, ciasne okna, brak Topaz i 5000 powtarzalnych wariantów geometrii. Poprawiono też kontrolę przepełnienia przy sumowaniu zarezerwowanych pionowych obszarów ekranu.
+
+**Weryfikacja:** testy są zapisane i podłączone do CMake, lecz **pełnego CTest najnowszej gałęzi nie zweryfikowano**. To matematyczne sprawdzanie geometrii, **nie dowód, że faktycznie wyrenderowane GadTools i fonty proporcjonalne nie będą obcięte**. Ostateczna akceptacja wymaga dokładnego pomiaru `TextLength/TextExtent` i zrzutów wszystkich okien w WinUAE.
+
+### DJ-0046 · 2026-11-17 · AmigaOS / powiadomienia · POTWIERDZONO RÓŻNICĘ API, ADAPTER EKSPERYMENTALNY
+**Temat:** Wykrycie zmiany plików preferencji i wykrycie zamykania ekranu publicznego to **dwa różne zdarzenia**.
+
+**Weryfikacja:** AmigaDOS `StartNotify()/EndNotify()` istnieje od V36 (AmigaOS 2.x), nie dopiero od OS 3.1.4. `IDCMP_NEWPREFS` nie obejmuje wszystkich zmian fontu i ekranu. **Nie ma potwierdzenia**, że 3.1.4 zawiera zintegrowaną bibliotekę o odpowiedniku API `screennotify.library`; na AmigaOS 3.x traktujemy ją jako opcjonalną, osobno instalowaną bibliotekę. Potrzebne jest sprawdzenie rzeczywistego protokołu przed jej podłączeniem.
+
+**Działanie:** `dolly_screen_watch` scala zdarzenia i zabrania przebudowy GUI z nieaktualnym `Screen*`. Dodano eksperymentalny adapter `amiga/dolly_amiga_pref_notify.c` obserwujący `ENV:sys/screenmode.prefs` i `ENV:sys/screenfont.prefs` przez prywatny port, z `NRF_WAIT_REPLY` i poprawnym `EndNotify` na koniec. Gdy ekran zostanie zamknięty, odbiorca musi go ponownie zdobyć i zmierzyć, zamiast używać starego wskaźnika. Adapter można osobno cross-kompilować przez `DOLLY_NATIVE_GUI_WATCH`.
+
+**Ograniczenia:** adapter nie został jeszcze skompilowany z prawdziwym NDK ani uruchomiony w WinUAE; `screennotify.library` i event loop GadTools pozostają otwarte. Bez tej biblioteki nie deklarujemy gwarantowanego wykrycia *każdego* zamknięcia ekranu. [Issue #15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15).
+
+**Źródła:** [AmigaDOS Notification](https://wiki.amigaos.net/wiki/Notification), [IDCMP_NEWPREFS](https://wiki.amigaos.net/wiki/Intuition_Input_and_Output_Methods), [Intuition Screens](https://wiki.amigaos.net/wiki/Intuition_Screens), [ScreenNotify10 (Aminet)](https://aminet.net/package/util/libs/ScreenNotify10).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0044 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0047 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
