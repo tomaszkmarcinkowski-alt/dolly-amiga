@@ -1199,3 +1199,31 @@ in WinUAE** and should be tested only with disposable HDF images
 before enabling tests on real physical Amigas. Keep trackdisk
 excluded; carddisk present but postpone its SRAM-specific
 hardware tests. RTG and profiling tests are still deferred.
+
+### M1.29 — persistent GadTools list selection and RDB sequence labels
+
+GadTools LISTVIEW_KIND was created with GTLV_Selected but without
+GTLV_ShowSelected, causing a short press/release highlight rather than a
+persistent indication. The chooser now creates every LISTVIEW with
+`GTLV_ShowSelected,NULL` and retains `GTLV_Selected` from picker
+selection state through rebuilds and resize.
+
+**Version distinction:** in GadTools V39+ (AmigaOS 3.x) this draws a
+persistent highlight bar across the chosen row. On V37 (AmigaOS 2.04),
+the selected item is instead shown in a separate read-only selection
+display beneath the list. It is not equivalent to V39 highlighting.
+No custom rendering or V39-only API is required.
+
+Partition LISTVIEW now displays an ordinal prefix `1: `, `2: `, etc.
+These are the positions in the validated, checksum-checked RDB PART
+linked chain, not alphabetical order, cylinder order or RDB block number.
+For MBR the same ordinal is the position among returned usable primary
+partition entries; MBR labels already say `MBR n`.
+The original disk label is held untouched in DollyNativePartition,
+used by Selected partition, Partition info and the endpoint committed
+to the main view. No disk I/O or partition parser logic changed.
+
+Status: implementation submitted for compilation and WinUAE verification,
+not yet tested by the assistant. Use the existing 640x256 A1200 / OS3.1
+test HDF first; verify OS2.04 separately for the version-dependent
+selection rendering. RTG remains deferred.
