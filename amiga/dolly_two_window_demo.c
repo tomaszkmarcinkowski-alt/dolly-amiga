@@ -196,8 +196,8 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
-                        GTST_String,(ULONG)value,
-                        GTST_Border,border,TAG_DONE);
+                        GTTX_Text,(ULONG)value,
+                        GTTX_Border,border,TAG_DONE);
 }
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     struct Gadget *last;
@@ -297,10 +297,10 @@ static void update_numbers(DollyDemoView *v) {
     /* Keep both formatted strings in view-owned storage. */
     update_labels(v);
     GT_SetGadgetAttrs(v->count,v->window,NULL,
-                      GTST_String,(ULONG)v->block_label,TAG_DONE);
+                      GTTX_Text,(ULONG)v->block_label,TAG_DONE);
     if(v->percent)
         GT_SetGadgetAttrs(v->percent,v->window,NULL,
-                          GTST_String,(ULONG)v->percent_label,TAG_DONE);
+                          GTTX_Text,(ULONG)v->percent_label,TAG_DONE);
     if(v->errors)
         GT_SetGadgetAttrs(v->errors,v->window,NULL,
                           GTNM_Number,(ULONG)operation.errors,TAG_DONE);
