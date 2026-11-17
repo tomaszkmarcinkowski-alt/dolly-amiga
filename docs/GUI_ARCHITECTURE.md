@@ -924,3 +924,25 @@ before connecting this UI to a real drive.
 
 See DISC-21 through DISC-29 in docs/TEST_MATRIX.md. Not yet
 cross-compiled or runtime tested. RTG and memory profiling deferred.
+
+### M1.22 — compact top/bottom margins on classic non-square-pixel screens
+
+The picker now derives a compact-vertical-layout flag from the
+public screen's pixel dimensions: screen width > 2 * screen height.
+This includes the tested 640x256 classic Workbench reference mode,
+whose non-square pixels make the previous vertical whitespace
+especially visible. The mode does not alter proportional 4:3-like
+screens, so the previously accepted offsets remain there.
+
+On compact screens the selection Cycle, headings, column captions,
+list start and File controls shift upward by 5 px. The Use selection
+and Cancel action row shifts 8 px toward the bottom window border.
+The reclaimed 13 px are given to LISTVIEW height. Both Physical /
+Partition recessed panels remain full-width with their existing
+3 px inter-panel/list gaps, and stay anchored above the action row.
+All coordinates are calculated through picker_geometry() so Source
+and Destination and resizes use the same layout rules.
+
+This is a geometry-only change; no changes to DOS discovery or disk
+I/O. Newly added tests GUI-33–37 are pending 640x256 verification.
+RTG/proportional mode testing remains deferred.
