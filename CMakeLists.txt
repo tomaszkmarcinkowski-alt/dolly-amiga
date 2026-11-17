@@ -13,3 +13,13 @@ enable_testing()
 add_executable(test-probe tests/test_probe.c)
 target_link_libraries(test-probe PRIVATE dollyprobe)
 add_test(NAME file_probe COMMAND test-probe)
+
+# POSIX host backend; AmigaOS device backend will be separate.
+add_library(dollyblock STATIC src/dolly_block_source.c)
+target_include_directories(dollyblock PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyblock PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-block-source tests/test_block_source.c)
+target_link_libraries(test-block-source PRIVATE dollyblock)
+add_test(NAME block_source COMMAND test-block-source)
