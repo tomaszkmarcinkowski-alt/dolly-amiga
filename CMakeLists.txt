@@ -91,3 +91,14 @@ if(Python3_Interpreter_FOUND)
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_cli_smoke.py
       $<TARGET_FILE:dolly-layout> $<TARGET_FILE:dolly-iff>)
 endif()
+
+# Read-only analysis of filesystem de_MaxTransfer (not raw device transfer limit).
+add_library(dollymaxtransfer STATIC src/dolly_maxtransfer.c)
+target_include_directories(dollymaxtransfer PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollymaxtransfer PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_executable(test-maxtransfer tests/test_maxtransfer.c)
+target_link_libraries(test-maxtransfer PRIVATE dollymaxtransfer)
+add_test(NAME maxtransfer_advisory COMMAND test-maxtransfer)
+target_link_libraries(dolly-rdb PRIVATE dollymaxtransfer)
