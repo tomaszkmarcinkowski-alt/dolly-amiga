@@ -44,6 +44,15 @@ int dolly_inventory_partition(const DollyPartition *p,
                 DOLLY_INV_DERIVED,
                 p->length_bytes<=UINT64_MAX-p->start_bytes
                   ? DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
+    EMIT_NUMBER("buffers","Initial DOS buffers","count",
+                p->buffer_count,DOLLY_INV_RDB_PART,
+                p->buffer_count_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
+    EMIT_NUMBER("buffer_mem_type","DOS buffer memory type","hex32",
+                p->buffer_memory_type,DOLLY_INV_RDB_PART,
+                p->buffer_memory_type_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
+    EMIT_NUMBER("dma_mask","Memory address mask","hex32",
+                p->dma_mask,DOLLY_INV_RDB_PART,
+                p->dma_mask_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
     EMIT_NUMBER("max_transfer","MaxTransfer (filesystem)","bytes",
                 p->max_transfer_bytes,DOLLY_INV_RDB_PART,
                 p->max_transfer_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
