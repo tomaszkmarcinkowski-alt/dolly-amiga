@@ -14,6 +14,36 @@
 
 The versioned toolkit-neutral contract lives in `include/dolly_gui_backend.h`. It defines a core-owned host interface and a backend table for events/main window/notice/window relayout. **It is a design contract, not an implemented dynamic loader**. We must verify actual AmigaOS shared-library/LoadSeg ABI, compiler calling conventions, symbol lifetime and packaging before describing modules as loadable plugins. Backend failure must show a brief message and revert to built-in GadTools, never fail to launch Dolly.
 
+## Sheep Counter window placement (M1.5)
+
+**Default:** open on the existing public/system screen (Workbench) using
+Intuition/GadTools styling and the screen's own pens/font. At launch,
+the window is maximized to the usable screen area **below** the
+system screen title bar, without covering that bar:
+
+- Left = 0, Top = `Screen.BarHeight`
+- Outer Width = `Screen.Width`
+- Outer Height = `Screen.Height - Screen.BarHeight`
+
+These are **outer window dimensions**, including Dolly's own title bar,
+borders and close gadget. The top system title bar remains visible.
+The screen size is queried at runtime; do not hard-code a window size
+of 640x256 or force a new screen.
+
+Future optional preference: open Sheep Counter on a separate dedicated
+screen, with a return to default public-screen mode. Do not implement
+the separate-screen option as a requirement for the current milestone.
+Use one model for block progress and a simple ASCII `*` marker until
+the final red/white Dolly art and animations are developed.
+
+The M1.5 prototype `dolly-sheep-window` uses a public Intuition window
+and direct RastPort drawing, not yet full GadTools gadgets. It has
+synthetic progress and **no physical disk reads or writes**. Fixed
+20x6 grid rendering is an experimental 640x256 baseline; adaptable
+layout/font measurements and refresh handling remain open. It should
+be compiled and run on MC68000 / 512 KiB Chip / Kickstart 2.04 before
+claiming this UI milestone complete.
+
 ## Screen resolution and font policy
 
 Mandatory **640x256, topaz.font/8** baseline for every built-in GadTools window and warning, considering outer dimensions (title, gadgets, borders, buttons). Prefer practical 640x200 compatibility. Existing `dolly_gui_layout` is a *portable geometry preflight*, not a real pixel-precise GadTools renderer.
