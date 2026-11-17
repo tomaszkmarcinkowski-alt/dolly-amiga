@@ -43,6 +43,10 @@ typedef struct DollyAmigaContext {
     ULONG dma_mask;
     ULONG dma_alignment;
 } DollyAmigaContext;
+static void notify_dma(const DollyAmigaDeviceOptions *opt,DollyDmaStatus reason){
+    if(opt && opt->report_dma_problem)
+        opt->report_dma_problem(reason,dolly_dma_user_message(reason),opt->report_user);
+}
 static void close_ctx(void *opaque) {
     DollyAmigaContext *ctx=(DollyAmigaContext *)opaque;
     if(!ctx)return;
@@ -125,8 +129,10 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
        opt->dma_address_mask==0 ||
        opt->dma_alignment<2 || opt->dma_alignment>4096 ||
        (opt->dma_alignment&(opt->dma_alignment-1))!=0 ||
-       opt->require_24bit_dma>1)
+       opt->require_24bit_dma>1 || !opt->report_dma_problem){
+        notify_dma(opt,DOLLY_DMA_BAD_PROFILE);
         return DOLLY_BLOCK_EINVAL;
+    }
     ctx=(DollyAmigaContext *)calloc(1,sizeof(*ctx));
     if(!ctx)return DOLLY_BLOCK_ENOMEM;
     ctx->block_bytes=sector;ctx->max_transfer=transfer;
@@ -145,7 +151,10 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
     ctx->supports_nsd64=verify_nsd64(ctx);
     ctx->bounce=(UBYTE *)AllocMem((ULONG)transfer,
                   MEMF_PUBLIC | (opt->require_24bit_dma?MEMF_24BITDMA:0));
-    if(!ctx->bounce){close_ctx(ctx);return DOLLY_BLOCK_ENOMEM;}
+    if(!ctx->bounce){
+        notify_dma(opt,DOLLY_DMA_NO_COMPATIBLE_MEMORY);
+        close_ctx(ctx);return DOLLY_BLOCK_ENOMEM;
+    }
     /* This is a necessary address-range check, NOT sufficient proof of
      * bus visibility or cache coherency. Integration still needs real
      * controller testing and OS-specific DMA handling. */
@@ -156,8 +165,10 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
     {
         uint64_t addr=(uint64_t)(uintptr_t)ctx->bounce;
 #endif
-        if(dolly_dma_check_buffer(addr,transfer,ctx->dma_mask,
-                                   ctx->dma_alignment)!=DOLLY_DMA_OK){
+        DollyDmaStatus dma_result=dolly_dma_check_buffer(addr,transfer,
+                                            ctx->dma_mask,ctx->dma_alignment);
+        if(dma_result!=DOLLY_DMA_OK){
+            notify_dma(opt,dma_result);
             close_ctx(ctx);return DOLLY_BLOCK_EUNSUPPORTED;
         }
     }
