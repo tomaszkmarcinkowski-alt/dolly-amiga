@@ -1384,3 +1384,18 @@ whether the whole label fits with 6px padding at both sides. On narrow
 windows omit the label rather than overlap active controls. The label
 is static text, not a gadget. Update the build string for later GUI
 revisions. Cross-build and WinUAE verification are pending.
+
+### M1.40 — measured main minimum
+
+Replace the stale 175px main client-height floor in the portable
+minimum calculator. The GUI passes the maximum bottom edge derived
+from its current status bevel, progress field and button rows, plus
+three pixels of breathing room; the minimum function adds actual
+font/chrome/padding metrics measured from Intuition. Use that result
+for WindowLimits instead of fixing the main minimum height to the
+initial window height. The remaining initial outer height is 190px.
+
+Version text is now `Dolly M1.40`. It is required in the Progress row:
+minimum width reserves the text's actual TextLength plus safe gaps and
+both 90px action buttons, preventing truncation even on minimum-width
+resizes. Cross-compile and visual regression remain to be done.
