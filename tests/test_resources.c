@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 typedef struct Fixture {
-    unsigned calls,notices,versions,unknown;
+    unsigned calls,notices,versions,formats,unknown;
 } Fixture;
 static DollyResourceProbeResult probe(const char *path,void *context){
     Fixture *f=(Fixture *)context;
@@ -44,6 +44,10 @@ static void notice(const DollyResourceNotice *n,void *context){
         f->versions++;
         assert(n->found_release);
     }
+    if(!strcmp(n->code,"DOLLY_OPTIONAL_RESOURCE_API_MISMATCH")){
+        f->formats++;
+        assert(n->expected_format==3 && n->found_format==2);
+    }
     if(!strcmp(n->code,"DOLLY_OPTIONAL_RESOURCE_UNVERIFIED"))f->unknown++;
 }
 int main(void){
@@ -66,7 +70,7 @@ int main(void){
     assert(f.calls==6&&f.notices==5);
     assert(r.missing_files==1&&r.unreadable_files==1);
     assert(r.incompatible_files==2&&r.unverified_files==1);
-    assert(f.versions==2&&f.unknown==1);
+    assert(f.versions==1&&f.formats==1&&f.unknown==1);
     assert(r.disabled_kinds==(1u<<DOLLY_RESOURCE_DEVICE_DATABASE |
                                1u<<DOLLY_RESOURCE_CATALOG));
     assert(!strcmp(dolly_resource_kind_directory(DOLLY_RESOURCE_DEVICE_DATABASE),
