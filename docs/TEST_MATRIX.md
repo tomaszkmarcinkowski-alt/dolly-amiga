@@ -286,3 +286,27 @@ exactly those two keys; it still does **not** populate the GUI directly.
 selection dialog until real driver/unit candidates and read-only query
 results have been verified in WinUAE. Do not map hardware to the
 synthetic Device/Unit indices.
+
+## K. M1.24 WinUAE regression: physical candidates always zero
+
+Observed: initial 68000/OS2.04 with no controller media produced
+Candidates: 0, skipped/unknown: 8. A1200/OS3.1 with IDE disk attached
+to scsi.device still produced Candidates: 0, skipped/unknown: 14.
+
+Do **not** infer that the Amiga does not have an IDE drive from this.
+The existing strict FileSysStartupMsg/DosEnvec heuristic may reject
+legitimate handlers or structures. An extra no-physical-I/O diagnostic
+now records each DOS entry's name and first failure reason, then
+prints diagnostics *after* releasing the LockDosList read lock.
+There is no automatic OpenDevice/DoIO.
+
+| ID | Run | Expected |
+|---|---|---|
+| PHYS-18 | dolly-physical-probe, no args | If no candidates, prints device-by-device rejection reasons |
+| PHYS-19 | dolly-physical-probe --inspect | Always prints per-entry reasons (no hardware I/O) |
+| PHYS-20 | Boot A1200/OS3.1 with scsi.device IDE | Determine whether actual disk's DOS node is rejected by pointer, environment validation or .device name |
+| PHYS-21 | Diagnostic errors | No unvalidated BADDR dereference, no calls to OpenDevice or DoIO for enumeration |
+
+Do not enable an automatic GUI probe until the actual IDE DOS startup
+record can be identified and validated. The M1.24 Device name/Size
+recessed fields remain distinct.
