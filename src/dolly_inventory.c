@@ -79,3 +79,31 @@ int dolly_inventory_mbr_partition(const DollyMbrPartition *p,
 #undef MBR_FIELD
     return 0;
 }
+
+int dolly_inventory_rdb_header(const DollyRdb *r,DollyInventoryEmit emit,void *user){
+    int x;
+    if(!r||!emit)return -1;
+#define RDB_FIELD(k,l,u,v,o) do { \
+    x=numeric(emit,user,k,l,u,(uint64_t)(v),o,DOLLY_INV_PRESENT); \
+    if(x)return x; \
+} while(0)
+    RDB_FIELD("rdb_base","RDB base","bytes",r->base_offset,DOLLY_INV_DERIVED);
+    RDB_FIELD("rdb_block_bytes","RDB block size","bytes",r->block_bytes,DOLLY_INV_RDB_HEADER);
+    RDB_FIELD("rdb_header_block","RDSK position","block",r->header_block,DOLLY_INV_RDB_HEADER);
+    RDB_FIELD("rdb_cylinders","RDB cylinders","cylinders",r->cylinders,DOLLY_INV_RDB_HEADER);
+    RDB_FIELD("rdb_heads","RDB heads","heads",r->heads,DOLLY_INV_RDB_HEADER);
+    RDB_FIELD("rdb_sectors","RDB sectors/track","sectors",r->sectors,DOLLY_INV_RDB_HEADER);
+    RDB_FIELD("rdb_partition_count","Recognized PART count","partitions",r->partition_count,DOLLY_INV_DERIVED);
+#undef RDB_FIELD
+    return 0;
+}
+const char *dolly_inventory_availability_name(DollyInventoryAvailability s){
+    switch(s){
+    case DOLLY_INV_PRESENT:return "present";
+    case DOLLY_INV_UNAVAILABLE:return "not present";
+    case DOLLY_INV_NOT_QUERIED:return "not queried";
+    case DOLLY_INV_UNSUPPORTED:return "unsupported";
+    case DOLLY_INV_INCONSISTENT:return "inconsistent";
+    default:return "invalid status";
+    }
+}
