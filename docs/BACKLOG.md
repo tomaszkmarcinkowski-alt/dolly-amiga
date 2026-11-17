@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**59 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**60 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -508,3 +508,16 @@
 **Akceptacja:** Raport pokazuje HEX i bajty, rozróżnia wartość `0x1FE00`, większą, mniejszą, zerową i niedostępną; ostrzega bez automatycznej zmiany. Uwzględnia profil sterownika, gdy jest znany. Nie utożsamia filesystemowego `de_MaxTransfer` z limitem pojedynczej operacji surowego I/O.
 
 **Stan:** wstępna diagnostyka hostowa i CLI dodana; porównanie z aktywnymi mountlistami i profilami sterowników pozostaje otwarte.
+
+
+## Epic: Diagnostics UX / Sheep Inventory
+
+### DOL-060 — Sheep Inventory: szczegółowy inwentarz dowolnego obiektu
+
+**Priorytet:** P1 (wstępnie) · **Etap:** M5 (UI), możliwość wcześniejszego prototypu CLI · **Story Points:** do rozbicia · [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13)
+
+**User story:** Jako użytkownik Dolly chcę otworzyć okno **Sheep Inventory** dla wybranego urządzenia, dysku, obrazu, partycji, woluminu lub systemu plików, by zobaczyć możliwie kompletne informacje techniczne, geometrię, właściwości, stan i zdiagnozowane niespójności.
+
+**Akceptacja:** pola pogrupowane kontekstowo; źródło i status wiarygodności każdego pomiaru; Hex/bajty/LBA i inne jednostki, dane kontrolera oraz urządzenia, RDB/MBR, MaxTransfer/Mask, filesystem; niewspierane dane oznaczone jako nieznane. Okno tylko do odczytu, na małej pamięci 68000, z oddzielnym uruchamianiem kosztownych analiz, opcją kopiowania informacji i wersją CLI.
+
+**Uwagi:** diagnostyka i informacja, nie naprawa. Wynik nie certyfikuje bezpieczeństwa dysku. Wspólne dane Inventory mogą kiedyś służyć Flock Managerowi, ale nie przenosimy tam żadnych prywatnych informacji automatycznie.
