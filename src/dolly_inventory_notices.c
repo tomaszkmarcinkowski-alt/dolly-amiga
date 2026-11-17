@@ -1,5 +1,6 @@
 #include "dolly_inventory_notices.h"
 #include "dolly_maxtransfer.h"
+#include "dolly_rdb_audit.h"
 static int notice(DollyInventoryNoticeEmit emit,void *user,
                   const char *code,const char *message,
                   DollyInventoryNoticeSeverity severity){
@@ -62,4 +63,36 @@ const char *dolly_notice_severity_name(DollyInventoryNoticeSeverity s){
     case DOLLY_NOTICE_ERROR:return "ERROR";
     default:return "UNKNOWN";
     }
+}
+
+int dolly_inventory_rdb_notices(const DollyRdb *r,
+                               uint64_t base,uint64_t length,
+                               DollyInventoryNoticeEmit emit,void *user){
+    DollyRdbAudit a;
+    int x;
+    if(!r||!emit)return -1;
+    a=dolly_rdb_audit(r,base,length);
+#define RDB_WARNING(flag,code,message) do { \
+    if(a.flags&(flag)){ \
+       x=notice(emit,user,code,message,DOLLY_NOTICE_WARNING); \
+       if(x)return x; \
+    } \
+} while(0)
+    RDB_WARNING(DOLLY_RDB_AUDIT_OVERLAPPING_PARTS,
+                "RDB_PARTITIONS_OVERLAP",
+                "Two recognized RDB partition data ranges overlap.");
+    RDB_WARNING(DOLLY_RDB_AUDIT_HEADER_COLLISION,
+                "RDB_HEADER_COLLISION",
+                "Partition data overlaps the RDSK header block.");
+    RDB_WARNING(DOLLY_RDB_AUDIT_PART_COLLISION,
+                "RDB_PART_DESCRIPTOR_COLLISION",
+                "Partition data overlaps a PART descriptor.");
+    RDB_WARNING(DOLLY_RDB_AUDIT_OUTSIDE_CONTAINER,
+                "RDB_OUTSIDE_CONTAINER",
+                "A partition or RDB metadata block falls outside its container.");
+    RDB_WARNING(DOLLY_RDB_AUDIT_BAD_ARGUMENT,
+                "RDB_AUDIT_INVALID",
+                "RDB geometry could not be safely audited.");
+#undef RDB_WARNING
+    return 0;
 }
