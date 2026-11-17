@@ -950,3 +950,15 @@ Not yet cross-compiled or tested in WinUAE.
 | GUI-177 | Main window | M1.41 layout unchanged except version text `Dolly M1.42` |
 
 M1.42 code not cross-compiled or WinUAE-tested; no real media writes enabled.
+
+## AK. M1.43 — validated device geometry and query provenance
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-178 | Physical Source, valid TD_GETGEOMETRY | Capacity accepted only with power-of-two sector size 128–65536 bytes |
+| GUI-179 | Unsupported/invalid TD geometry, supported SCSI READ CAPACITY(10) | SCSI probe supplies verified capacity and size |
+| GUI-180 | Invalid sector size in both queries | Unknown capacity and Use selection disabled |
+| GUI-181 | Geometry available but no SCSI INQUIRY name | Device info shows sector size and whether TD geometry or SCSI capacity supplied it |
+| GUI-182 | Main Dolly window | Same approved M1.41 geometry, `Dolly M1.43` SHINEPEN label |
+
+Source changes not yet cross-compiled or tested in WinUAE. Device selection is not permission to perform writes.
