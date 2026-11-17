@@ -114,3 +114,29 @@ The toolchain preset defaults to `-noixemul`; the compile target defines
 `DOLLY_AMIGAOS_MEMORY_PROFILING`. After copying the executable to the
 WinUAE shared directory, run `Stack 16384`, then
 `dolly-native-smoke --selftest` and `Echo $RC`.
+
+### M1.1 real WinUAE checkpoint result (2026-11-17)
+
+User-confirmed native execution on MC68000, 512 KiB Chip RAM,
+Kickstart 2.04 (no Fast RAM):
+
+```text
+Dolly native smoke: PASS
+RDB result allocation: 13604 bytes
+MEM start        chip=278672 fast=0 total=278672 largest=277944
+MEM allocated    chip=262288 fast=0 total=262288 largest=261560
+MEM parsed       chip=262288 fast=0 total=262288 largest=261560
+MEM released     chip=278672 fast=0 total=278672 largest=277944
+RC=0
+```
+
+Free memory fell by **16384 bytes (16 KiB)** between the start and
+allocated checkpoints, and the largest contiguous free block fell by the
+same amount. Both returned **exactly** to their starting values at the
+released checkpoint. This supports correct cleanup in the measured interval,
+not a general no-leaks claim; checkpoint sampling does not include the
+program's loader/runtime baseline, transient peaks, or stack high-water.
+The 13604-byte RDB structure is not the full process memory footprint.
+
+The provisional WinUAE compatibility baseline remains MC68000,
+512 KiB Chip, Kickstart 2.04, without Fast RAM.
