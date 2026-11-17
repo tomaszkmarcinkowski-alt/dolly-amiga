@@ -389,5 +389,6 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME release_crc32_manifest
     COMMAND ${Python3_EXECUTABLE}
       ${PROJECT_SOURCE_DIR}/tests/test_release_manifest.py
-      ${PROJECT_SOURCE_DIR}/tools/make_release_manifest.py)
+      ${PROJECT_SOURCE_DIR}/tools/make_release_manifest.py
+      ${PROJECT_SOURCE_DIR}/tools/verify_release_manifest.py)
 endif()
