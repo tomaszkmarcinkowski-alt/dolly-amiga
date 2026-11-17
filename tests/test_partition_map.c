@@ -30,5 +30,15 @@ int main(void){char path[]="/tmp/dolly-mbr-XXXXXX";int fd=mkstemp(path);FILE *f;
  make_part(part,2,4);store(f,4096ULL*BS+2*BS,part);
  add_part(mbr,0,0xee,1,1000);store(f,0,mbr);assert(scan(path,&map)==DOLLY_MAP_UNSUPPORTED);
  add_part(mbr,0,0x0c,10000,5000);store(f,0,mbr);assert(scan(path,&map)==DOLLY_MAP_OUT_OF_RANGE);
+ /* Read-only whole-disk RDB coexisting with primary MBR. */
+ add_part(mbr,0,0x0c,2048,2048);store(f,0,mbr);
+ make_rdb(rdb);make_part(part,64,66);
+ store(f,BS,rdb);store(f,2ULL*BS,part);
+ assert(scan(path,&map)==DOLLY_MAP_OK);
+ assert(map.has_mbr&&map.has_whole_disk_rdb&&map.hybrid_mbr_rdb);
+ assert(map.hybrid_mbr_overlap);
+ make_part(part,4,5);store(f,2ULL*BS,part);
+ assert(scan(path,&map)==DOLLY_MAP_OK&&map.hybrid_mbr_rdb);
+ assert(!map.hybrid_mbr_overlap);
  assert(fclose(f)==0);assert(unlink(path)==0);
  puts("MBR/nested RDB test cases passed");return 0;}
