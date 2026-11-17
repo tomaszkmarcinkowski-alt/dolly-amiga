@@ -666,6 +666,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         GT_ReplyIMsg(msg);
         if(cls==IDCMP_NEWSIZE) {
+            p->last_click_valid=0;
             /* Resize completed: discard old pixel positions, build
              * fresh GadTools gadgets at the newly measured geometry.
              */
@@ -702,6 +703,8 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             refresh_selection_preview(p);
             p->last_click_valid=0;
         } else if(id==PICK_UNIT && code<2u && p->has_device) {
+            if(p->mode==DOLLY_MODE_PARTITION)
+                p->last_click_valid=0;
             p->unit=code;p->has_unit=1;p->has_partition=0;
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
