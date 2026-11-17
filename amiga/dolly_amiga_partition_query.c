@@ -76,7 +76,7 @@ static void add_rdb(DollyGuiPartitionResult *out,const DollyRdb *rdb,
             sprintf(d->label,"%s",p->name[0]?p->name:"(unnamed)");
         fs_label(fs,p->dos_type);
         block_bytes=(ULONG)p->block_size_longwords*4ul;
-        snprintf(d->details,sizeof(d->details),
+        sprintf(d->details,
                  "%s | %lu MiB | %s | Cyl %lu-%lu | Block %lu B",
                  p->name[0]?p->name:"(unnamed)",
                  (unsigned long)(p->length_bytes/1048576u),fs,
@@ -97,7 +97,7 @@ static void add_mbr(DollyGuiPartitionResult *out,
     d->length_bytes=part->length_bytes;
     sprintf(d->label,"MBR %lu (0x%02lx)",
             (unsigned long)(index+1u),(unsigned long)part->type);
-    snprintf(d->details,sizeof(d->details),
+    sprintf(d->details,
              "%s | %lu MiB | Type 0x%02lx | Cyl N/A | Sector %lu B",
              d->label,(unsigned long)(part->length_bytes/1048576u),
              (unsigned long)part->type,(unsigned long)device_block);
