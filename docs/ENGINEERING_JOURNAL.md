@@ -651,12 +651,19 @@
 
 **Następny krok:** niezależne `DOLLY_NATIVE_ONLY=ON` na hoście, następnie `m68k-amigaos-gcc` i WinUAE/AmigaOS 2.04. Zapis wyników cross-build i wykonania native smoke osobno.
 
+### DJ-0064 · 2026-11-17 · M0 / WSL2 native-only host dry run · 8/8 PASS — POTWIERDZONE PRZEZ UŻYTKOWNIKA
+**Wynik:** na Windows 11 / Ubuntu WSL2 z GCC 15.2.0 użytkownik wykonał oddzielną konfigurację `DOLLY_NATIVE_ONLY=ON`; CMake i Ninja zakończyły budowę (52/52), `ctest` zgłosił **8/8 PASS, 0 failures**, a uruchomione `./build-native-host/dolly-native-smoke --selftest` wypisało `Dolly native smoke: PASS` i `RDB result allocation: 14376 bytes`.
+
+**Zakres potwierdzenia:** POSIX-free source list i syntetyczna diagnostyka w pamięci, ale **binarka hostowa dla x86-64**, nie natywny plik AmigaOS HUNK. Rozmiar `DollyRdb` 14 376 bajtów jest właściwy dla ABI użytego na tym hoście; nie należy go automatycznie przypisywać MC68000.
+
+**Następny krok:** cross-build za pomocą `m68k-amigaos-gcc` z `cmake/toolchains/amigaos-m68k.cmake`, potem test w WinUAE na 68000 / AmigaOS 2.04. CTest po kompilacji krzyżowej nie uruchamiać lokalnie bez emulatora. Nie włączono operacji fizycznego odczytu ani zapisu.
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0064 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0065 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
