@@ -1,6 +1,7 @@
 #include "dolly_amiga_partition_query.h"
 #include "dolly_partition_map.h"
 #include <devices/trackdisk.h>
+#include <exec/io.h>
 #include <proto/exec.h>
 #include <exec/memory.h>
 #include <string.h>
@@ -77,7 +78,7 @@ static void add_rdb(DollyGuiPartitionResult *out,const DollyRdb *rdb,
         fs_label(fs,p->dos_type);
         block_bytes=(ULONG)p->block_size_longwords*4ul;
         sprintf(d->details,
-                 "%s | %lu MiB | %s | Cyl %lu-%lu | Block %lu B",
+                 "%.12s %luMiB %s LC%lu HC%lu Blk%luB",
                  p->name[0]?p->name:"(unnamed)",
                  (unsigned long)(p->length_bytes/1048576u),fs,
                  (unsigned long)p->low_cylinder,
@@ -98,7 +99,7 @@ static void add_mbr(DollyGuiPartitionResult *out,
     sprintf(d->label,"MBR %lu (0x%02lx)",
             (unsigned long)(index+1u),(unsigned long)part->type);
     sprintf(d->details,
-             "%s | %lu MiB | Type 0x%02lx | Cyl N/A | Sector %lu B",
+             "%.12s %luMiB MBR/0x%02lx LC/HC:N/A Sec%luB",
              d->label,(unsigned long)(part->length_bytes/1048576u),
              (unsigned long)part->type,(unsigned long)device_block);
 }
