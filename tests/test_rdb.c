@@ -14,6 +14,16 @@ static void store(FILE *f,unsigned long long where,const unsigned char *b){asser
 static DollyRdbStatus run(const char *path,unsigned long long base,DollyRdb *r){DollyBlockSource *src=NULL;DollyRdbStatus status;assert(dolly_block_open_file(path,&src)==DOLLY_BLOCK_OK);status=dolly_rdb_scan(src,base,BS,16,r);dolly_block_close(src);return status;}
 int main(void){char path[]="/tmp/dolly-rdb-XXXXXX";int fd=mkstemp(path);FILE *f;unsigned char rdb[BS],part[BS];DollyRdb r;unsigned long long base=2048ULL*BS;assert(fd>=0);f=fdopen(fd,"wb+");assert(f);make_rdb(rdb,2);make_part(part,DOLLY_RDB_END);store(f,base+BS,rdb);store(f,base+2*BS,part);assert(fseeko(f,(off_t)(base+500ULL*BS-1),SEEK_SET)==0);assert(fputc(0,f)==0);fflush(f);
  assert(run(path,base,&r)==DOLLY_RDB_OK);assert(r.header_block==1);assert(r.partition_count==1);assert(strcmp(r.partitions[0].name,"DH0")==0);assert(r.partitions[0].start_bytes==base+2ULL*4*16*BS);assert(r.partitions[0].length_bytes==4ULL*4*16*BS);
+ /* Correct checksum over too few words must never validate PART fields. */
+ make_part(part,DOLLY_RDB_END);finish_sum(part,40);
+ store(f,base+2*BS,part);fflush(f);
+ assert(run(path,base,&r)==DOLLY_RDB_BAD_CHECKSUM);
+ make_part(part,DOLLY_RDB_END);store(f,base+2*BS,part);
+ /* RDSK with a checksum stopping before its geometry is also invalid. */
+ make_rdb(rdb,2);finish_sum(rdb,8);
+ store(f,base+BS,rdb);fflush(f);
+ assert(run(path,base,&r)==DOLLY_RDB_BAD_CHECKSUM);
+ make_rdb(rdb,2);store(f,base+BS,rdb);fflush(f);
  assert(run(path,0,&r)==DOLLY_RDB_NOT_FOUND);
  /* Synthetic DosEnvec MaxTransfer: index 13 from pb_Environment[0]. */
  make_part(part,DOLLY_RDB_END);wr32(part+128+13*4,0x7fffffffu);
