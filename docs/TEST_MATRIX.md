@@ -684,3 +684,50 @@ controlled WinUAE test HDF. Inspect that Query returns Device name
 and Size and creates numbered RDB partition rows. Also test Source
 alone; repeat Source -> Destination and Destination -> Source.
 Do not use a physical Amiga until the HALT3 failure is resolved.
+
+## Y. M1.32 — Partition Query rendered corrupted text after M1.31
+
+A1200 / OS 3.1 WinUAE user test: M1.31 eliminated the observed
+HALT3 crash on the Source -> disk-to-disk -> Destination -> Partition
+-> scsi.device Unit 0 -> Query sequence. The final console markers
+were \`DEST Query: partition nodes ready\`, \`DEST Rebuild: begin\`,
+and \`DEST Rebuild: completed\`. The Device name and Size were
+correct (UAE-IDE rafael.hdf / 1881 MiB), but the newly recreated
+Partition LISTVIEW displayed corrupted entries (\`0:\`, garbage)
+instead of \`1: WB_1.3\`, \`2: WB_2.x\`, \`3: OS\`, \`4: GRY\`.
+
+GadTools documentation explicitly requires detaching a List by setting
+GTLV_Labels to \`~0\` before mutating its List/Node structures, and
+reattaching it afterward. Merely removing a Gadget from Intuition
+does not substitute for that documented contract.
+
+M1.32 avoids removing/freeing/recreating GadTools completely on a
+Partition Query:
+1. Drain all IDCMP messages / reply to each as in M1.31.
+2. \`GT_SetGadgetAttrs(partition_list,...,GTLV_Labels,~0,...)\`.
+3. Perform the already validated read-only device/partition queries.
+4. Rebuild private RDB/MBR nodes and stable numbered display strings.
+5. Print each raw RDB label and displayed label to AmigaShell for
+   verification (only in this diagnostic version).
+6. \`GT_SetGadgetAttrs(...,GTLV_Labels,&partitions,
+   GTLV_Selected,~0,...)\`, refresh independent device/size,
+   partition info, preview, and Query-gated Use button.
+
+Query does NOT rebuild the Gadget context. Mode/Driver/Unit changes
+still use the M1.31 delayed rebuild path pending broader refactor.
+
+| ID | WinUAE verification | Expected |
+|---|---|---|
+| GUI-97 | Repeat Source then Destination Partition Query | No HALT3 or Guru |
+| GUI-98 | Shell debug \`DOLLY M1.32 DEST PART ...\` lines | Correct raw volume names and numbered display strings |
+| GUI-99 | Third LISTVIEW immediately after Query | \`1: WB_1.3\`, \`2: WB_2.x\`, \`3: OS\`, \`4: GRY\` |
+| GUI-100 | Select a third-list partition | Persistent highlight; Selected partition and Partition info show original name |
+| GUI-101 | Repeated Query without reopening picker | Stable list, no ghost entries or dangling labels |
+| GUI-102 | Query error / no partition table | Empty list, Use selection disabled |
+| GUI-103 | Destination Physical Query | Existing name/size behavior unchanged |
+
+If the Shell shows correct \`name=\`/\`label=\` but LISTVIEW is still
+corrupt, next isolate the GadTools attribute update / gadget context.
+If Shell labels are wrong, investigate parser/map overwrites before
+further GUI work. Cross-compilation and WinUAE testing are pending;
+do not use against real hardware yet.

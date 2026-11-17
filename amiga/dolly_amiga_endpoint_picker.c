@@ -1136,15 +1136,17 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         /* No IntuiMessage can refer to the old gadgets after this
          * point. Detach BEFORE changing list nodes and label buffers.
          */
-        picker_trace(p,deferred==4?"Query: gadgets teardown":
-                       "Selection: gadgets teardown");
-        release_picker_gadgets(p);
-        if(deferred==1 || deferred==2) {
-            invalidate_query(p);
-            populate_units(p);
-        } else if(deferred==3) {
-            invalidate_query(p);
-        } else {
+        if(deferred==4) {
+            unsigned i;
+            /* GadTools requires detaching the LABELS themselves before
+             * changing List/Node/ln_Name. No RemoveGList/FreeGadgets or
+             * CreateGadget is needed after a Query. Keeping the current
+             * LISTVIEW_KIND intact also preserves V39 selection state.
+             */
+            picker_trace(p,"Query: detach partition labels");
+            if(p->partition_list)
+                GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
+                                  GTLV_Labels,(ULONG)~0ul,TAG_DONE);
             picker_trace(p,"Query: device commands begin");
             p->query_attempted=1;
             p->queried=(unsigned char)dolly_amiga_device_query(
@@ -1172,9 +1174,33 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                 strcpy(p->partition_map.status,
                        "Capacity unavailable; no partition scan");
             }
-            picker_trace(p,"Query: populate partition nodes");
             populate_partitions(p);
-            picker_trace(p,"Query: partition nodes ready");
+            for(i=0;i<p->partition_count;++i) {
+                printf("DOLLY M1.32 %s PART %u name=%s label=%s\n",
+                       p->role?"DEST":"SOURCE",i,
+                       p->partition_map.parts[i].label,
+                       p->partition_list_labels[i]);
+                fflush(stdout);
+            }
+            picker_trace(p,"Query: reattach partition labels");
+            if(p->partition_list)
+                GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
+                                  GTLV_Labels,(ULONG)&p->partitions,
+                                  GTLV_Selected,(ULONG)~0ul,TAG_DONE);
+            refresh_disk_info(p);
+            refresh_selection_preview(p);
+            refresh_partition_details(p);
+            change_enabled(p);
+            picker_trace(p,"Query: in-place update completed");
+            return;
+        }
+        picker_trace(p,"Selection: gadgets teardown");
+        release_picker_gadgets(p);
+        if(deferred==1 || deferred==2) {
+            invalidate_query(p);
+            populate_units(p);
+        } else if(deferred==3) {
+            invalidate_query(p);
         }
         picker_trace(p,"Rebuild: begin");
         if(!rebuild(p)) {
