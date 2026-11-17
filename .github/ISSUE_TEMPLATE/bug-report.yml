@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible Dolly problem
+title: "[Bug] "
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Amiga model, CPU, memory, OS, controller, disk/image format
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and sanitized test fixtures
+      description: Never upload sensitive/private disk images without checking contents.
