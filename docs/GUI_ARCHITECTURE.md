@@ -1054,3 +1054,25 @@ rechecked on each run.
 
 The approved M1.24 GUI retains independent recessed fields for
 Device name and Size. No automatic device probe has been connected.
+
+### M1.25 — stable hardware query address (without UI integration)
+
+The physical discovery list now excludes only trackdisk.device;
+carddisk.device remains present and is reserved for later
+device-specific validation using a physical PCMCIA SRAM card.
+Filtering the floppy shifts candidate indices, so **do not assume**
+an earlier \`--probe INDEX\` refers to the same unit.
+
+The console-only diagnostic adds
+\`--probe-driver NAME.device UNIT\`. It first snapshots the current
+AmigaDOS registered device startup records, then requires an exact
+match of both driver name and numerical unit against the validated
+candidates before issuing any hardware request. No matching
+candidate means no OpenDevice, TD_GETGEOMETRY or HD_SCSICMD.
+
+The separate results remain **Device name** (SCSI INQUIRY
+vendor/product) and **Size** (TD_GETGEOMETRY capacity in MiB),
+with independent Unavailable states. The approved M1.24 picker
+layout stays untouched, and GUI auto-probing remains disabled.
+Synchronous DoIO currently has no transport timeout; this test
+must be run only in WinUAE on a controlled, disposable disk image.
