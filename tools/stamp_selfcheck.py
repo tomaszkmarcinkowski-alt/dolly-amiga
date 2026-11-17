@@ -38,6 +38,8 @@ def main():
     opts = parser.parse_args()
     payload = bytearray(opts.executable.read_bytes())
     pos = locate(payload)
+    if b"\x00$VER: Dolly " not in payload:
+        parser.error("missing AmigaDOS $VER: Dolly identification string")
     if opts.verify:
         expected = payload[pos+CRC_START:pos+CRC_END]
         version = bytes(payload[pos+CRC_END:pos+VERSION_END]).decode("ascii")
