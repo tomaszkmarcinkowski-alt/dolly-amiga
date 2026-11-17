@@ -94,3 +94,15 @@ ctest --test-dir build --output-on-failure
 **Safety policy:** no actual device writes are implemented. Reports are preliminary and do not certify bootability or data integrity.
 
 See [engineering journal](ENGINEERING_JOURNAL.md), [AmigaOS I/O](AMIGA_IO.md) and [IFF format](IFF_FORMAT.md).
+
+## GUI architectural groundwork (future M3/M5; 2026-11-17)
+
+- [x] Define builtin GadTools / optional ReAction / future MUI interface without imposing optional dependencies.
+- [x] Define 640×256/Topaz8 geometry preflight and font preference order custom → actual Screen Font → Topaz/8.
+- [x] Add host-side unit tests of seven view types, 640×256/200 and 5000 generated geometry/font cases (not yet confirmed in full CI).
+- [x] Add portable screen event reducer and tests of preferences, font, close/reopen and coalescing.
+- [x] Publish experimental AmigaDOS V36+ `StartNotify` adapter for ScreenMode/Screen Font prefs; an opt-in NDK compilation target is available.
+- [ ] Verify native NDK build, add optional `screennotify.library` integration from its real SDK, connect actual GadTools event loop, and test visual pixel fit using WinUAE.
+- [ ] Confirm all dialogs and long warnings fit 640×256 with real text widths and window borders.
+
+This GUI work does not make M0 media operations safe or replace the pending native 68000 validation.
