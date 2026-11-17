@@ -39,6 +39,7 @@ def image_file(path):
     put_be32(part, 128, 17)
     put_be32(part, 132, 128)
     put_be32(part, 140, 4)
+    put_be32(part, 144, 1)  # de_SectorPerBlock
     put_be32(part, 148, 16)
     put_be32(part, 164, 2)
     put_be32(part, 168, 4)
