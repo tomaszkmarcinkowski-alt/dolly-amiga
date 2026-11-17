@@ -35,6 +35,7 @@ struct Library *GadToolsBase;
 #define SHEEP_COUNT_ID 205u
 #define SHEEP_ERRORS_ID 206u
 #define SHEEP_PERCENT_ID 207u
+#define MAIN_START_ID 208u
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
@@ -47,7 +48,7 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *quit, *hide, *count, *errors, *percent;
+    struct Gadget *show, *quit, *start, *hide, *count, *errors, *percent;
     char block_label[40];
     char percent_label[8];
     APTR visual;
@@ -217,7 +218,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
             RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
-        v->show=NULL;v->quit=NULL;v->hide=NULL;
+        v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;
     }
     last=CreateContext(&v->gadgets);
@@ -232,6 +233,10 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->controls_y,button_w,"Quit demo");
         if(!last)return 0;
         v->quit=last;
+        last=make_button(last,v,MAIN_START_ID,d->left,
+                         d->controls_y+19,d->right-d->left+1,"Start demo");
+        if(!last)return 0;
+        v->start=last;
         last=make_text(last,v,MAIN_COUNT_ID,d->left,d->bottom-15,
                        d->number_w,v->block_label,TRUE);
         if(!last)return 0;
@@ -255,6 +260,15 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         if(!last)return 0;
         v->percent=last;
     }
+    /* Sheep Counter can only be opened while the operation is active. */
+    if(main_window) {
+        if(v->show)
+            v->show->Flags|=(operation.state!=DOLLY_OP_RUNNING &&
+                             operation.state!=DOLLY_OP_PAUSED)?GFLG_DISABLED:0;
+        if(v->start && (operation.state==DOLLY_OP_RUNNING ||
+                        operation.state==DOLLY_OP_PAUSED))
+            v->start->Flags|=GFLG_DISABLED;
+    }
     AddGList(v->window,v->gadgets,(ULONG)-1,-1,NULL);
     v->gadgets_detached=0;
     RefreshGList(v->gadgets,v->window,NULL,-1);
@@ -272,7 +286,7 @@ static void destroy_view(DollyDemoView *v) {
     }
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
-    v->show=NULL;v->quit=NULL;v->hide=NULL;
+    v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
 }
 /* Measure the actual active font and window chrome, then tell Intuition
@@ -370,12 +384,13 @@ static void draw_main_static(void) {
      * narrow widths; required controls set the minimum geometry.
      */
     {
-        static const char explanation[]="Sheep Counter is an auxiliary window.";
+        static const char explanation[]="Start a demo to enable Sheep Counter.";
         struct RastPort *rp=main_view.window->RPort;
         LONG text_w=(LONG)TextLength(rp,(STRPTR)explanation,
                                     (ULONG)strlen(explanation));
-        if(text_w<=d->right-d->left+1)
-            label(main_view.window,d->left,d->controls_y+31,explanation);
+        if(text_w<=d->right-d->left+1 &&
+           d->controls_y+62<d->bottom-20)
+            label(main_view.window,d->left,d->controls_y+60,explanation);
     }
     label(main_view.window,d->left,d->bottom-20,"Blocks:");
 }
@@ -473,6 +488,8 @@ static void draw_full(DollyDemoView *v,int main_window) {
 }
 static int show_sheep(void) {
     ULONG top=(ULONG)public_screen->BarHeight+1ul;
+    if(operation.state!=DOLLY_OP_RUNNING &&
+       operation.state!=DOLLY_OP_PAUSED)return 0;
     if(sheep_view.window)return 1;
     if(!open_view(&sheep_view,0,"Dolly - Sheep Counter",
                   0,top,(ULONG)public_screen->Width,
@@ -488,6 +505,17 @@ static int show_sheep(void) {
 static void hide_sheep(void) {
     destroy_view(&sheep_view);
     dolly_operation_hide_sheep_counter(&operation);
+}
+static void update_main_actions(void) {
+    int active=(operation.state==DOLLY_OP_RUNNING ||
+                operation.state==DOLLY_OP_PAUSED);
+    if(!main_view.window)return;
+    if(main_view.show)
+        GT_SetGadgetAttrs(main_view.show,main_view.window,NULL,
+                          GA_Disabled,(ULONG)!active,TAG_DONE);
+    if(main_view.start)
+        GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
+                          GA_Disabled,(ULONG)active,TAG_DONE);
 }
 static void progress_view_update(unsigned old) {
     DemoLayout *d=&sheep_view.l;
@@ -533,7 +561,15 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         }
         if(main_window) {
             if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID)*quit=1;
-            else if(id==MAIN_SHOW_ID && !show_sheep())
+            else if(id==MAIN_START_ID) {
+                if(dolly_operation_start(&operation,GRID_TOTAL)==DOLLY_OP_OK) {
+                    update_numbers(&main_view);
+                    update_main_actions();
+                }
+            } else if(id==MAIN_SHOW_ID &&
+                      (operation.state==DOLLY_OP_RUNNING ||
+                       operation.state==DOLLY_OP_PAUSED) &&
+                      !show_sheep())
                 puts("MAIN WARN: unable to show Sheep Counter");
         } else if(cls==IDCMP_CLOSEWINDOW || id==SHEEP_HIDE_ID)hide=1;
         GT_ReplyIMsg(msg);
@@ -570,7 +606,7 @@ int main(void) {
         (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
     };
     dolly_operation_init(&operation);
-    if(dolly_operation_start(&operation,GRID_TOTAL)!=DOLLY_OP_OK)return 10;
+    /* Open the main UI idle. Starting a synthetic operation is explicit. */
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
     if(!IntuitionBase)return 10;
     GfxBase=(struct GfxBase *)OpenLibrary("graphics.library",36);
@@ -588,7 +624,8 @@ int main(void) {
                   14,(ULONG)public_screen->BarHeight+14ul,390,190))
         goto cleanup;
     draw_full(&main_view,1);
-    if(!show_sheep())puts("MAIN WARN: unable to show Sheep Counter");
+    update_main_actions();
+    /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
         WaitTOF();
         process_view(&main_view,1,&quit);
@@ -604,6 +641,7 @@ int main(void) {
                     progress_view_update(old);
             } else {
                 (void)dolly_operation_finish(&operation,1);
+                update_main_actions();
             }
         }
     }
