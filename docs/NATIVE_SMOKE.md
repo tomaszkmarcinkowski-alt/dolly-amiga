@@ -282,3 +282,30 @@ block increased by 352 bytes in this run, as opposed to the
 varies between runs, and these snapshots alone do not establish
 either an accumulating memory leak or absence of fragmentation.
 Further consecutive runs in the same emulator session are useful.
+
+### M1.3 additional consecutive WinUAE screen runs (2026-11-17)
+
+On the same MC68000 / 512 KiB Chip / Kickstart 2.04 session,
+the tester supplied two further runs immediately following the previous
+screen test:
+
+```text
+SCREEN before chip=306512 largest=283880
+SCREEN opened chip=283552 largest=283448
+SCREEN closed chip=306512 largest=283280
+SCREEN PASS
+SCREEN WARN: largest free block shrank by 600 bytes
+
+SCREEN before chip=306512 largest=283280
+SCREEN opened chip=283552 largest=283280
+SCREEN closed chip=306512 largest=283448
+SCREEN PASS
+SCREEN NOTE: largest free block grew by 168 bytes
+```
+
+Together with the prior run (largest block 283528 -> 283880),
+the three-run sequence ends at 283448, a net change of -80 bytes.
+Each run returns total free Chip RAM to 306512 bytes, while
+the contiguous largest block fluctuates in both directions.
+No sustained loss of total free Chip RAM is observed in this
+short sequence. This does not establish long-run stability.
