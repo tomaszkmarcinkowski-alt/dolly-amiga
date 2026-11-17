@@ -116,6 +116,18 @@ static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
         strcat(tmp," (whole)");
     text_copy(out,cap,tmp);
 }
+/* Text is pre-clipped against the live system font. Some early
+ * GadTools versions do not implement later clipping attributes.
+ */
+static void clip_main(char *value,LONG width) {
+    ULONG len;
+    struct RastPort *rp;
+    if(!main_view.window || width<1)return;
+    rp=main_view.window->RPort;
+    len=(ULONG)strlen(value);
+    while(len && (LONG)TextLength(rp,(STRPTR)value,len)>width)
+        value[--len]='\0';
+}
 static void update_main_status(void) {
     int need=dolly_demo_needs_target((DollyDemoOperation)selected_operation);
     int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
@@ -141,6 +153,13 @@ static void update_main_status(void) {
                     &selected_source);
     format_endpoint(main_view.target_label,sizeof(main_view.target_label),
                     &selected_target);
+    if(main_view.window) {
+        DemoLayout *d=&main_view.l;
+        clip_main(main_view.source_label,d->right-d->left-120);
+        clip_main(main_view.target_label,d->right-d->left-120);
+        clip_main(main_view.desc_label,d->right-d->left-88);
+        clip_main(main_view.status_label,d->right-d->left-8);
+    }
 }
 
 /* Bounds-checked C99 decimal formatter. No format varargs or overflow. */
