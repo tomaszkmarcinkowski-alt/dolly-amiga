@@ -11,6 +11,7 @@ option(DOLLY_NATIVE_M68000 "Pass -m68000 for classic Motorola 68000" OFF)
 # This does not yet create a working GadTools event loop or plugin loader.
 option(DOLLY_NATIVE_GUI_WATCH "Compile AmigaDOS screen/font notify adapter (NDK required)" OFF)
 if(DOLLY_NATIVE_ONLY)
+  enable_testing()
   add_executable(dolly-native-smoke
     amiga/dolly_native_smoke.c
     src/dolly_block_source.c src/dolly_rdb.c src/dolly_rdb_audit.c
