@@ -2,6 +2,7 @@
 #include "dolly_partition_map.h"
 #include "dolly_inventory.h"
 #include "dolly_inventory_notices.h"
+#include "dolly_capacity_audit.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +44,25 @@ static void show_rdb(const DollyRdb *r,const char *type,
                      uint64_t container_base,uint64_t container_length){
     unsigned i;
     printf("%s: RDSK block %u, partitions %u\n",type,r->header_block,r->partition_count);
+    {
+        DollyCapacityAudit cap=dolly_capacity_audit(r,container_base,container_length);
+        if(cap.flags&DOLLY_CAPACITY_GEOMETRY_SMALLER)
+            printf("    [INFO] RDB_CAPACITY_EXTRA: %" PRIu64
+                   " extra bytes beyond declared RDB geometry. Not certified free.\n",
+                   cap.extra_bytes);
+        if(cap.flags&DOLLY_CAPACITY_GEOMETRY_LARGER)
+            printf("    [WARN] RDB_CAPACITY_SHORT: declared geometry exceeds container by %"
+                   PRIu64 " bytes. Check actual device size.\n",cap.shortfall_bytes);
+        if(cap.flags&DOLLY_CAPACITY_PART_OUTSIDE)
+            printf("    [ERROR] RDB_PART_BEYOND_MEDIA: PART #%u exceeds observed capacity.\n",
+                   cap.first_outside_partition+1u);
+        if(cap.flags&(DOLLY_CAPACITY_META_OUTSIDE|
+                      DOLLY_CAPACITY_PART_PAST_GEOM|
+                      DOLLY_CAPACITY_GEOMETRY_UNKNOWN|
+                      DOLLY_CAPACITY_OVERFLOW|DOLLY_CAPACITY_INVALID))
+            printf("    [WARN] RDB_GEOMETRY_REVIEW: flags 0x%08" PRIX32
+                   "; do not attempt automatic repair.\n",cap.flags);
+    }
     if(dolly_inventory_rdb_header(r,emit_field,stdout)!=0)
         fprintf(stderr,"RDSK inventory rendering stopped\n");
     if(dolly_inventory_rdb_notices(r,container_base,container_length,
