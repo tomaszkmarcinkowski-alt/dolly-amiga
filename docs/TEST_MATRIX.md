@@ -166,3 +166,40 @@ CMD_READ or write operation is introduced in M1.21.
 
 State: **implementation committed; untested in Docker/WinUAE**.
 RTG tests and RAM profiling are still postponed.
+
+## F. M1.22 filtering and disk-identification panel (reference 640x256)
+
+| ID | Action | Expected |
+|---|---|---|
+| DISC-21 | Open Logical device on AmigaDOS | RAW:, CON:, RAM:, SER:, PAR:, PRT: absent regardless of case |
+| DISC-22 | Select nonstandard DOS device name | Not excluded solely for unusual name (entry still not verified block) |
+| DISC-23 | Physical: select Device then Unit | First inset shows hierarchy; second inset reports INQUIRY not queried (demo) and size unavailable |
+| DISC-24 | Partition: select Device, Unit, Partition | Both inset panels stay visible; second panel applies to selected physical unit |
+| DISC-25 | Switch modes and resize on 640x256 | No overlapping gadgets; list/panel and panel/panel spacing approx. 3 px |
+| DISC-26 | Double-click Physical Unit / Partition | Closes chooser and commits selection; no stale info |
+| DISC-27 | Logical/File modes | No unintended second disk-info panel |
+| DISC-28 | No hardware discovery yet | No SCSI commands sent; demo fields do not claim real identity |
+| DISC-29 | Explicit physical discovery later | Query only verified driver/unit, INQUIRY vendor/product/revision then GETGEOMETRY or READ CAPACITY; unsupported queries report unavailable |
+
+The six-name exclusion is an explicit known-nonblock filter,
+**not a complete, authoritative test of block-device capability**.
+AmigaDOS DLT_DEVICE includes ordinary file/stream handlers.
+The second inset is deliberately provisional: the Physical/Partition
+inventory still uses synthetic driver/unit candidates and must not
+issue HD_SCSICMD or TD_GETGEOMETRY to an invented endpoint.
+
+## G. M1.22 vertical margins for non-square-pixel screens
+
+| ID | Screen | Expected |
+|---|---|---|
+| GUI-33 | 640x256 classic Workbench | 5 px tighter top content, bottom action buttons 8 px nearer window edge; no overlap |
+| GUI-34 | 640x256 Physical/Partition | Both inset panels remain 3 px apart and below list; extra space enlarges LISTVIEW |
+| GUI-35 | 640x256 File Source/Destination | Browse/path/details/format captions follow new top offsets; Use/Cancel stay reachable |
+| GUI-36 | Proportional 4:3 display, later | Original baseline vertical offsets retained; RTG test remains deferred |
+| GUI-37 | 640x256 resizing and mode changes | No stale pixels, clipping, inaccessible controls or lost selections |
+
+The compact-mode criterion is screen width > twice screen height,
+rather than a hardware/RTG detection or fixed display-name check.
+It targets non-square-pixel classic Workbench geometries while leaving
+4:3-like screen ratios unchanged. A screen with conventional square
+pixels and very wide proportions may also trigger compact mode.
