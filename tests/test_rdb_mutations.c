@@ -25,7 +25,7 @@ static void base_image(unsigned char *p){
  memcpy(r,"RDSK",4);be32(r+16,B);be32(r+28,2);be32(r+64,10);be32(r+68,16);be32(r+72,4);finish(r,64);
  part=p+PSTART+2*B;
  memcpy(part,"PART",4);be32(part+16,UINT32_MAX);part[36]=3;memcpy(part+37,"DH0",3);
- be32(part+128,17);be32(part+132,128);be32(part+140,4);be32(part+148,16);
+ be32(part+128,17);be32(part+132,128);be32(part+140,4);be32(part+144,1);be32(part+148,16);
  be32(part+164,1);be32(part+168,1);be32(part+192,0x444f5301);finish(part,64);
 }
 int main(void){
