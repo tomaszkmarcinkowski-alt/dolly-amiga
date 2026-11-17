@@ -323,12 +323,33 @@
 **Ciekawostka:** brak ostrzeżeń oznacza tylko, że *aktualnie rozpoznawane problemy* nie zostały zgłoszone. Nie oznacza, że wolumen, nośnik ani kontroler są zdrowe.
 
 
+### DJ-0033 · 2026-11-17 · AmigaDOS / Boot Priority · WDROŻONE, TESTY LOKALNE PASS
+**Temat:** Wartość `de_BootPri` jest liczbą ze znakiem i może być ujemna.
+
+**Problem:** wcześniejszy model `InventoryField` miał wyłącznie `uint64_t` i tekst. Rzutowanie ujemnej wartości BootPri na typ bez znaku prowadziłoby do mylącego raportu — bardzo dużej liczby zamiast np. `-5`.
+
+**Działanie:** `DollyPartition.boot_priority` jest typu `int32_t`, z flagą obecności dla `de_TableSize >= 15`. Dodano `DOLLY_INV_I64` i pole `signed_number` w `DollyInventoryField`, a CLI drukuje wartość ze znakiem. Syntetyczny test CLI zawiera `de_BootPri=-5`.
+
+**Test:** moduł Inventory GCC/Clang `-Wall -Wextra -Werror -pedantic`: PASS; GCC z ASan/UBSan: PASS. To nie jest test rzeczywistej kolejności bootowania AmigaOS.
+
+**Uwagi:** BootPri w RDB jest *deklaracją*. Aktywne BootNodes, stan nośników i dostępność urządzeń mogą wpływać na rzeczywistą kolejność startu systemu.
+
+### DJ-0034 · 2026-11-17 · Sheep Inventory / zaawansowana diagnostyka · WDROŻONO PROTOTYP
+**Temat:** Raport obiektu powinien obejmować również lokalne, spójne ostrzeżenia, zamiast jedynie surowych pól.
+
+**Implementacja:** dwa oddzielne strumienie metadanych i ostrzeżeń, przypisywane do `PART` lub `RDSK`. Analiza ostrzeżeń jest synchroniczna i bez alokowania list; możliwe jest przerwanie raportu po pierwszym komunikacie. Pojawiają się ostrzeżenia MaxTransfer, de_SectorPerBlock, zerowego Mask, brakującego DosType oraz kolizji `PART/RDSK`.
+
+**Testy:** lokalny moduł ostrzeżeń GCC/Clang PASS, także po połączeniu z audytem RDB; GCC ASan/UBSan PASS. Cały obecny `main` i natywny backend AmigaOS nadal oczekują niezależnej weryfikacji.
+
+**Granica interpretacji:** zero ostrzeżeń nie oznacza braku błędów na nośniku. W szczególności nadal nie kontrolujemy `FSHD`, `LSEG`, `BADB` ani wszystkich hybryd.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0033 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0035 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
