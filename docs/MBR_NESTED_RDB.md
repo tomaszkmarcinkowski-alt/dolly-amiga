@@ -9,3 +9,10 @@ Implemented validation: partition bounds, MBR overlap, RDB and PART checksums/cy
 A reported valid map is preliminary and **does not** certify the disk as healthy, bootable or safe to modify.
 
 Test on the host with `cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`.
+
+
+## Update: MBR and disk-wide RDB coexistence (read-only)
+
+The parser now checks for a disk-wide RDB even when the primary MBR signature is valid. The result records `hybrid_mbr_rdb`; if any disk-wide RDB partition overlaps a primary MBR partition, it also reports `hybrid_mbr_overlap`. The CLI displays warnings.
+
+This is **diagnostic discovery only**. Dual views may be intentional but imply significant risks for writes, and the engine currently cannot certify ownership or resolve driver aliases. Never infer safe write/clone operations from these flags.
