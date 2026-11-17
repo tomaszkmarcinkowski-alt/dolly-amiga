@@ -852,7 +852,7 @@ static int pick_file(DollyEndpoint *result,unsigned destination) {
 int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
                       DollyEndpointMode preferred_mode) {
-    LONG top;
+    LONG top,minheight;
     if(!p || !screen || role>1u ||
        (unsigned)preferred_mode>3u)return 0;
     if(p->window)return 1;
@@ -915,12 +915,17 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     p->visual=GetVisualInfo(screen,TAG_DONE);
     if(!p->visual)return 0;
     top=(LONG)screen->BarHeight+1;
+    /* Third Partition info row requires slightly more vertical space
+     * on conventional square-pixel screens; preserve 640x256 at 195.
+     */
+    minheight=(ULONG)screen->Width>2ul*(ULONG)screen->Height?
+              195:212;
     p->window=OpenWindowTags(NULL,
           WA_PubScreen,(ULONG)screen,
           WA_Title,(ULONG)(role?"Dolly - Destination":"Dolly - Source"),
           WA_Left,12,WA_Top,(ULONG)top,
-          WA_Width,606,WA_Height,195,
-          WA_MinWidth,606,WA_MinHeight,195,
+          WA_Width,606,WA_Height,(ULONG)minheight,
+          WA_MinWidth,606,WA_MinHeight,(ULONG)minheight,
           WA_MaxWidth,(ULONG)screen->Width-12ul,
           WA_MaxHeight,(ULONG)screen->Height-(ULONG)top,
           WA_SizeGadget,TRUE,
