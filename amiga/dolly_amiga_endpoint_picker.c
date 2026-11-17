@@ -648,13 +648,13 @@ static int commit_picker(DollyEndpointPicker *p) {
             p->has_device && p->has_unit && p->has_partition)
         ok=dolly_endpoint_set_partition(&p->result,p->device,
                                         p->unit,p->partition);
-    else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical)
+    else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
         if(p->logical<p->logical_count) {
             ok=dolly_endpoint_set_logical(&p->result,p->logical);
             if(ok)strcpy(p->result.path,
                          p->dos_devices.names[p->logical]);
         }
-    else if(p->mode==DOLLY_MODE_FILE &&
+    } else if(p->mode==DOLLY_MODE_FILE &&
             p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
         p->result=p->pending_file;
         if(p->role)p->result.image_format=p->output_format;
