@@ -49,9 +49,6 @@ typedef struct DollyEndpointPicker {
     unsigned role;
     unsigned char changed;
     unsigned char gadgets_detached;
-    UWORD last_click_id,last_click_code;
-    ULONG last_click_seconds,last_click_micros;
-    unsigned char last_click_valid;
     char message[64];
 } DollyEndpointPicker;
 /* role: 0 source, 1 target. Two distinct, identical selectors. */
