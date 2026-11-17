@@ -47,6 +47,32 @@ static STRPTR mode_names[]={
     (STRPTR)"Partition",
     (STRPTR)"File",NULL
 };
+static int set_allowed_modes(DollyEndpointPicker *p,unsigned mask) {
+    unsigned i;
+    p->allowed_mask=mask;
+    p->mode_count=0;
+    p->mode_index=0;
+    for(i=0;i<4u;++i) {
+        if(dolly_mode_allowed(mask,(DollyEndpointMode)i)) {
+            p->allowed_mode_labels[p->mode_count]=mode_names[i];
+            p->allowed_mode_ids[p->mode_count]=(DollyEndpointMode)i;
+            ++p->mode_count;
+        }
+    }
+    p->allowed_mode_labels[p->mode_count]=NULL;
+    return p->mode_count!=0u;
+}
+static void sync_mode_index(DollyEndpointPicker *p) {
+    unsigned i;
+    for(i=0;i<p->mode_count;++i)
+        if(p->allowed_mode_ids[i]==p->mode) {
+            p->mode_index=i;
+            return;
+        }
+    p->mode_index=0;
+    p->mode=p->allowed_mode_ids[0];
+}
+
 /* The driver/unit lists are snapshots of verified DOS startup tuples.
  * No guessed devices and no fabricated RDB/MBR partition labels.
  */
@@ -597,8 +623,8 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     ng.ng_Width=picker_geometry(p).mode_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_MODE;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
-                        GTCY_Labels,(ULONG)mode_names,
-                        GTCY_Active,(ULONG)p->mode,TAG_DONE);
+                        GTCY_Labels,(ULONG)p->allowed_mode_labels,
+                        GTCY_Active,(ULONG)p->mode_index,TAG_DONE);
 }
 /* LISTVIEW columns must occupy the whole client width, with the same
  * gutter independent of whether this mode has two or three columns.
@@ -881,7 +907,8 @@ static int pick_file(DollyEndpoint *result,unsigned destination) {
 }
 int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
-                      DollyEndpointMode preferred_mode) {
+                      DollyEndpointMode preferred_mode,
+                      unsigned allowed_mask) {
     LONG top,minheight;
     if(!p || !screen || role>1u ||
        (unsigned)preferred_mode>3u)return 0;
@@ -889,6 +916,7 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     memset(p,0,sizeof(*p));
     p->screen=screen;
     p->role=role;
+    if(!set_allowed_modes(p,allowed_mask))return 0;
     if(initial) {
         p->result=*initial;
         if(initial->kind==DOLLY_ENDPOINT_FILE) {
@@ -900,8 +928,11 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     if(initial && initial->kind==DOLLY_ENDPOINT_FILE &&
        (unsigned)initial->image_format<=3u)
         p->output_format=initial->image_format;
-    p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE) ?
+    p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE &&
+             dolly_mode_allowed(p->allowed_mask,
+                                dolly_endpoint_mode(initial))) ?
             dolly_endpoint_mode(initial) : preferred_mode;
+    sync_mode_index(p);
     dolly_physical_catalog_snapshot(&p->physical_catalog);
     populate_devices(p);
     populate_units(p);
@@ -1071,8 +1102,9 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             captions(p);
         }
         if(cls==IDCMP_CLOSEWINDOW || id==PICK_CANCEL)close=1;
-        else if(id==PICK_MODE && code<4u) {
-            p->mode=(DollyEndpointMode)code;
+        else if(id==PICK_MODE && (unsigned)code<p->mode_count) {
+            p->mode_index=code;
+            p->mode=p->allowed_mode_ids[code];
             p->has_device=0;p->has_unit=0;
             p->has_partition=0;p->has_logical=0;
             deferred=1;
