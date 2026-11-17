@@ -50,10 +50,7 @@ static STRPTR unit_names[]={(STRPTR)"Unit 0",(STRPTR)"Unit 1"};
 static STRPTR partition_names[]={
     (STRPTR)"DH0: RDB (demo)",(STRPTR)"DH1: MBR (demo)"
 };
-static STRPTR logical_names[]={
-    (STRPTR)"DH0: mounted (demo)",
-    (STRPTR)"DH1: mounted (demo)"
-};
+/* Logical devices now come from a bounded AmigaDOS snapshot. */
 /* All coordinates are window-relative. At the 606x195 baseline this
  * matches the accepted layout; on larger public screens the LISTVIEWs
  * grow vertically and each row grows horizontally. The bottom actions
@@ -103,6 +100,24 @@ static void make_list(struct List *l,struct Node *nodes,STRPTR *names) {
         memset(&nodes[i],0,sizeof(nodes[i]));
         nodes[i].ln_Name=(char *)names[i];
         AddTail(l,&nodes[i]);
+    }
+}
+/* Snapshot list nodes refer only to picker-owned names. They remain
+ * valid until the chooser closes; no DosList pointers remain.
+ */
+static void make_logical_list(DollyEndpointPicker *p) {
+    struct List *l=&p->logical_devices;
+    unsigned i;
+    l->lh_Head=(struct Node *)&l->lh_Tail;
+    l->lh_Tail=NULL;
+    l->lh_TailPred=(struct Node *)&l->lh_Head;
+    l->lh_Type=NT_USER;
+    l->l_pad=0;
+    for(i=0;i<p->logical_count;++i) {
+        struct Node *n=&p->logical_nodes[i];
+        memset(n,0,sizeof(*n));
+        n->ln_Name=p->dos_devices.names[i];
+        AddTail(l,n);
     }
 }
 static struct Gadget *button(struct Gadget *last,DollyEndpointPicker *p,
@@ -184,8 +199,14 @@ static void update_selection_preview(DollyEndpointPicker *p) {
         (const char *)partition_names[p->partition] : NULL;
     /* These names come from fixed, short synthetic arrays. */
     if(p->mode==DOLLY_MODE_LOGICAL) {
-        if(p->has_logical)
-            strcpy(full,(const char *)logical_names[p->logical]);
+        if(p->has_logical && p->logical<p->logical_count)
+            strcpy(full,p->dos_devices.names[p->logical]);
+        else if(!p->dos_devices.available)
+            strcpy(full,"AmigaDOS device list unavailable.");
+        else if(!p->logical_count)
+            strcpy(full,"No AmigaDOS devices found.");
+        else if(p->dos_devices.truncated)
+            strcpy(full,"Select device... (list limited to first 24)");
         else strcpy(full,"Select logical device...");
     } else if(!p->has_device) {
         strcpy(full,"Select device...");
@@ -375,7 +396,8 @@ static void captions(DollyEndpointPicker *p) {
             Text(rp,(STRPTR)"Partition (RDB/MBR)",19);
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
-        Move(rp,20,59);Text(rp,(STRPTR)"Mounted logical device (demo)",29);
+        Move(rp,20,59);
+        Text(rp,(STRPTR)"Registered DOS devices (read-only)",34);
     } else {
         Move(rp,20,99);
         Text(rp,(STRPTR)"Selected file:",14);
@@ -472,7 +494,8 @@ static int rebuild(DollyEndpointPicker *p) {
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         last=list(last,p,PICK_LOGICAL,g.left,g.list_y,
-                  g.full_width,&p->logical_devices,0);
+                  g.full_width,&p->logical_devices,
+                  !p->logical_count);
         if(!last)return 0;
         p->logical_list=last;
     }
@@ -571,7 +594,20 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     make_list(&p->devices,p->device_nodes,device_names);
     make_list(&p->units,p->unit_nodes,unit_names);
     make_list(&p->partitions,p->partition_nodes,partition_names);
-    make_list(&p->logical_devices,p->logical_nodes,logical_names);
+    dolly_amiga_discover_dos_devices(&p->dos_devices);
+    p->logical_count=p->dos_devices.count;
+    make_logical_list(p);
+    if(initial && initial->kind==DOLLY_ENDPOINT_LOGICAL &&
+       initial->path[0]) {
+        unsigned i;
+        for(i=0;i<p->logical_count;++i) {
+            if(strcmp(initial->path,p->dos_devices.names[i])==0) {
+                p->logical=i;
+                p->has_logical=1;
+                break;
+            }
+        }
+    }
     p->visual=GetVisualInfo(screen,TAG_DONE);
     if(!p->visual)return 0;
     top=(LONG)screen->BarHeight+1;
@@ -612,9 +648,13 @@ static int commit_picker(DollyEndpointPicker *p) {
             p->has_device && p->has_unit && p->has_partition)
         ok=dolly_endpoint_set_partition(&p->result,p->device,
                                         p->unit,p->partition);
-    else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical)
-        ok=dolly_endpoint_set_logical(&p->result,p->logical);
-    else if(p->mode==DOLLY_MODE_FILE &&
+    else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
+        if(p->logical<p->logical_count) {
+            ok=dolly_endpoint_set_logical(&p->result,p->logical);
+            if(ok)strcpy(p->result.path,
+                         p->dos_devices.names[p->logical]);
+        }
+    } else if(p->mode==DOLLY_MODE_FILE &&
             p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
         p->result=p->pending_file;
         if(p->role)p->result.image_format=p->output_format;
@@ -720,7 +760,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             refresh_selection_preview(p);
             if(picker_double_click(p,id,code,seconds,micros))
                 close=commit_picker(p);
-        } else if(id==PICK_LOGICAL && code<2u) {
+        } else if(id==PICK_LOGICAL && (unsigned)code<p->logical_count) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);

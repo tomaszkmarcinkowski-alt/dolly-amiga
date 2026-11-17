@@ -113,8 +113,8 @@ static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
         text_copy(out,cap,e->path);return;
     }
     if(e->kind==DOLLY_ENDPOINT_LOGICAL) {
-        text_copy(out,cap,e->logical==0 ? "DH0: (mounted demo)" :
-                   "DH1: (mounted demo)");
+        text_copy(out,cap,e->path[0] ? e->path :
+                   "<logical device not resolved>");
         return;
     }
     sprintf(tmp,"Demo device %u / unit %u",

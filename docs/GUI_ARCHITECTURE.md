@@ -852,3 +852,39 @@ second preview.
 GUI-13 through GUI-17 in `docs/TEST_MATRIX.md` cover this addition.
 The new module has **not yet been cross-compiled or validated in
 WinUAE**. RTG and memory tests remain deferred.
+
+### M1.21 — first real read-only device discovery (AmigaDOS)
+
+Logical device mode now snapshots the system AmigaDOS **registered
+device names** using the OS 2.0/V36 APIs LockDosList
+(LDF_DEVICES | LDF_READ), NextDosEntry and UnLockDosList.
+The copy of each BSTR name into picker-owned memory is finished
+**while the list is locked**; GUI drawing and other operations happen
+only **after unlocking**. This is important because DOS-list entries
+can change and DOS packet operations must not be made under that lock.
+
+The picker lists up to 24 real DOS device names (with trailing ':').
+It neither synthesizes DH0/DH1 entries nor assumes a particular
+number of devices. If discovery is unavailable or no entries exist,
+the Logical preview reports that explicitly and the list is disabled.
+The first-24 limit is reported; entries whose complete device name
+cannot fit the bounded name buffer are skipped, not silently renamed.
+No dynamic memory allocation is required for the snapshot.
+
+Selected logical endpoints store both a snapshot index and a
+stable DOS device name in their path field; reopening the picker
+matches the name to the new snapshot if it still exists.
+The main window displays the real name. The demo overlap guard
+rejects equal real DOS names even if enumeration indexes differ.
+Physical device and Partition remain **synthetic** at this stage.
+
+**Important semantic limit:** registration in the AmigaDOS device
+list does NOT prove that a medium is present, that its filesystem
+is mounted or that a related hardware unit is available.
+There is no OpenDevice(), real block read/write, RDB scan,
+filesystem mount, resource initialization, or DOS-list mutation.
+This remains a discovery preview suitable for 68000/Kickstart 2.04.
+
+See docs/TEST_MATRIX.md (DISC-10–DISC-20). Cross-compiler and WinUAE
+runtime verification are pending. RTG tests and memory profiling
+remain deferred by request.
