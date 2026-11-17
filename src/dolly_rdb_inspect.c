@@ -1,5 +1,6 @@
 /* Host-only read-only RDB inspector. */
 #include "dolly_rdb.h"
+#include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,14 @@ int main(int argc,char **argv){
   DollyPartition *p=&r.partitions[i];
   printf("  %s: PART=%u cylinders=%u..%u start=%" PRIu64 " length=%" PRIu64 " DosType=%08" PRIX32 "\n",
          p->name,p->descriptor_block,p->low_cylinder,p->high_cylinder,p->start_bytes,p->length_bytes,p->dos_type);
+  {
+   DollyMaxTransferClass c=dolly_maxtransfer_classify(p->max_transfer_bytes,p->max_transfer_present);
+   if(p->max_transfer_present){
+    printf("    MaxTransfer: 0x%08" PRIX32 " (%" PRIu32 " bytes) [%s]\n",
+           p->max_transfer_bytes,p->max_transfer_bytes,dolly_maxtransfer_class_name(c));
+   }else printf("    MaxTransfer: not present [%s]\n",dolly_maxtransfer_class_name(c));
+   printf("    Advice: %s\n",dolly_maxtransfer_guidance(c));
+  }
  }
  dolly_block_close(source);return 0;
 }
