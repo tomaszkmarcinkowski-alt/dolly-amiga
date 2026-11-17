@@ -98,13 +98,18 @@ static void change_enabled(DollyEndpointPicker *p) {
         GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                           GA_Disabled,(ULONG)!p->has_unit,TAG_DONE);
 }
-static int pick_file(DollyEndpoint *result) {
+static int pick_file(DollyEndpoint *result,unsigned destination) {
     struct FileRequester *fr;
     char path[256];
     size_t dn,fn;
     int ok=0,slash;
     if(!AslBase)return 0;
-    fr=(struct FileRequester *)AllocAslRequestTags(ASL_FileRequest,TAG_DONE);
+    /* OS 2.04 / asl.library V37: FILF_SAVE uses the old ASL_FuncFlags.
+     * The newer ASLFR_DoSaveMode tag is V38-only.
+     */
+    fr=(struct FileRequester *)AllocAslRequestTags(
+        ASL_FileRequest,ASL_FuncFlags,(ULONG)(destination?FILF_SAVE:0),
+        TAG_DONE);
     if(!fr)return 0;
     if(AslRequest(fr,NULL) && fr->fr_Drawer && fr->fr_File) {
         dn=strlen(fr->fr_Drawer);
@@ -227,7 +232,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                 p->changed=1;close=1;
             }
         } else if(id==PICK_FILE) {
-            if(pick_file(&p->result)){p->changed=1;close=1;}
+            if(pick_file(&p->result,p->role)){p->changed=1;close=1;}
         }
         if(close){dolly_picker_close(p);return;}
     }
