@@ -1,21 +1,42 @@
-# Milestone M0 — foundation
+# Dolly — Milestone M0 status
 
-**Goal:** establish repository, CI, portable read-only image probing and safe partition parsing.
+**Goal:** public, tested, non-destructive foundations for a future Motorola 68000 / AmigaOS 2.04 utility.
 
-## Sprint backlog
-1. [x] Public repository and MIT license.
-2. [x] Read-only host image probe, `BlockSource` and tests.
-3. [x] Bounded read-only RDB/PART inspector and tests.
-4. [x] Primary MBR scan + PiStorm-style MBR type 0x76 nested RDB, with containment and overlap detection.
-5. [ ] Review extra hybrid MBR/RDB variations, GPT and EBR (explicitly unsupported today).
-6. [ ] Verify native Motorola 68000 build and AmigaOS I/O adapter.
-7. [ ] Expand damaged IFF FORM DOLY fixture coverage.
-8. [ ] Verify GitHub Actions workflow status.
+## Implemented
+- [x] Public GitHub repository, MIT, Retroware and engineering journal
+- [x] Portable read-only BlockSource callback API and POSIX file adapter
+- [x] Byte-range validation and backend-error regression tests
+- [x] Bounded preliminary RDB/PART parser with checksum and cycle checks
+- [x] Primary MBR + PiStorm-style 0x76 nested RDB discovery, range checks
+- [x] Separate `dolly-layout` and `dolly-rdb` read-only inspectors
+- [x] IFF FORM DOLY structural scanner and `dolly-iff` inspector
+- [x] 32/64-bit Amiga device read planner with NSD capability gate
+- [x] Prototype `OpenDevice/DoIO` adapter exercised in fake Exec test
+- [x] Synthetic CLI integration smoke test
+- [x] Host CTest suite: 8/8 locally with GCC; 7/7 Clang before adding CLI smoke; 7/7 sanitizer suite before adding CLI smoke
+- [x] CI configuration: GCC, Clang and sanitizer jobs (actual GitHub run status unconfirmed)
 
-## Current host checks
-`cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`
+## Unfinished / gating native release
+- [ ] Compile with installed real NDK and a 68000-compatible toolchain
+- [ ] Test in WinUAE and on actual AmigaOS 2.04+
+- [ ] Verify physical capacity detection, DMA alignment and controller Mask/MaxTransfer
+- [ ] Finish TD64 fallback strategy and media-change handling
+- [ ] Handle hybrid MBR/RDB variants and full RDB reserved metadata
+- [ ] Avoid large stack RDB structures on low-memory machines
+- [ ] Implement OFS/FFS structure validation before Smart Clone or repair
+- [ ] Finish complete DOLY chunk payload schemas, checksums and segment manifest
+- [ ] Refine/import remainder of the 58-story product backlog into GitHub issues/projects
 
-Local validation: **4/4 CTest suites passed**.
+## Repeatable local commands
 
-## Limitations
-Only regular file images are supported; no AmigaOS device I/O. Not all RDB reserved structures are checked. GPT/extended-MBR are unsupported. No on-device writes. Native 68000 build remains unverified.
+```sh
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/dolly-layout disk.img
+./build/dolly-iff image.dly
+```
+
+**Safety policy:** no actual device writes are implemented. Reports are preliminary and do not certify bootability or data integrity.
+
+See [engineering journal](ENGINEERING_JOURNAL.md), [AmigaOS I/O](AMIGA_IO.md) and [IFF format](IFF_FORMAT.md).
