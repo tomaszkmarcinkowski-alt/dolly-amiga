@@ -348,28 +348,56 @@ done:
     printf("  Device name: %s\n",name);
     printf("  Size: %s\n",size);
 }
+/* An explicit driver + unit identity is safer than relying on the
+ * current DOS-list enumeration index. Never open a guessed driver:
+ * it must first match a validated snapshot candidate.
+ */
+static int parse_unit(const char *arg,ULONG *unit) {
+    ULONG value=0;
+    if(!arg || !*arg)return 0;
+    while(*arg) {
+        unsigned digit;
+        if(*arg<'0' || *arg>'9')return 0;
+        digit=(unsigned)(*arg-'0');
+        if(value>(0xfffffffful-(ULONG)digit)/10ul)return 0;
+        value=value*10ul+(ULONG)digit;
+        ++arg;
+    }
+    *unit=value;
+    return 1;
+}
 int main(int argc,char **argv) {
     unsigned i,selected=MAX_CANDIDATES;
-    int perform=argc>1 && strcmp(argv[1],"--probe")==0;
-    if(perform) {
-        const char *arg=argc>2 ? argv[2] : "";
-        unsigned n=0;
-        if(!*arg) {
+    int perform=0,by_name=0;
+    ULONG requested_unit=0;
+    const char *requested_driver=NULL;
+    if(argc>1 && strcmp(argv[1],"--probe-driver")==0) {
+        if(argc!=4 || !parse_unit(argv[3],&requested_unit) ||
+           !driver_suffix(argv[2])) {
+            puts("Usage: dolly-physical-probe --probe-driver NAME.device UNIT");
+            return 5;
+        }
+        requested_driver=argv[2];
+        perform=1;
+        by_name=1;
+    } else if(argc>1 && strcmp(argv[1],"--probe")==0) {
+        ULONG index;
+        if(argc!=3 || !parse_unit(argv[2],&index) ||
+           index>=MAX_CANDIDATES) {
             puts("Usage: dolly-physical-probe --probe INDEX");
             return 5;
         }
-        while(*arg>='0' && *arg<='9') {
-            n=n*10u+(unsigned)(*arg-'0');
-            if(n>=MAX_CANDIDATES)break;
-            ++arg;
-        }
-        if(*arg!='\0' || n>=MAX_CANDIDATES) {
-            puts("Invalid candidate index.");
-            return 5;
-        }
-        selected=n;
+        selected=(unsigned)index;
+        perform=1;
+    } else if(argc>1 && strcmp(argv[1],"--inspect")!=0) {
+        puts("Usage: dolly-physical-probe [--inspect | --probe INDEX |"
+             " --probe-driver NAME.device UNIT]");
+        return 5;
+    } else if(argc>2) {
+        puts("Unexpected arguments; no device opened.");
+        return 5;
     }
-    puts("Dolly M1.23: read-only AmigaDOS physical candidates");
+    puts("Dolly M1.25: read-only AmigaDOS physical candidates");
     snapshot();
     printf("Candidates: %u (skipped/unknown: %u)\n",count,skipped);
     if(!count || (argc>1 && strcmp(argv[1],"--inspect")==0))
@@ -378,11 +406,22 @@ int main(int argc,char **argv) {
         printf("%u: %s unit %lu (from %s:)\n",i,
                candidates[i].driver,(unsigned long)candidates[i].unit,
                candidates[i].volume);
-        if(perform && selected==i)probe(&candidates[i]);
+        if(by_name && requested_unit==candidates[i].unit &&
+           strcmp(requested_driver,candidates[i].driver)==0)
+            selected=i;
     }
-    if(!perform)
-        puts("No device opened. Use --probe INDEX for read-only queries.");
-    else if(selected>=count)
-        puts("Selected candidate not found; no device opened.");
+    if(perform && selected<count) {
+        printf("Probing confirmed candidate: %s unit %lu\n",
+               candidates[selected].driver,
+               (unsigned long)candidates[selected].unit);
+        probe(&candidates[selected]);
+    } else if(perform) {
+        puts("Requested driver/unit not found in validated snapshot;"
+             " no device opened.");
+        return 5;
+    } else {
+        puts("No device opened. Prefer --probe-driver NAME.device UNIT"
+             " for read-only queries.");
+    }
     return 0;
 }

@@ -413,3 +413,39 @@ Device name and Size in **separate fields**.
 
 Following the filter, do not reuse an old --probe INDEX; run the
 enumeration again and confirm the driver/unit identity first.
+
+## P. M1.25 named, confirmed driver/unit probe
+
+The previously accepted no-I/O discovery returned four unique
+devices before excluding trackdisk.device:
+trackdisk.device unit 0, carddisk.device unit 0,
+scsi.device unit 0, uaehf.device unit 0.
+After the agreed floppy exclusion the list is reordered.
+Do not reuse an old numerical INDEX for a physical probe.
+
+M1.25 adds a stable alternative:
+\`dolly-physical-probe --probe-driver scsi.device 0\`
+
+The diagnostic first enumerates and validates AmigaDOS startup
+driver/unit records without device I/O. It only calls OpenDevice
+when the exact requested driver name and numeric unit match one of
+those current validated candidates. It refuses missing, stale or
+unrecognized pairs; trackdisk.device cannot be probed through this
+candidate list. carddisk.device is still enumerated but its
+special characteristics are postponed for testing with a real PCMCIA
+SRAM card.
+
+| ID | Test | Expected |
+|---|---|---|
+| PHYS-35 | List with no arguments | Enumerates without opening devices; trackdisk excluded, carddisk retained |
+| PHYS-36 | \`--probe-driver scsi.device 0\` | Opens only confirmed scsi.device unit 0; separately reports Device name and Size |
+| PHYS-37 | \`--probe-driver scsi.device 9999\` | No match; does not call OpenDevice, returns error |
+| PHYS-38 | \`--probe-driver trackdisk.device 0\` | Excluded; cannot call OpenDevice |
+| PHYS-39 | \`--probe-driver scsi.device bad\` | Invalid argument, no I/O |
+| PHYS-40 | scsi.device SCSI INQUIRY unsupported | Device name Unavailable, independently report capacity if geometry works |
+| PHYS-41 | scsi.device TD_GETGEOMETRY unsupported | Size Unavailable, independently report INQUIRY if supported |
+
+This opt-in diagnostic still uses synchronous DoIO without a
+timeout; run only in controlled WinUAE, on a test image. Automatic
+GUI probing remains disabled pending test verification. The M1.24
+GUI uses two distinct recessed fields: Device name and Size.
