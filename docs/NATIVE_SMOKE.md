@@ -342,3 +342,23 @@ The final mascot sprite, a real scanned-block cursor, error/retry
 notifications, audio, a responsive screen and actual progress updates
 will be later steps. This demo must not be presented as working
 imaging or filesystem recovery.
+
+### M1.4 WinUAE user-reported runtime result (2026-11-17)
+
+First synthetic Sheep Counter demo was executed successfully on
+MC68000 / 512 KiB Chip RAM / Kickstart 2.04, with no Fast RAM:
+
+```text
+SHEEP before chip=305448 largest=283448
+SHEEP open chip=282488
+SHEEP closed chip=305448
+SHEEP PASS
+```
+
+The screen occupied 22960 bytes of Chip RAM in the measured interval,
+matching the earlier 320x256 / 2-bitplane Intuition screen smoke.
+Total free Chip RAM returned to the initial value. Visual quality,
+colour palette, text legibility, and animation smoothness are **not
+independently confirmed** by the supplied screenshot, which shows
+the Shell after the demo closed. The demo still operates entirely
+on synthetic progress, not physical media.
