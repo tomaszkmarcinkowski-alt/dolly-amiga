@@ -48,6 +48,24 @@ int dolly_demo_needs_target(DollyDemoOperation op) {
     return op==DOLLY_DEMO_COPY || op==DOLLY_DEMO_RESTORE ||
            op==DOLLY_DEMO_CREATE_IMAGE;
 }
+/* Canonical identity is the complete driver/device + Unit portion.
+ * Partition endpoint paths append " / volume" to that identity.
+ * Never authorize whole-disk versus partition-copy aliases merely
+ * because the rendered labels are not identical.
+ */
+static int same_physical_unit(const char *a,const char *b) {
+    const char *ua,*ub,*ea,*eb;
+    size_t na,nb;
+    if(!a || !b || !*a || !*b)return 0;
+    ua=strstr(a," / Unit ");
+    ub=strstr(b," / Unit ");
+    if(!ua || !ub)return 0;
+    ea=strstr(ua+8," / ");
+    eb=strstr(ub+8," / ");
+    na=ea?(size_t)(ea-a):strlen(a);
+    nb=eb?(size_t)(eb-b):strlen(b);
+    return na==nb && strncmp(a,b,na)==0;
+}
 int dolly_demo_can_start(DollyDemoOperation op,
                          const DollyEndpoint *source,
                          const DollyEndpoint *target) {
@@ -76,13 +94,15 @@ int dolly_demo_can_start(DollyDemoOperation op,
        (target->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_PARTITION) &&
        ((source->path[0] && target->path[0] &&
-         strcmp(source->path,target->path)==0) ||
+         same_physical_unit(source->path,target->path)) ||
         ((!source->path[0] || !target->path[0]) &&
          source->device==target->device &&
          source->unit==target->unit)) &&
        (source->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_UNIT ||
-        source->partition==target->partition))
+        ((source->path[0] && target->path[0])?
+          strcmp(source->path,target->path)==0:
+          source->partition==target->partition)))
         return 0;
     /* Logical-vs-physical aliasing is unknown before real discovery:
      * this is a demo validation only, never authorization to write.
