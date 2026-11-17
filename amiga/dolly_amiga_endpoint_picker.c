@@ -946,6 +946,10 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->mode=(DollyEndpointMode)code;
             p->has_device=0;p->has_unit=0;
             p->has_partition=0;p->has_logical=0;
+            if(p->gadgets && !p->gadgets_detached) {
+                RemoveGList(p->window,p->gadgets,-1);
+                p->gadgets_detached=1;
+            }
             populate_units(p);
             invalidate_query(p);
             p->last_click_valid=0;
