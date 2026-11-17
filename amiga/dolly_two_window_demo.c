@@ -52,6 +52,7 @@ struct Library *AslBase;
 #define MAIN_INVENTORY_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
+#define DOLLY_DEMO_BUILD_LABEL "Dolly build M1.39"
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
@@ -337,8 +338,8 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_w=d.right-d.left+1;
     avail_h=d.bottom-d.top+1;
     if(main_window) {
-        /* Lowest status well ends 168 pixels after the content top. */
-        if(avail_w<320 || avail_h<170)return 0;
+        /* Lowest status well ends 164 pixels after the content top. */
+        if(avail_w<320 || avail_h<166)return 0;
         /* Operation, Info, Source, Destination, action row.
          * A compact Progress/status pair replaces the old gap.
          */
@@ -347,8 +348,8 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         d.main_device_y=d.top+43;
         d.main_target_y=d.top+63;
         d.controls_y=d.top+87;
-        d.main_count_y=d.top+129;
-        d.main_status_y=d.top+151;
+        d.main_count_y=d.top+125;
+        d.main_status_y=d.top+147;
         /* Fixed compact percent well, Stop/Quit aligned to the right.
          * Keep enough room even at the 320px minimum client width.
          */
@@ -711,6 +712,20 @@ static void draw_main_static(void) {
     label(main_view.window,d->left,d->main_operation_y+11,"Operation:");
     label(main_view.window,d->left,d->main_desc_y+11,"Info:");
     label(main_view.window,d->left,d->main_count_y+11,"Progress:");
+    /* Build label occupies only the gap between the progress well
+     * and Stop. Omit it when a minimum-width window cannot fit it;
+     * never paint text underneath an interactive gadget.
+     */
+    {
+        struct RastPort *rp=main_view.window->RPort;
+        LONG from=d->progress_x+d->progress_w+6;
+        LONG to=d->stop_x-6;
+        LONG tw=(LONG)TextLength(rp,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
+                                 (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
+        if(to-from>=tw)
+            label(main_view.window,from+(to-from-tw)/2,
+                  d->main_count_y+11,DOLLY_DEMO_BUILD_LABEL);
+    }
     tags[0].ti_Tag=GT_VisualInfo;
     tags[0].ti_Data=(ULONG)main_view.visual;
     tags[1].ti_Tag=GTBB_Recessed;
@@ -1028,7 +1043,7 @@ int main(void) {
     if(!screen_info)goto cleanup;
     puts("Dolly: public screen ready");
     if(!open_view(&main_view,1,"Dolly",
-                  12,(ULONG)public_screen->BarHeight+1ul,600,195))
+                  12,(ULONG)public_screen->BarHeight+1ul,600,190))
         goto cleanup;
     draw_full(&main_view,1);
     refresh_main_selection();
