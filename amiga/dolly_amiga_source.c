@@ -3,6 +3,7 @@
  */
 #include "dolly_amiga_source.h"
 #include "dolly_io_plan.h"
+#include "dolly_dma_policy.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,9 @@
 #endif
 #ifndef MEMF_PUBLIC
 #define MEMF_PUBLIC (1UL<<0)
+#endif
+#ifndef MEMF_24BITDMA
+#define MEMF_24BITDMA (1UL<<9)
 #endif
 #define DOLLY_NSCMD_DEVICEQUERY 0x4000u
 #define DOLLY_NSD_TRACKDISK 5u
@@ -36,6 +40,8 @@ typedef struct DollyAmigaContext {
     ULONG max_transfer;
     int opened;
     int supports_nsd64;
+    ULONG dma_mask;
+    ULONG dma_alignment;
 } DollyAmigaContext;
 static void close_ctx(void *opaque) {
     DollyAmigaContext *ctx=(DollyAmigaContext *)opaque;
@@ -113,9 +119,19 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
     if(sector<512||sector>32768||(sector&(sector-1))||
        !opt->capacity_bytes || opt->capacity_bytes%sector ||
        transfer<sector||transfer>65536||transfer%sector)return DOLLY_BLOCK_EINVAL;
+    /* A caller must establish device/controller DMA limitations before
+     * raw access. It is not safe to guess from a generic device name. */
+    if(opt->dma_profile_verified!=1 ||
+       opt->dma_address_mask==0 ||
+       opt->dma_alignment<2 || opt->dma_alignment>4096 ||
+       (opt->dma_alignment&(opt->dma_alignment-1))!=0 ||
+       opt->require_24bit_dma>1)
+        return DOLLY_BLOCK_EINVAL;
     ctx=(DollyAmigaContext *)calloc(1,sizeof(*ctx));
     if(!ctx)return DOLLY_BLOCK_ENOMEM;
     ctx->block_bytes=sector;ctx->max_transfer=transfer;
+    ctx->dma_mask=opt->dma_address_mask;
+    ctx->dma_alignment=opt->dma_alignment;
     ctx->port=CreateMsgPort();
     if(!ctx->port){close_ctx(ctx);return DOLLY_BLOCK_ENOMEM;}
     /* NSD recommends extra packet room for drivers with larger requests. */
@@ -127,8 +143,24 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
     }
     ctx->opened=1;
     ctx->supports_nsd64=verify_nsd64(ctx);
-    ctx->bounce=(UBYTE *)AllocMem((ULONG)transfer,MEMF_PUBLIC);
+    ctx->bounce=(UBYTE *)AllocMem((ULONG)transfer,
+                  MEMF_PUBLIC | (opt->require_24bit_dma?MEMF_24BITDMA:0));
     if(!ctx->bounce){close_ctx(ctx);return DOLLY_BLOCK_ENOMEM;}
+    /* This is a necessary address-range check, NOT sufficient proof of
+     * bus visibility or cache coherency. Integration still needs real
+     * controller testing and OS-specific DMA handling. */
+#ifdef DOLLY_AMIGA_MOCK
+    {
+        uint64_t addr=dolly_mock_dma_address();
+#else
+    {
+        uint64_t addr=(uint64_t)(uintptr_t)ctx->bounce;
+#endif
+        if(dolly_dma_check_buffer(addr,transfer,ctx->dma_mask,
+                                   ctx->dma_alignment)!=DOLLY_DMA_OK){
+            close_ctx(ctx);return DOLLY_BLOCK_EUNSUPPORTED;
+        }
+    }
     status=dolly_block_open_backend(opt->capacity_bytes,read_device,close_ctx,ctx,out);
     if(status!=DOLLY_BLOCK_OK)close_ctx(ctx);
     return status;
