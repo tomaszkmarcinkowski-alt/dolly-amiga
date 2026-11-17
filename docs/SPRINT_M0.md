@@ -34,8 +34,8 @@
 
 ## Early Sheep Inventory foundation (non-blocking M0 experiment)
 
-- [x] Read-only partition field stream with explicit availability, provenance and units.
-- [x] Preliminary host `dolly-inventory` CLI using MBR and nested RDB.
+- [x] Read-only streaming field providers for RDB/PART (12), primary MBR (7) and RDSK header (7), with provenance and units.
+- [x] Preliminary host `dolly-inventory` CLI using MBR, RDSK and nested PART including de_Mask and de_NumBuffers.
 - [x] Local GCC, Clang and ASan/UBSan standalone unit checks, including absent fields, overflow and cancellation.
 - [ ] Full current-repository CTest/Actions validation after integration.
 - [ ] Native 68000 / GadTools window and broader device/volume field providers (future UX milestone M5; Issue #13).
