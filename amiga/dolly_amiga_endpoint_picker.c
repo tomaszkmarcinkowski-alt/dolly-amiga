@@ -33,6 +33,7 @@ extern struct DosLibrary *DOSBase;
 #define PICK_FILE_INFO 511u
 #define PICK_SELECTION_TEXT 512u
 #define PICK_DISK_INFO_TEXT 513u
+#define PICK_DISK_SIZE_TEXT 514u
 
 static STRPTR image_formats[]={
     (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",NULL
@@ -65,6 +66,8 @@ typedef struct PickerGeometry {
     WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
     WORD format_y;
     WORD format_x,format_w;
+    WORD value_x,value_w;
+    WORD name_x,name_w,size_label_x,size_x,size_w;
 } PickerGeometry;
 static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     PickerGeometry g;
@@ -117,6 +120,16 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.detail_y=(WORD)(132-lift);
     g.format_x=159;
     g.format_w=(WORD)(right-159);
+    /* A shared label column keeps the previews aligned in all
+     * modes. The Size field is right-anchored and stays separate.
+     */
+    g.value_x=180;
+    g.value_w=(WORD)(right-180);
+    g.name_x=124;
+    g.size_w=102;
+    g.size_x=(WORD)(right-g.size_w);
+    g.size_label_x=(WORD)(g.size_x-46);
+    g.name_w=(WORD)(g.size_label_x-8-g.name_x);
     return g;
 }
 static void make_list(struct List *l,struct Node *nodes,STRPTR *names) {
@@ -205,7 +218,7 @@ static void preview_file(DollyEndpointPicker *p) {
     len=(ULONG)strlen(p->file_display);
     while(len>3u &&
           (LONG)TextLength(rp,(STRPTR)p->file_display,len)>
-          (LONG)picker_geometry(p).full_width-16) {
+          (LONG)picker_geometry(p).value_w-16) {
         p->file_display[--len]='\0';
     }
     if(len<(ULONG)strlen(p->pending_file.path) && len>=3u) {
@@ -256,7 +269,7 @@ static void update_selection_preview(DollyEndpointPicker *p) {
     while(length>3u &&
           (LONG)TextLength(p->window->RPort,
                (STRPTR)p->selection_display,length)>
-               (LONG)picker_geometry(p).full_width-16)
+               (LONG)picker_geometry(p).value_w-16)
         p->selection_display[--length]='\0';
     if(length<(ULONG)strlen(full) && length>=3u) {
         p->selection_display[length-3u]='.';
@@ -271,8 +284,8 @@ static struct Gadget *selection_text(struct Gadget *last,
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=g.left;ng.ng_TopEdge=g.preview_y;
-    ng.ng_Width=g.full_width;ng.ng_Height=16;
+    ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.preview_y;
+    ng.ng_Width=g.value_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_SELECTION_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -292,10 +305,14 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
  */
 static void update_disk_info(DollyEndpointPicker *p) {
     if(!p->has_device || !p->has_unit) {
-        strcpy(p->disk_info_display,"INQUIRY: select a unit | Size: unknown");
+        strcpy(p->disk_info_display,"Select unit...");
+        strcpy(p->disk_size_display,"Unknown");
     } else {
-        strcpy(p->disk_info_display,
-               "INQUIRY: not queried (demo) | Size: unavailable");
+        /* Real HD_SCSICMD / TD_GETGEOMETRY remain deliberately
+         * disconnected from the synthetic GUI inventory.
+         */
+        strcpy(p->disk_info_display,"Not queried (demo)");
+        strcpy(p->disk_size_display,"Unavailable");
     }
 }
 static struct Gadget *disk_info_text(struct Gadget *last,
@@ -305,12 +322,27 @@ static struct Gadget *disk_info_text(struct Gadget *last,
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=g.left;ng.ng_TopEdge=g.disk_info_y;
-    ng.ng_Width=g.full_width;ng.ng_Height=16;
+    ng.ng_LeftEdge=g.name_x;ng.ng_TopEdge=g.disk_info_y;
+    ng.ng_Width=g.name_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_DISK_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->disk_info_display,
+                        GTTX_Border,TRUE,TAG_DONE);
+}
+static struct Gadget *disk_size_text(struct Gadget *last,
+                                     DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    PickerGeometry g=picker_geometry(p);
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=g.size_x;ng.ng_TopEdge=g.disk_info_y;
+    ng.ng_Width=g.size_w;ng.ng_Height=16;
+    ng.ng_GadgetID=PICK_DISK_SIZE_TEXT;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTTX_Text,(ULONG)p->disk_size_display,
                         GTTX_Border,TRUE,TAG_DONE);
 }
 static void refresh_disk_info(DollyEndpointPicker *p) {
@@ -320,15 +352,18 @@ static void refresh_disk_info(DollyEndpointPicker *p) {
     if(p->disk_info_text && p->window)
         GT_SetGadgetAttrs(p->disk_info_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->disk_info_display,TAG_DONE);
+    if(p->disk_size_text && p->window)
+        GT_SetGadgetAttrs(p->disk_size_text,p->window,NULL,
+                          GTTX_Text,(ULONG)p->disk_size_display,TAG_DONE);
 }
 static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=picker_geometry(p).left;
+    ng.ng_LeftEdge=picker_geometry(p).value_x;
     ng.ng_TopEdge=picker_geometry(p).path_y;
-    ng.ng_Width=picker_geometry(p).full_width;ng.ng_Height=17;
+    ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_FILE_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -340,9 +375,9 @@ static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=picker_geometry(p).left;
+    ng.ng_LeftEdge=picker_geometry(p).value_x;
     ng.ng_TopEdge=picker_geometry(p).detail_y;
-    ng.ng_Width=picker_geometry(p).full_width;ng.ng_Height=16;
+    ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_FILE_INFO;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->file_details,
@@ -405,7 +440,7 @@ static void file_details(DollyEndpointPicker *p) {
     }
     /* Clip only the display string, not the stored filename/path. */
     if(p->window) {
-        LONG available=(LONG)picker_geometry(p).full_width-16;
+        LONG available=(LONG)picker_geometry(p).value_w-16;
         len=(ULONG)strlen(p->file_details);
         while(len>3u &&
               (LONG)TextLength(p->window->RPort,
@@ -469,12 +504,32 @@ static void captions(DollyEndpointPicker *p) {
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         Move(rp,20,g.list_label_y);
         Text(rp,(STRPTR)"Registered DOS devices (read-only)",34);
-    } else {
-        Move(rp,20,g.file_label_y);
-        Text(rp,(STRPTR)"Selected file:",14);
+    }
+    /* Labels and recessed fields share a row, not separate vertical
+     * lines. The same placement works on the reference 640x256 screen.
+     */
+    if(p->mode==DOLLY_MODE_FILE) {
+        Move(rp,g.left,(LONG)g.path_y+12);
+        Text(rp,(STRPTR)"Selected file",13);
         if(p->role) {
-            Move(rp,20,g.format_label_y);
-            Text(rp,(STRPTR)"Image format:",13);
+            Move(rp,g.left,(LONG)g.format_y+12);
+            Text(rp,(STRPTR)"Image format",12);
+        } else {
+            Move(rp,g.left,(LONG)g.detail_y+12);
+            Text(rp,(STRPTR)"File info",9);
+        }
+    } else {
+        Move(rp,g.left,(LONG)g.preview_y+12);
+        if(p->mode==DOLLY_MODE_PARTITION)
+            Text(rp,(STRPTR)"Selected partition",18);
+        else
+            Text(rp,(STRPTR)"Selected device",15);
+        if(p->mode==DOLLY_MODE_PHYSICAL ||
+           p->mode==DOLLY_MODE_PARTITION) {
+            Move(rp,g.left,(LONG)g.disk_info_y+12);
+            Text(rp,(STRPTR)"Device name",11);
+            Move(rp,g.size_label_x,(LONG)g.disk_info_y+12);
+            Text(rp,(STRPTR)"Size",4);
         }
     }
     if(info)FreeScreenDrawInfo(p->screen,info);
@@ -543,6 +598,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->format_cycle=NULL;p->file_info=NULL;
     p->selection_text=NULL;
     p->disk_info_text=NULL;
+    p->disk_size_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -582,6 +638,9 @@ static int rebuild(DollyEndpointPicker *p) {
             last=disk_info_text(last,p);
             if(!last)return 0;
             p->disk_info_text=last;
+            last=disk_size_text(last,p);
+            if(!last)return 0;
+            p->disk_size_text=last;
         }
     }
     if(p->mode==DOLLY_MODE_FILE) {

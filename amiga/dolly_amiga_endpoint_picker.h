@@ -14,6 +14,7 @@ typedef struct DollyEndpointPicker {
     struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
+    struct Gadget *disk_size_text;
     struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[2],unit_nodes[2],partition_nodes[2];
     struct Node logical_nodes[DOLLY_DOS_MAX_DEVICES];
@@ -24,6 +25,7 @@ typedef struct DollyEndpointPicker {
     char file_details[160];
     char selection_display[160];
     char disk_info_display[160];
+    char disk_size_display[40];
     DollyImageFormat output_format;
     unsigned device,unit,partition,logical;
     DollyEndpointMode mode;
