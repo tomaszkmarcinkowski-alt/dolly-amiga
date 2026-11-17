@@ -309,3 +309,56 @@ Each run returns total free Chip RAM to 306512 bytes, while
 the contiguous largest block fluctuates in both directions.
 No sustained loss of total free Chip RAM is observed in this
 short sequence. This does not establish long-run stability.
+
+## M1.4 — Sheep Counter visual demo (NOT YET NATIVE-VALIDATED)
+
+New optional native-only target `dolly-sheep-demo`: synthetic 320x256
+2-bitplane (four-colour) Intuition screen using AmigaOS 2.04-era APIs.
+A 12x6 grid, movable red/white checkerboard placeholder sheep, 72-block
+progress demonstration and top/bottom status captions are drawn using
+graphics.library primitives. No external assets, DMA buffers, audio,
+physical drives or file writes are used. The demo closes automatically
+after about 260 PAL frames (~5.2 seconds), and prints free Chip RAM
+before/open/after plus PASS if the initial free total was restored.
+The code retains a 64 KiB contiguous / 128 KiB total Chip RAM
+precondition.
+
+Build in the existing Docker m68k toolchain on the branch:
+
+```sh
+cmake -S . -B build-m68k-sheep \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/amigaos-m68k.cmake \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-m68k-sheep -j2
+```
+
+Copy `build-m68k-sheep/dolly-sheep-demo` to the WinUAE
+shared folder and invoke `DOLLYTEST:dolly-sheep-demo`, followed
+by `Echo $RC`, under MC68000, 512 KiB Chip RAM, Kickstart 2.04.
+Expected UI is preliminary only; the code has not yet passed
+the user's Docker build or WinUAE runtime validation.
+
+The final mascot sprite, a real scanned-block cursor, error/retry
+notifications, audio, a responsive screen and actual progress updates
+will be later steps. This demo must not be presented as working
+imaging or filesystem recovery.
+
+### M1.4 WinUAE user-reported runtime result (2026-11-17)
+
+First synthetic Sheep Counter demo was executed successfully on
+MC68000 / 512 KiB Chip RAM / Kickstart 2.04, with no Fast RAM:
+
+```text
+SHEEP before chip=305448 largest=283448
+SHEEP open chip=282488
+SHEEP closed chip=305448
+SHEEP PASS
+```
+
+The screen occupied 22960 bytes of Chip RAM in the measured interval,
+matching the earlier 320x256 / 2-bitplane Intuition screen smoke.
+Total free Chip RAM returned to the initial value. Visual quality,
+colour palette, text legibility, and animation smoothness are **not
+independently confirmed** by the supplied screenshot, which shows
+the Shell after the demo closed. The demo still operates entirely
+on synthetic progress, not physical media.

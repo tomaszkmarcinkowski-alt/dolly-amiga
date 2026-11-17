@@ -37,6 +37,11 @@ if(DOLLY_NATIVE_ONLY)
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-screen-smoke PRIVATE -m68000)
     target_link_libraries(dolly-screen-smoke PRIVATE amiga)
+    add_executable(dolly-sheep-demo amiga/dolly_sheep_demo.c)
+    target_compile_options(dolly-sheep-demo PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-sheep-demo PRIVATE -m68000)
+    target_link_libraries(dolly-sheep-demo PRIVATE amiga)
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice
