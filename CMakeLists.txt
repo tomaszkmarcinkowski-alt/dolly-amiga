@@ -12,7 +12,7 @@ if(DOLLY_NATIVE_ONLY)
     amiga/dolly_native_smoke.c
     src/dolly_block_source.c src/dolly_rdb.c src/dolly_rdb_audit.c
     src/dolly_inventory.c src/dolly_io_plan.c src/dolly_maxtransfer.c
-    src/dolly_dma_policy.c)
+    src/dolly_dma_policy.c src/dolly_dma_advice.c)
   target_include_directories(dolly-native-smoke PRIVATE
     ${PROJECT_SOURCE_DIR}/include)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -21,6 +21,17 @@ if(DOLLY_NATIVE_ONLY)
     if(DOLLY_NATIVE_M68000)
       target_compile_options(dolly-native-smoke PRIVATE -m68000)
       target_link_options(dolly-native-smoke PRIVATE -m68000)
+    endif()
+  endif()
+  # Portable diagnostic helper: can also be cross-built for AmigaOS.
+  add_executable(dolly-dma-advice
+    src/dolly_dma_advice_cli.c src/dolly_dma_advice.c src/dolly_dma_policy.c)
+  target_include_directories(dolly-dma-advice PRIVATE ${PROJECT_SOURCE_DIR}/include)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(dolly-dma-advice PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    if(DOLLY_NATIVE_M68000)
+      target_compile_options(dolly-dma-advice PRIVATE -m68000)
+      target_link_options(dolly-dma-advice PRIVATE -m68000)
     endif()
   endif()
   # This also allows a host smoke build; host success is not Amiga validation.
@@ -191,7 +202,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # Pure C99 DMA safety policy: necessary mask/range/alignment checks.
-add_library(dollydma STATIC src/dolly_dma_policy.c)
+add_library(dollydma STATIC src/dolly_dma_policy.c src/dolly_dma_advice.c)
 target_include_directories(dollydma PUBLIC ${PROJECT_SOURCE_DIR}/include)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollydma PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -201,4 +212,15 @@ target_link_libraries(test-dma-policy PRIVATE dollydma)
 add_test(NAME dma_mask_alignment COMMAND test-dma-policy)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(test-dma-policy PRIVATE -UNDEBUG)
+endif()
+
+# Actionable, localized (legacy ASCII PL/EN) troubleshooting hints.
+add_executable(test-dma-advice tests/test_dma_advice.c)
+target_link_libraries(test-dma-advice PRIVATE dollydma)
+add_test(NAME dma_troubleshooting_catalog COMMAND test-dma-advice)
+add_executable(dolly-dma-advice src/dolly_dma_advice_cli.c)
+target_link_libraries(dolly-dma-advice PRIVATE dollydma)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-dma-advice PRIVATE -UNDEBUG)
+  target_compile_options(dolly-dma-advice PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
