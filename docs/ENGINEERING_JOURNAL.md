@@ -428,12 +428,26 @@
 **Decyzja UX:** błędy DMA są ostrzeżeniami blokującymi, z kodem problemu i poradą, nie automatyczną naprawą ani próbą zgadywania parametrów. [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8), [DOL-061](BACKLOG.md).
 
 
+### DJ-0042 · 2026-11-17 · DMA / pomoc użytkownikowi · WDROŻONO MODEL I TESTY; NATYWNE GUI OTWARTE
+**Temat:** Komunikat o błędzie powinien zawierać wskazówki rozwiązania problemu, jeśli można je podać bez ryzyka.
+
+**Wymaganie użytkownika:** oprócz przyczyny ostrzeżenia DMA Dolly ma proponować konkretne, możliwe do wykonania czynności diagnostyczne. Nie wolno jednak podawać „uniwersalnej” maski DMA, automatycznie zwiększać MaxTransfer, zmniejszać wymaganego wyrównania ani wymuszać niebezpiecznego transferu.
+
+**Działanie:** dodano strukturę `DollyDmaAdvice` ze stabilnym kodem, tytułem, przyczyną, maksymalnie trzema zalecanymi krokami i informacją, czy operacja została zablokowana. `dolly_dma_get_advice(status, language)` udostępnia angielski i tymczasowy polski katalog ASCII. W `dolly-dma-advice DMA_CODE [en|pl]` można wyświetlić pomoc również bez fizycznego dysku. Ten sam model może być wykorzystywany przez przyszły natywny CLI i okno GadTools; callback backendu przekazuje kod `DollyDmaStatus`, który identyfikuje właściwy zestaw podpowiedzi.
+
+**Przykład:** dla `DMA_ADDRESS_MASK` wskazujemy sprawdzenie RAM dostępnego dla kontrolera, możliwy wymóg DMA 24-bit i ostrzegamy przed sztucznym poszerzaniem maski. W każdym przypadku komunikat podkreśla, że operacja została zatrzymana, a uszkodzenie danych **nie jest stwierdzone**.
+
+**Testy:** dodano `tests/test_dma_advice.c` i `tests/test_dma_advice_cli.py` (wszystkie stany, EN/PL, liczba wskazówek, błędne kody i exit code). **Nie potwierdzono jeszcze wykonania tych testów na aktualnej pełnej gałęzi `main` ani na Amidze**; samo opublikowanie testu nie jest wynikiem PASS.
+
+**Ograniczenia:** polski zapis ASCII jest świadomym etapem przejściowym dla klasycznych konsol; docelowe tłumaczenia powinny korzystać z katalogów Locale i właściwego kodowania. Brakuje też podłączenia pełnych podpowiedzi do rzeczywistego okna GadTools.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0042 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0043 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
