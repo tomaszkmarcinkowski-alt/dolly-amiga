@@ -54,6 +54,7 @@ typedef struct DollyDemoView {
     char block_label[40];
     char percent_label[8];
     APTR visual;
+    unsigned char gadgets_detached;
     DemoLayout l;
 } DollyDemoView;
 
@@ -212,7 +213,11 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     if(!calculate_layout(v,main_window))return 0;
     update_labels(v);
     if(v->gadgets) {
-        RemoveGList(v->window,v->gadgets,-1);
+        /* IDCMP_SIZEVERIFY already detached the list before sizing.
+         * Never remove the same gadgets twice.
+         */
+        if(!v->gadgets_detached)
+            RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
         v->show=NULL;v->quit=NULL;v->hide=NULL;
@@ -254,12 +259,17 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->percent=last;
     }
     AddGList(v->window,v->gadgets,(ULONG)-1,-1,NULL);
+    v->gadgets_detached=0;
     RefreshGList(v->gadgets,v->window,NULL,-1);
     GT_RefreshWindow(v->window,NULL);
     return 1;
 }
 static void destroy_view(DollyDemoView *v) {
     if(v->window) {
+        if(v->gadgets && v->gadgets_detached) {
+            /* Already detached; leave the list freeable below. */
+            v->gadgets_detached=0;
+        }
         CloseWindow(v->window);
         v->window=NULL;
     }
@@ -286,7 +296,7 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
         WA_CloseGadget,TRUE,WA_SizeGadget,TRUE,
         WA_Activate,TRUE,WA_SmartRefresh,TRUE,
         WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
-                 IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE,
+                 IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
         TAG_DONE);
     if(!v->window)return 0;
     return rebuild_gadgets(v,main_window);
@@ -457,6 +467,15 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         UWORD id=0;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
+        if(cls==IDCMP_SIZEVERIFY && !v->gadgets_detached &&
+           v->gadgets) {
+            /* Remove GadTools before Intuition starts interactive sizing,
+             * preventing old-size gadgets from flashing in a smaller
+             * frame. Reply to SIZEVERIFY immediately afterwards.
+             */
+            RemoveGList(v->window,v->gadgets,-1);
+            v->gadgets_detached=1;
+        }
         if(cls==IDCMP_NEWSIZE)relayout=1;
         if(cls==IDCMP_REFRESHWINDOW) {
             GT_BeginRefresh(v->window);
@@ -479,11 +498,21 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
     if(relayout) {
         if(!rebuild_gadgets(v,main_window)) {
             puts("WINDOW WARN: resize layout rejected");
+            /* Reattach the previous list if the layout could not be
+             * reconstructed. It is no longer safe to leave a detached
+             * GadTools list orphaned in an otherwise usable window.
+             */
+            if(v->gadgets && v->gadgets_detached) {
+                AddGList(v->window,v->gadgets,(ULONG)-1,-1,NULL);
+                v->gadgets_detached=0;
+                RefreshGList(v->gadgets,v->window,NULL,-1);
+                GT_RefreshWindow(v->window,NULL);
+            }
             return;
         }
         redraw=1;
     }
-    if(redraw)draw_full(v,main_window);
+    if(redraw && !v->gadgets_detached)draw_full(v,main_window);
 }
 int main(void) {
     unsigned frames=0;
