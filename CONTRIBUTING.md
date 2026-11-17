@@ -10,4 +10,4 @@ Welcome! We are beginning with Milestone M0: safe read-only inspection and a tes
 - Separate professional diagnostics from optional sheep-related humor.
 - Do not add third-party artwork, samples or code without verifying distribution rights.
 
-**Licensing note:** a source license has not yet been chosen. Please discuss substantial contributions with the maintainer before submitting them.
+**License:** Dolly is MIT-licensed (see [LICENSE](LICENSE)). By contributing you agree that your contributions are submitted under the same MIT terms; only submit work you have the rights to contribute.
