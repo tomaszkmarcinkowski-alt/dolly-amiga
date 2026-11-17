@@ -402,12 +402,26 @@
 **Test:** lokalny GCC/Clang oraz ASan/UBSan z leak checking — **PASS**; brak testów z prawdziwym urządzeniem.
 
 
+### DJ-0040 · 2026-11-17 · DMA / maski adresów · BŁĄD POTWIERDZONY I POPRAWIONY, TESTY LOKALNE PASS
+**Temat:** Sprawdzenie tylko pierwszego i ostatniego adresu bufora może przeoczyć niedozwoloną „dziurę” w masce DMA.
+
+**Objaw:** pierwotna implementacja `dolly_dma_check_buffer()` sprawdzała maskę adresu początkowego i końcowego. Dla nietypowej maski `0x00002FFE`, adresu `0x00000FF0` i długości `0x1020` oba końce spełniały warunek, lecz zakres przechodził przez adresy z zakazanym bitem 12. **Przed poprawką test odtwarzający błąd zwracał nieprawidłowe `DOLLY_DMA_OK`.**
+
+**Poprawka:** kontrola oblicza teraz bitową sumę OR **wszystkich adresów** w przedziale za pomocą najwyższego zmienionego bitu `start XOR end`, a następnie sprawdza, czy wśród nich występuje bit niedozwolony przez maskę (z wyjątkiem dopuszczonych niskich bitów wewnątrz wyrównanego transferu). Dzięki temu odrzuca zakres przekraczający wewnętrzną, niedozwoloną przestrzeń adresową, nawet jeśli oba końce wyglądają poprawnie.
+
+**Test:** `tests/test_dma_policy.c` zawiera bezpośrednią regresję oraz **6000 deterministycznych przypadków** sprawdzanych wobec prostego algorytmu kontrolującego każdy bajt zakresu. **GCC PASS, Clang PASS**. Po zmianie osobny odtworzony zestaw adapter + fake Exec oraz pamięciowy smoke test ponownie przeszedł GCC/Clang. Smoke dla ścieżki natywnej dodatkowo sprawdza teraz dziurawą maskę.
+
+**Znaczenie:** szczególnie istotna lekcja dla Dolly: szybka kontrola granic nie jest automatycznie poprawną kontrolą *całego przedziału*. `MEMF_24BITDMA` i poprawna maska wciąż nie dowodzą rzeczywistej dostępności magistrali ani spójności cache.
+
+**Weryfikacja docelowa:** pełny build najnowszego `main`, CI, cross-kompilacja 68000, WinUAE i prawdziwy kontroler pozostają otwarte.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0040 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0041 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
