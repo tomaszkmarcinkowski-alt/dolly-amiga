@@ -60,3 +60,17 @@ These checks are **necessary, not sufficient**. DMA bus routing, controller firm
 The first implementation checked only the first and last addresses of a DMA buffer. That method can incorrectly accept a transfer crossing a **forbidden hole** in an irregular mask even if both endpoints appear valid. A concrete regression uses start `0x00000FF0`, length `0x1020` and mask `0x00002FFE`: the original algorithm returned `OK` while the transfer passes addresses with the prohibited bit 12 set.
 
 The corrected policy evaluates the OR of **all address bit patterns across the interval**, then rejects any prohibited bit. The algorithm's result was compared with a deliberately simple byte-by-byte reference implementation for **6000 deterministic random cases**. GCC and Clang passed; GCC ASan/UBSan with leak checking also passed locally. See [DJ-0040](ENGINEERING_JOURNAL.md).
+
+## User-facing DMA refusal messages (DOL-061)
+
+**Mandatory UX rule:** when a DMA safety check fails, Dolly must not silently return only `EINVAL` or `EUNSUPPORTED`. The operation is stopped, and the caller receives a **specific diagnostic reason, readable message and suggested safe next check**. There is no automatic fallback to unverified address masks, alternate RAM or unsafe alignment.
+
+The experimental native backend provides a `report_dma_problem(reason, message, user)` callback on `DollyAmigaDeviceOptions`. The callback is required before raw device access. `dolly_dma_user_message()` provides a 7-bit English fallback for older AmigaOS displays; the eventual CLI and GadTools dialog must translate messages to Polish/English via locale catalogs and visibly show them.
+
+Example planned Polish warning:
+
+> **Problem z DMA — odczyt zatrzymany.** Bufor znajduje się poza zakresem adresów obsługiwanym przez kontroler. Sprawdź ustawienia kontrolera i maskę DMA. Dolly nie wykonało niebezpiecznego transferu.
+
+Message categories: missing/invalid controller profile, memory outside DMA mask, buffer misalignment, address-range overflow and inability to allocate compatible memory. Messages must not assert that the disk is damaged or that a real transfer failed if Dolly refused to start it.
+
+**Local verification:** a reconstructed adapter/fake-Exec subset was compiled and tested with GCC and Clang (PASS). Callback delivery was verified for rejected profile, alignment and address mask, with no spurious warnings on accepted profiles. Full repository CI, AmigaOS SDK build, actual visible UI and real-controller tests remain open. See [Engineering Journal DJ-0041](ENGINEERING_JOURNAL.md).
