@@ -534,12 +534,20 @@
 **Do zrobienia:** GUI podglądu różnicy i zatwierdzania, zapisywanie/rollback lokalnych opcji, natywna walidacja urządzeń, niezależne testy DMA. [Issue #21](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/21).
 
 
+### DJ-0053 · 2026-11-17 · M0 / lokalne testy integralności · PODZBIÓR GCC/CLANG PASS, CI OTWARTE
+**Weryfikacja:** przenośny algorytm CRC32 i jego testy (`123456789`, wieloczęściowa aktualizacja, brak bufora i przepełnienie liczników) uruchomiono na lokalnie odtworzonym podzbiorze pod **GCC i Clang** z `-std=c99 -Wall -Wextra -Wpedantic -Werror`: PASS. W analogicznym lokalnie odtworzonym zestawie `dolly_device_profiles` + `dolly_profile_config` testy propozycji i odmów także **GCC PASS, Clang PASS**.
+
+**Weryfikacja pakietu:** hostowy generator manifestu CRC32 i jego verifier uruchomiono na lokalnie odtworzonych skryptach: dwa pliki, poprawna wersja i CRC32: PASS; celowo zmieniona zawartość programu zostaje odrzucona: PASS.
+
+**Ograniczenie:** z powodu niedostępnej sieci w środowisku kompilacji nie można pobrać pełnego `main` do jednorazowego CMake/CTest. Testowane zestawy odtworzono z kodu opublikowanego na GitHubie. **Nie twierdzimy, że cały bieżący `main` ani build AmigaOS 68000 został przetestowany.** GitHub nie udostępnił raportowanych statusów CI dla sprawdzanego commita.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0053 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0054 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
