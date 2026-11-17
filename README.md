@@ -89,3 +89,9 @@ Dolly source code is licensed under the **[MIT License](LICENSE)**. Software wil
 Dolly's native baseline is **640×256 with topaz.font/8**, including window borders, title and buttons. Default UI text follows the current **system Screen Font**; an explicitly selected custom Dolly font takes precedence *only if it fits*. Otherwise views reflow using Screen Font, then Topaz/8 and compact pagination. If even the compact layout cannot fit, no inaccessible window should open.
 
 The portable screen watcher coalesces screen mode/font change events. On AmigaOS 2.x+ the experimental `StartNotify` adapter watches `ENV:sys/screenmode.prefs` and `screenfont.prefs`. A future optional `screennotify.library` adapter will handle additional public-screen lifecycle notifications. **These are source-level prototypes, not a tested native GadTools UI.** See [GUI architecture](docs/GUI_ARCHITECTURE.md), [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14) and [Issue #15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15).
+
+## Optional-resource compatibility and controller knowledge
+
+Every optional `DOLLY:` asset must match the **exact running Dolly release** and its own format/API version and pass file-integrity checks. Missing, unreadable, unversioned or incompatible add-ons are disabled with a specific path, consequence and suggested remedy; GadTools and the built-in core remain usable. The pure C99 decision layer is implemented, but native AmigaDOS file verification/startup UI remain future work.
+
+The planned controller knowledge base under `DOLLY:Plugins/Devices/` can give **source-backed, device-specific DMA troubleshooting** instead of guesses. A unique device match plus verified database may supply documented warnings, never unconditional DMA authorization. See [installation policy](docs/INSTALLATION.md) and [DMA safety](docs/DMA_SAFETY.md).
