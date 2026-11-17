@@ -1408,3 +1408,21 @@ outer width and unrestricted maximum width. The compact `Dolly M1.41`
 label is rendered using the active screen's `SHINEPEN` (DrawInfo pen),
 not a hardcoded palette index. Other labels remain on `TEXTPEN`.
 Cross-build and WinUAE verification remain pending.
+
+### M1.42 — truthful physical device selection
+
+Keep the approved M1.41 main layout unchanged. Its build marker is
+`Dolly M1.42`. The existing AmigaDOS DosList snapshot supplies registered
+physical driver/unit tuples, not proof a disk is responding. Initially
+show `Registered; press Query` and `Not verified` in the picker.
+An explicit Query already opens the driver and tries TD_GETGEOMETRY,
+SCSI INQUIRY and READ CAPACITY(10) in the read-only native query module.
+Treat an INQUIRY name without valid capacity as *not verified*: show
+`Unknown` for the size and keep Physical `Use selection` disabled.
+Partition scanning continues to require actual capacity and is not
+run for unverified media. No new scanning of arbitrary unit numbers,
+automatic probing of absent media or write commands are introduced.
+
+This is only a correctness/safety gate around the existing native
+query path; device-presence verification, capacity validation and
+hardware compatibility require real WinUAE/device testing.
