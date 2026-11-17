@@ -192,12 +192,38 @@
 **Ograniczenia:** audyt nie interpretuje jeszcze `FSHD`, `LSEG`, `BADB`, `rdb_RDBBlocksLo/Hi` ani współdzielonych hybryd MBR/RDB. Zero flag nie jest certyfikatem zdrowego dysku.
 
 
+
+### DJ-0021 · 2026-11-17 · RDB / checksum · POPRAWIONE W ŹRÓDLE; PEŁNE CI DO POTWIERDZENIA
+**Temat:** Checksum `RDSK` / `PART` może mieć prawidłową sumę przy zbyt małym `SummedLongs`.
+
+**Wykrycie:** starszy parser akceptował arytmetycznie poprawną sumę nawet dla `SummedLongs=8` w `RDSK` lub `40` w `PART`, chociaż później czytał pola znajdujące się poza obszarem sumowania. Skutkiem była fałszywa wiarygodność geometrii, nazwy lub `DosEnvec`.
+
+**Działanie:** `src/dolly_rdb.c` wymaga obecnie co najmniej 19 słów (4-bajtowych) dla konsumowanych pól `RDSK` oraz `33 + de_TableSize` słów dla `PART`. Wcześniej odrzuca `de_TableSize` wykraczające poza bufor.
+
+**Test:** `tests/test_rdb.c` zawiera specjalnie spreparowane, krótsze checksumy. Ten sam algorytm i odpowiadające mu testy przeszły lokalnie w odtworzonym wcześniejszym snapshotcie (5/5 CTest), natomiast pełne bieżące repozytorium nadal wymaga niezależnego potwierdzenia builda/CI.
+
+**Pozostałe ryzyka:** RDB ma dodatkowe typy metadanych (`FSHD`, `LSEG`, `BADB`); nie są jeszcze walidowane tym kodem.
+
+### DJ-0022 · 2026-11-17 · PiStorm / hybrydy · CZĘŚCIOWO ZAIMPLEMENTOWANE
+**Temat:** Prawidłowy MBR nie wyklucza jednoczesnego RDB w początkowych blokach nośnika.
+
+**Wykrycie:** wcześniejsze `dolly_partition_map_scan()` wykrywało cały-dysk RDB tylko przy braku sygnatury MBR. W zaawansowanych układach jednoczesna obecność MBR i RDB mogła pozostać niewidoczna.
+
+**Działanie:** po zbadaniu wpisów MBR parser sprawdza również pierwsze bloki całego nośnika pod kątem poprawnego `RDSK`. Zapisuje `hybrid_mbr_rdb` oraz `hybrid_mbr_overlap`, a `dolly-layout` ostrzega o niejednoznaczności. Nie podejmuje automatycznie decyzji, który widok miałby służyć do zapisu.
+
+**Test:** syntetyczne hybrydy z kolidującymi i rozłącznymi zakresami; lokalna kompilacja i CTest 5/5 na odtworzonym starszym snapshotcie z nowymi zmianami. Testy aktualnego repozytorium i autentycznych kart PiStorm pozostają do wykonania.
+
+**Ważne:** wykrywanie współistnienia nie jest pełną obsługą dowolnej hybrydy; nie traktujemy tego jako bezpiecznej podstawy do klonowania.
+
+**Źródło praktyczne:** [oficjalna dokumentacja Emu68/PiStorm — przygotowanie karty SD](https://pistorm.github.io/tutorials/sd_setup/). [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0021 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0023 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
