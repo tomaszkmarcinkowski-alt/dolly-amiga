@@ -119,6 +119,12 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
                            UWORD id,WORD x,WORD y,WORD w,
                            struct List *items,int disabled) {
     struct NewGadget ng;
+    ULONG selected=(ULONG)~0ul;
+    if(id==PICK_DEVICE && p->has_device)selected=(ULONG)p->device;
+    if(id==PICK_UNIT && p->has_unit)selected=(ULONG)p->unit;
+    if(id==PICK_PARTITION && p->has_partition)
+        selected=(ULONG)p->partition;
+    if(id==PICK_LOGICAL && p->has_logical)selected=(ULONG)p->logical;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
@@ -128,7 +134,7 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
     ng.ng_GadgetID=id;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(LISTVIEW_KIND,last,&ng,
                         GTLV_Labels,(ULONG)items,
-                        GTLV_Selected,(ULONG)~0ul,
+                        GTLV_Selected,selected,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
 /* Read-only GadTools text field with the same inset border convention as
@@ -500,7 +506,7 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
           WA_Left,12,WA_Top,(ULONG)top,
           WA_Width,606,WA_Height,195,
           WA_MinWidth,606,WA_MinHeight,195,
-          WA_MaxWidth,(ULONG)screen->Width,
+          WA_MaxWidth,(ULONG)screen->Width-12ul,
           WA_MaxHeight,(ULONG)screen->Height-(ULONG)top,
           WA_SizeGadget,TRUE,
           WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,
