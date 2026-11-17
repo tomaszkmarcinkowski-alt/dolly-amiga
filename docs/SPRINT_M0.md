@@ -32,6 +32,14 @@
 
 **Locally verified:** reconstructed earlier source snapshot + new RDB changes: GCC CTest **6/6 PASS**, GCC Release CTest **6/6 PASS**; standalone RDB collision audit under Clang ASan/UBSan **PASS**. **Not equivalent to** a complete current GitHub checkout or native 68000 validation.
 
+## Early Sheep Inventory foundation (non-blocking M0 experiment)
+
+- [x] Read-only partition field stream with explicit availability, provenance and units.
+- [x] Preliminary host `dolly-inventory` CLI using MBR and nested RDB.
+- [x] Local GCC, Clang and ASan/UBSan standalone unit checks, including absent fields, overflow and cancellation.
+- [ ] Full current-repository CTest/Actions validation after integration.
+- [ ] Native 68000 / GadTools window and broader device/volume field providers (future UX milestone M5; Issue #13).
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
