@@ -66,7 +66,7 @@ static void render(struct RastPort *rp, unsigned step) {
         }
     }
     /* Sheep moves with the current column. The demo never reads a disk. */
-    sheep(rp, 9+(LONG)((step < 11u ? step : 11u)*25u), 103);
+    sheep(rp, 9+(LONG)((step < 12u ? step : 12u)*20u), 103);
     fill(rp, 3, 8, 202, 311, 207);
     if (step) fill(rp, 1, 8, 202, 8+(LONG)(step*25u), 207);
     sprintf(detail, "Blocks: %u/%u   Errors: 0", done, total);
