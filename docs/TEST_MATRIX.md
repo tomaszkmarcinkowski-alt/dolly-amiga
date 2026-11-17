@@ -203,3 +203,44 @@ rather than a hardware/RTG detection or fixed display-name check.
 It targets non-square-pixel classic Workbench geometries while leaving
 4:3-like screen ratios unchanged. A screen with conventional square
 pixels and very wide proportions may also trigger compact mode.
+
+## H. M1.23 verified physical driver/unit diagnostic
+
+This milestone introduces a **separate Shell executable**,
+\`dolly-physical-probe\`. The normal Dolly GUI remains unchanged.
+Before integrating probe results into Physical device and Partition
+pickers, obtain a reliable physical-driver/unit map on the reference
+WinUAE setup.
+
+| ID | Command or case | Expected |
+|---|---|---|
+| PHYS-01 | \`dolly-physical-probe\` | Prints bounded real DOS startup candidates, with **zero** OpenDevice/DoIO calls |
+| PHYS-02 | Repeated no-argument enumeration | Stable candidates, no Guru / Software Failure |
+| PHYS-03 | \`dolly-physical-probe --probe 0\` | One selected candidate only; OpenDevice handled or cleanly reported |
+| PHYS-04 | Supported unit | TD_GETGEOMETRY reports sector count/size and capacity in MiB |
+| PHYS-05 | Driver supports SCSI-direct | INQUIRY returns model/manufacturer/revision; missing support reports unavailable |
+| PHYS-06 | Driver without media | Reports unavailable without invented geometry or product |
+| PHYS-07 | Non-disk handler startup value | No unvalidated BPTR dereference; handler excluded from probe candidates |
+| PHYS-08 | Multiple DOS partitions on one driver/unit | Only one physical candidate entry |
+| PHYS-09 | Invalid index or omitted index with --probe | No device opened |
+| PHYS-10 | Reopen existing Dolly GUI | Previously accepted 640x256 Source/Destination functionality unchanged |
+
+Safety boundaries:
+- Enumeration only takes the AmigaDOS device-list **read lock**;
+  it does not call OpenDevice until the explicit --probe INDEX option.
+- A candidate is accepted only if startup BPTR, FileSysStartupMsg,
+  BSTR driver name and DosEnvec show plausible structure and the
+  driver name ends with .device. These checks are heuristic, **not a
+  universal proof** that a third-party handler follows this structure.
+- Probe sends only TD_GETGEOMETRY and HD_SCSICMD with opcode 0x12
+  (SCSI INQUIRY). No CMD_READ/CMD_WRITE, no TD_FORMAT, no partitions
+  parsed yet. The diagnostic sends commands synchronously and does
+  not yet have a timeout; test **only in WinUAE** until reviewed.
+- Chip RAM buffers are used for the SCSI data/CDB. Driver-specific
+  noncompliance can still produce unexpected behavior. Never treat
+  read-only intent as a guarantee of driver stability.
+
+**Gate before UI integration:** successful 640x256 WinUAE candidate
+listing and explicit safe probing, including at least one device and
+one unsupported/no-medium outcome. RTG and memory profiling remain
+deferred by the user.
