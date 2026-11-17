@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**63 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**67 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -544,11 +544,11 @@
 
 ## Epic: Modular GUI / low-resolution safety
 
-### DOL-062 — GadTools wbudowany, ReAction i MUI jako niezalezne moduly GUI
+### DOL-062 — GadTools jako jedyne GUI MVP; architektura niezaleznych backendow po MVP
 
-**Priorytet:** P1 dla architektury, P0 dla 640×256 · **Etap:** M3/M5 · [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14)
+**Priorytet:** P1 dla architektury, P0 dla 640×256 · **Etap:** MVP M3/M5 (GadTools), dodatkowe backendy poza MVP · [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14)
 
-**User story:** Dolly uruchamia sie domyslnie z GadTools na AmigaOS 2.04+/68000, a posiadacz opcjonalnych bibliotek moze wybrac oddzielny backend ReAction lub przyszly MUI, bez przymusu ich instalowania.
+**User story:** Dolly w MVP udostepnia tylko GadTools na AmigaOS 2.04+/68000; ReAction i MUI beda rozwijane i dostarczane jako oddzielne opcjonalne moduly dopiero po MVP.
 
 **Zalozenia:** niezalezny od GUI core, wersjonowany interfejs backendu, bez wymuszonych zaleznosci na ReAction/MUI, czytelny fallback do GadTools w razie niedostepnosci pluginu. Dopiero po sprawdzeniu natywnego ABI projektujemy wczytywanie modulow. Kazde okno, dialog i komunikat GadTools musi miescic sie w 640×256 przy Topaz/8 z uwzglednieniem obramowania, tytulu i przyciskow; dlugie informacje dzielimy na strony.
 
@@ -567,3 +567,42 @@
 **Akceptacja:** brak uzywania starych wskaznikow `Screen*`; po zmianie ekran i fonty pozyskiwane na nowo, a GUI przebudowywane dopiero gdy ekran jest dostepny. Bez dodatkowej biblioteki nadal dziala powiadamianie o preferencjach, ponowne mierzenie przy otwarciu/aktywacji/zmianie rozmiaru; nie obiecujemy wykrycia kazdego zdarzenia zamkniecia ekranu w takim trybie. Sprawdzic OS 2.04, 3.1, 3.1.4 i 3.2 pod WinUAE.
 
 **Status:** opublikowano model zdarzen, testy i eksperymentalny adapter AmigaDOS; natywna kompilacja i `screennotify.library` API niepotwierdzone.
+
+
+### DOL-064 — Wspolny katalog programu przez AmigaDOS Assign DOLLY:
+
+**Priorytet:** P1 · **Etap:** M0 (kontrakt sciezek), pozniejsze wydania (integracja runtime) · [Issue #16](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/16)
+
+**User story:** Jako uzytkownik Dolly chce przechowywac program, konfiguracje, katalogi lokalizacyjne, dokumentacje i ewentualne przyszle pluginy w jednym katalogu dostepnym przez `DOLLY:`, niezaleznie od aktualnego katalogu powloki.
+
+**Akceptacja:** `DOLLY:` jest jedynym logicznym rootem zasobow; przenosny mechanizm budowania sciezek odrzuca przeskoki `../`, bezposrednie sciezki `SYS:`, bledne segmenty i nadmierne dlugosci. Backend AmigaDOS ma weryfikowac, czy przypisanie wskazuje poprawny katalog, a w razie braku wyjasnic uzytkownikowi procedure naprawcza. Nie przestawiac Assign automatycznie na przypadkowy katalog. Systemowe `LIBS:`, `FONTS:` i `LOCALE:` nie sa nadpisywane.
+
+**Stan:** `dolly_paths` + test GCC/Clang/ASan/UBSan lokalnie PASS; natywne rozwiazywanie Assign i test AmigaOS nadal otwarte.
+
+### DOL-065 — Klasyczny skrypt instalacyjny Installer
+
+**Priorytet:** P1 · **Etap:** przed pierwszym wydaniem do instalacji (po M0) · [Issue #16](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/16)
+
+**User story:** Jako uzytkownik AmigaOS chce zainstalowac Dolly w wybranym katalogu, utworzyc przypisanie `DOLLY:` i opcjonalnie zapisac je w `S:User-startup`, z zachowaniem dotychczasowych ustawien oraz mozliwoscia bezpiecznej aktualizacji.
+
+**Akceptacja:** uzyc **klasycznego Commodore Installer**, nie pythonowej Installation Utility z OS4. Instalacja binarki i zasobow, pytanie o nadpisanie istniejacego Assign, opt-in dla trwalego wpisu w User-startup, bez duplikatow i z kopia zapasowa; aktualizacja, uninstall i obnizenie wymagan na dyskietkowych Amigach. Nie zakladac obecnoci programu Installer na kazdym czystym OS 2.04; udostepnic instrukcje instalacji recznej, jesli potrzebna.
+
+**Stan:** wymagania i `docs/INSTALLATION.md` zapisane; skrypt Installer pozostaje do wykonania po M0.
+
+## Epic: Post-MVP GUI backends
+
+### DOL-066 — Opcjonalny zewnetrzny backend ReAction
+
+**Priorytet:** P2 · **Etap:** wyłącznie po MVP · [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14)
+
+**User story:** Jako uzytkownik nowszego systemu chce osobno doinstalowac backend ReAction bez zmiany silnika Dolly i bez uzalezniania wydania podstawowego od klas ReAction.
+
+**Akceptacja:** odrebny modul/pakiet, kompatybilnosc ABI, rozpoznanie dostepnych klas, mozliwosc powrotu do GadTools, PL/EN, obsluga zmiany Screen Font i niski narzut pamieci. Nie jest warunkiem zadnego wydania MVP.
+
+### DOL-067 — Opcjonalny zewnetrzny backend MUI
+
+**Priorytet:** P2 · **Etap:** po MVP, w dalszym rozwoju · [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14)
+
+**User story:** Jako uzytkownik posiadajacy MUI chce w przyszlosci osobno zainstalowac backend GUI dla Dolly, przy niezmienionym silniku oraz pelnej dostepnosci GadTools.
+
+**Akceptacja:** niezalezny modul i zaleznosci, jawne wykrywanie instalacji MUI, bezpieczny fallback do GadTools, brak narzutu w standardowym MVP, mozliwosc uzycia `DOLLY:Plugins/`. Nastepny etap po podstawowym wydaniu.
