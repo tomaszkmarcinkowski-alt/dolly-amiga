@@ -63,30 +63,36 @@ static struct TextFont *marker_font;
 static DollyOperationSession operation;
 static DollyDemoView main_view, sheep_view;
 
-/* Small bounded decimal rendering: avoids varargs/64-bit ABI formatting.
- * GadTools copies/reads these stable view-owned strings as needed.
- */
-static void append_u32(char **out,unsigned long n) {
-    char digits[11];
+/* Bounds-checked C99 decimal formatter. No format varargs or overflow. */
+static void append_u32(char **out,char *limit,unsigned long n) {
+    char digits[10];
     unsigned p=0;
     do {
         digits[p++]=(char)('0'+n%10ul);
         n/=10ul;
     } while(n && p<sizeof(digits));
-    while(p) *(*out)++=digits[--p];
+    while(p && *out<limit)
+        *(*out)++=digits[--p];
+}
+static void append_char(char **out,char *limit,char c) {
+    if(*out<limit) *(*out)++=c;
 }
 static void update_labels(DollyDemoView *v) {
     char *p=v->block_label;
+    char *limit=v->block_label+sizeof(v->block_label)-1;
     unsigned long current=(unsigned long)operation.completed_blocks;
     unsigned long total=(unsigned long)operation.total_blocks;
     unsigned long percent=total ? current*100ul/total : 0ul;
-    append_u32(&p,current);
-    *p++=' '; *p++='/'; *p++=' ';
-    append_u32(&p,total);
+    append_u32(&p,limit,current);
+    append_char(&p,limit,' ');
+    append_char(&p,limit,'/');
+    append_char(&p,limit,' ');
+    append_u32(&p,limit,total);
     *p='\0';
     p=v->percent_label;
-    append_u32(&p,percent>100ul?100ul:percent);
-    *p++='%';
+    limit=v->percent_label+sizeof(v->percent_label)-1;
+    append_u32(&p,limit,percent>100ul?100ul:percent);
+    append_char(&p,limit,'%');
     *p='\0';
 }
 static void fill(struct RastPort *rp,UWORD pen,
