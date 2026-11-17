@@ -25,7 +25,8 @@ typedef struct DollyEndpointPicker {
 } DollyEndpointPicker;
 /* role: 0 source, 1 target. Two distinct, identical selectors. */
 int dolly_picker_open(DollyEndpointPicker *picker,struct Screen *screen,
-                      unsigned role,const DollyEndpoint *initial);
+                      unsigned role,const DollyEndpoint *initial,
+                      DollyEndpointMode preferred_mode);
 void dolly_picker_pump(DollyEndpointPicker *picker);
 void dolly_picker_close(DollyEndpointPicker *picker);
 #endif
