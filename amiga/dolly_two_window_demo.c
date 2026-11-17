@@ -158,6 +158,48 @@ static void clip_main(char *value,LONG width) {
     while(len && (LONG)TextLength(rp,(STRPTR)value,len)>width)
         value[--len]='\0';
 }
+/* Image format is metadata of the selected output endpoint, not a
+ * filename extension guess. Keep "(FORMAT)" visible when a long path
+ * needs clipping, and do not modify the committed path itself.
+ */
+static const char *image_format_label(DollyImageFormat format) {
+    switch(format) {
+    case DOLLY_IMAGE_RAW:return "RAW";
+    case DOLLY_IMAGE_HDF:return "HDF";
+    case DOLLY_IMAGE_ADF:return "ADF";
+    case DOLLY_IMAGE_IFF_DOLY:return "IFF DOLY";
+    default:return "Unknown";
+    }
+}
+static void format_destination_image(char *dst,size_t cap,
+                                     const DollyEndpoint *endpoint,
+                                     LONG max_pixels) {
+    const char *name=endpoint->path;
+    const char *fmt=image_format_label(endpoint->image_format);
+    size_t name_len=strlen(name),fmt_len=strlen(fmt);
+    size_t tail_len=fmt_len+3u; /* space, (, ) */
+    struct RastPort *rp=main_view.window?main_view.window->RPort:NULL;
+    if(!cap || cap<=tail_len)return;
+    if(name_len>cap-1u-tail_len)name_len=cap-1u-tail_len;
+    while(name_len) {
+        memcpy(dst,name,name_len);
+        dst[name_len]=' ';
+        dst[name_len+1u]='(';
+        memcpy(dst+name_len+2u,fmt,fmt_len);
+        dst[name_len+2u+fmt_len]=')';
+        dst[name_len+tail_len]='\0';
+        if(!rp || (LONG)TextLength(rp,(STRPTR)dst,
+                                   (ULONG)strlen(dst))<=max_pixels)
+            return;
+        --name_len;
+    }
+    /* Even when the filename is exceptionally long, preserve format. */
+    dst[0]=' ';
+    dst[1]='(';
+    memcpy(dst+2,fmt,fmt_len);
+    dst[2u+fmt_len]=')';
+    dst[tail_len]='\0';
+}
 static void update_main_status(void) {
     int need=dolly_demo_needs_target((DollyDemoOperation)selected_operation);
     int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
@@ -194,10 +236,20 @@ static void update_main_status(void) {
                     &selected_source);
     format_endpoint(main_view.target_label,sizeof(main_view.target_label),
                     &selected_target);
+    if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+       selected_target.kind==DOLLY_ENDPOINT_FILE) {
+        LONG pixel_width=main_view.window ?
+                         main_view.l.right-main_view.l.left-120 : 9999;
+        format_destination_image(main_view.target_label,
+                                 sizeof(main_view.target_label),
+                                 &selected_target,pixel_width);
+    }
     if(main_view.window) {
         DemoLayout *d=&main_view.l;
         clip_main(main_view.source_label,d->right-d->left-120);
-        clip_main(main_view.target_label,d->right-d->left-120);
+        if(!(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+             selected_target.kind==DOLLY_ENDPOINT_FILE))
+            clip_main(main_view.target_label,d->right-d->left-120);
         clip_main(main_view.desc_label,d->right-d->left-88);
         clip_main(main_view.status_label,d->right-d->left-8);
     }
@@ -276,7 +328,8 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_w=d.right-d.left+1;
     avail_h=d.bottom-d.top+1;
     if(main_window) {
-        if(avail_w<320 || avail_h<175)return 0;
+        /* Lowest status well ends 168 pixels after the content top. */
+        if(avail_w<320 || avail_h<170)return 0;
         /* Operation, Info, Source, Destination, action row.
          * A compact Progress/status pair replaces the old gap.
          */
@@ -458,7 +511,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->show=last;
         last=make_button(last,v,MAIN_INVENTORY_ID,
                          d->left+three_width+three_gap,d->controls_y,
-                         three_width,"Sheep Inventory");
+                         three_width,"");
         if(!last)return 0;
         v->inventory=last;
         last=make_button(last,v,MAIN_QUIT_ID,
@@ -933,7 +986,7 @@ int main(void) {
     if(!screen_info)goto cleanup;
     puts("Dolly: public screen ready");
     if(!open_view(&main_view,1,"Dolly",
-                  12,(ULONG)public_screen->BarHeight+1ul,600,213))
+                  12,(ULONG)public_screen->BarHeight+1ul,600,195))
         goto cleanup;
     draw_full(&main_view,1);
     refresh_main_selection();
