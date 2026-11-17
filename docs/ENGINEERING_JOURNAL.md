@@ -542,12 +542,24 @@
 **Ograniczenie:** z powodu niedostępnej sieci w środowisku kompilacji nie można pobrać pełnego `main` do jednorazowego CMake/CTest. Testowane zestawy odtworzono z kodu opublikowanego na GitHubie. **Nie twierdzimy, że cały bieżący `main` ani build AmigaOS 68000 został przetestowany.** GitHub nie udostępnił raportowanych statusów CI dla sprawdzanego commita.
 
 
+### DJ-0054 · 2026-11-17 · Samokontrola pliku wykonywalnego · ZMIANA DECYZJI I PROTOTYP M0
+**Temat:** Kontrola integralności bez osobnego programu uruchamiającego.
+
+**Decyzja użytkownika:** odrzucono osobny launcher/bootstrap. Główny program **Dolly po własnym uruchomieniu** weryfikuje na dysku **swój rzeczywisty plik wykonywalny** za pomocą dokładnego identyfikatora wydania, oczekiwanej długości i CRC32 z manifestu. Dopóki weryfikacja nie zakończy się sukcesem, operacje na urządzeniach dyskowych pozostają niedostępne. Nie wolno uznawać sprawdzenia `DOLLY:Dolly` za równoważne, jeśli proces uruchomiono z innego miejsca.
+
+**Implementacja:** opublikowano `dolly_selfcheck_stream()` w `src/dolly_selfcheck.c` wraz z przenośnym interfejsem odczytu w małych porcjach, komunikatami błędów oraz testami zgodnej sumy, zmiany danych, obcięcia pliku, niezgodnego wydania i awarii odczytu. Cele CMake dodane do zwykłej i eksperymentalnej gałęzi native-only.
+
+**Ograniczenie techniczne:** kod działa **po** rozpoczęciu wykonywania programu. Przy uszkodzeniu części pliku startowej program może się w ogóle nie uruchomić, więc nie jest to niezawodna kontrola przed pierwszą instrukcją ani zabezpieczenie przed celową podmianą plików. CRC32 jest tylko wykrywaniem przypadkowych błędów.
+
+**Do wykonania:** natywny AmigaDOS adapter do prawidłowego odnalezienia aktualnego pliku programu, odczyt rzeczywistego manifestu, włączenie kontroli do właściwej ścieżki startowej przed aktywacją operacji dyskowych i test WinUAE. **Najnowszy pełny CTest i uruchomienie m68k nie są potwierdzone.** [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0054 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0055 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
