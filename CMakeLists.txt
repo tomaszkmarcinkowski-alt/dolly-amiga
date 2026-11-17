@@ -122,3 +122,11 @@ target_link_libraries(dolly-rdb PRIVATE dollyrdbaudit)
 add_executable(test-rdb-mutations tests/test_rdb_mutations.c)
 target_link_libraries(test-rdb-mutations PRIVATE dollymap)
 add_test(NAME rdb_mutation_stability COMMAND test-rdb-mutations)
+
+# Several M0 test cases use assert() both for setup and validation.
+# Force assertions on in all GNU/Clang test executables, even Release builds.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  foreach(dolly_test IN ITEMS test-probe test-block-source test-rdb test-partition-map test-io-plan test-amiga-mock test-iff test-maxtransfer test-rdb-audit test-rdb-mutations)
+    target_compile_options(${dolly_test} PRIVATE -UNDEBUG)
+  endforeach()
+endif()
