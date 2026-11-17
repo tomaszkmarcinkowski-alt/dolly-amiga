@@ -63,7 +63,7 @@ unsigned dolly_allowed_modes(DollyDemoOperation op,unsigned role,
         case DOLLY_DEMO_COPY:return P|L|R|F;
         case DOLLY_DEMO_RESTORE:return F;
         case DOLLY_DEMO_CREATE_IMAGE:return P|L|R;
-        case DOLLY_DEMO_DISK_VET:return P|L|R;
+        case DOLLY_DEMO_DISK_VET:return P|L|R|F;
         default:return 0;
         }
     }
