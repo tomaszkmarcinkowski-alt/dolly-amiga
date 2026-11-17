@@ -43,6 +43,9 @@ def image_file(path):
     put_be32(part, 164, 2)
     put_be32(part, 168, 4)
     put_be32(part, 192, 0x444F5301)
+    put_be32(part, 128 + 11 * 4, 30)  # de_NumBuffers
+    put_be32(part, 128 + 12 * 4, 0)   # de_BufMemType
+    put_be32(part, 128 + 14 * 4, 0x00FFFFFE)  # de_Mask
     put_be32(part, 128 + 13 * 4, 0x7FFFFFFF)  # de_MaxTransfer
     checksum(part)
     with path.open('wb') as out:
@@ -69,6 +72,10 @@ def main(layout, iff, inventory):
         assert 'DH0' in result.stdout
         assert 'MaxTransfer' in result.stdout
         assert '0x444F5301' in result.stdout
+        assert 'Memory address mask' in result.stdout
+        assert '0x00FFFFFE' in result.stdout
+        assert 'Initial DOS buffers' in result.stdout
+
         anno = b'abc'
         archive.write_bytes(b'FORM' + struct.pack('>I', 16) + b'DOLY' +
                             b'ANNO' + struct.pack('>I', 3) + anno + b'\x00')
