@@ -95,3 +95,9 @@ The portable screen watcher coalesces screen mode/font change events. On AmigaOS
 Every optional `DOLLY:` asset must match the **exact running Dolly release** and its own format/API version and pass file-integrity checks. Missing, unreadable, unversioned or incompatible add-ons are disabled with a specific path, consequence and suggested remedy; GadTools and the built-in core remain usable. The pure C99 decision layer is implemented, but native AmigaDOS file verification/startup UI remain future work.
 
 The planned controller knowledge base under `DOLLY:Plugins/Devices/` can give **source-backed, device-specific DMA troubleshooting** instead of guesses. A unique device match plus verified database may supply documented warnings, never unconditional DMA authorization. See [installation policy](docs/INSTALLATION.md) and [DMA safety](docs/DMA_SAFETY.md).
+
+## Integrity and configuration (M0 groundwork)
+
+We use **exact Dolly release/build identity + CRC32** for the main executable and all optional assets; the per-resource format/API is checked for plugins. The host release manifest tools and a C99 checksum implementation are available. These detect **accidental** corruption, not malicious tampering. Native executable prelaunch verification and AmigaOS file probing are still planned — see [integrity policy](docs/INTEGRITY.md).
+
+A compatible controller database can prepare a user-approved proposal to **reduce** Dolly's local transfer size, but it cannot modify RDB, AmigaDOS settings or automatically authorize DMA. The optional [Dolly Rescue floppy](docs/RESCUE_FLOPPY.md) remains a future post-M0 deliverable.
