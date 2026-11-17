@@ -52,7 +52,7 @@ struct Library *AslBase;
 #define MAIN_INVENTORY_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly M1.40"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly M1.41"
 #define MAIN_CONTROLS_OFFSET 87
 #define MAIN_PROGRESS_OFFSET 125
 #define MAIN_STATUS_OFFSET 147
@@ -678,8 +678,9 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     if(!minimum.valid || minimum.outer_width>(ULONG)w->Width ||
        minimum.outer_height>(ULONG)w->Height)return 0;
     if(main_window)
+        /* Keep current height fixed; allow only horizontal resizing. */
         return WindowLimits(w,(LONG)minimum.outer_width,
-                            (LONG)minimum.outer_height,0,0)!=FALSE;
+                            (LONG)w->Height,0,(LONG)w->Height)!=FALSE;
     return WindowLimits(w,(LONG)minimum.outer_width,
                         (LONG)minimum.outer_height,0,0)!=FALSE;
 }
@@ -747,9 +748,13 @@ static void draw_main_static(void) {
         LONG to=d->stop_x-6;
         LONG tw=(LONG)TextLength(rp,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
                                  (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
-        if(to-from>=tw)
-            label(main_view.window,from+(to-from-tw)/2,
-                  d->main_count_y+11,DOLLY_DEMO_BUILD_LABEL);
+        if(to-from>=tw) {
+            SetDrMd(rp,JAM1);
+            SetAPen(rp,system_pen(SHINEPEN));
+            Move(rp,from+(to-from-tw)/2,d->main_count_y+11);
+            Text(rp,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
+                 (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
+        }
     }
     tags[0].ti_Tag=GT_VisualInfo;
     tags[0].ti_Data=(ULONG)main_view.visual;
