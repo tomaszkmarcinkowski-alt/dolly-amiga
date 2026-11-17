@@ -43,6 +43,7 @@ typedef struct Ui {
     struct Screen *screen;
     struct Window *win;
     struct DrawInfo *di;
+    struct TextFont *marker_font; /* Topaz/8 only for the current cell */
     APTR visual;
     struct Gadget *gadgets,*blocks,*errors;
     UWORD text,back,done,shade,active;
@@ -102,13 +103,25 @@ static void draw_cell(Ui *u,unsigned idx,int active) {
     rect(rp,u->shade,x,y,x2,y2);
     rect(rp,idx<u->done_blocks?u->done:u->back,x+1,y+1,x2-1,y2-1);
     if(active) {
-        struct TextFont *font=rp->Font;
-        LONG star_w=(LONG)TextLength(rp,(STRPTR)"*",1);
-        LONG sx=x+(l->stepx-star_w)/2;
-        LONG sy=y+(l->stepy-(LONG)font->tf_YSize)/2+
-                (LONG)font->tf_Baseline;
+        struct TextFont *previous_font=rp->Font;
+        UBYTE previous_mode=rp->DrawMode;
+        LONG star_w,sx,sy;
+        /* A dedicated ROM-compatible Topaz/8 marker is independent from
+         * the system font and future Dolly font preferences.
+         * JAM1 paints only foreground glyph pixels, never a text backdrop.
+         */
+        SetFont(rp,u->marker_font);
+        star_w=(LONG)TextLength(rp,(STRPTR)"*",1);
+        sx=x+(l->stepx-star_w)/2;
+        sy=y+(l->stepy-(LONG)u->marker_font->tf_YSize)/2+
+                (LONG)u->marker_font->tf_Baseline;
         rect(rp,u->active,x+2,y+2,x2-2,y2-2);
-        write_text(rp,u->text,sx,sy,"*");
+        SetDrMd(rp,JAM1);
+        SetAPen(rp,u->text);
+        Move(rp,sx,sy);
+        Text(rp,(STRPTR)"*",1);
+        SetDrMd(rp,previous_mode);
+        if(previous_font)SetFont(rp,previous_font);
     }
 }
 static void draw_all(Ui *u) {
@@ -232,6 +245,16 @@ int main(void) {
     if(!GfxBase){puts("WINDOW FAIL: graphics V36");goto cleanup;}
     GadToolsBase=OpenLibrary("gadtools.library",36);
     if(!GadToolsBase){puts("WINDOW FAIL: gadtools V36");goto cleanup;}
+    {
+        static struct TextAttr marker_attr={
+            (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
+        };
+        u.marker_font=OpenFont(&marker_attr);
+    }
+    if(!u.marker_font) {
+        puts("WINDOW FAIL: topaz.font/8 unavailable");
+        goto cleanup;
+    }
     u.screen=LockPubScreen(NULL);
     if(!u.screen){puts("WINDOW SKIP: public screen unavailable");rc=20;goto cleanup;}
     if((ULONG)u.screen->Width<MIN_WIDTH ||
@@ -338,6 +361,7 @@ cleanup:
     if(u.gadgets)FreeGadgets(u.gadgets);
     if(u.di && u.screen)FreeScreenDrawInfo(u.screen,u.di);
     if(u.visual)FreeVisualInfo(u.visual);
+    if(u.marker_font)CloseFont(u.marker_font);
     if(u.screen)UnlockPubScreen(NULL,u.screen);
     if(GadToolsBase)CloseLibrary(GadToolsBase);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);

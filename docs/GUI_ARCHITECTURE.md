@@ -240,3 +240,22 @@ No compilation or WinUAE run of M1.8 has been confirmed yet.
 Test especially **both minimum dimensions**, grid-frame clipping,
 system bar bottom pixel, and the memory report on MC68000,
 512 KiB Chip RAM, Kickstart 2.04.
+
+## M1.9 — fixed Topaz/8 transparent current-block marker (unverified)
+
+The M1.8 recessed 24x8 progress grid remains unchanged in geometry and
+uses system DrawInfo pens. For its ASCII `*` marker **only**, M1.9 explicitly
+opens `topaz.font` size 8 using `OpenFont()`, switches the window RastPort
+font transiently via `SetFont()`, sets `JAM1` transparent text mode,
+draws the glyph, and restores the previous font and draw mode.
+The font is closed when the demo ends. System labels and GadTools
+widgets still use the screen's current font.
+
+This prevents larger user-selected fonts from changing the glyph
+shape/size or adding an opaque text background. On a minimum-size grid,
+the 8px glyph may still overlap its thin cell outline; clipping is a
+separate possible enhancement and is not claimed here.
+
+Requires Docker m68k build and WinUAE verification (especially
+minimum-width/height resize and memory cleanup) on MC68000, 512 KiB
+Chip RAM, Kickstart 2.04. The prototype remains synthetic/no disk I/O.
