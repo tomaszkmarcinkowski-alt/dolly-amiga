@@ -704,3 +704,27 @@ the chooser.
 Same behavior applies to Source File and Destination File modes,
 including Create image. No actual image I/O is performed. This GUI fix
 still requires Docker m68k compile and WinUAE validation.
+
+### M1.18 — ASL current-directory and proportional list columns (WinUAE feedback)
+
+When selecting a file in the current directory, the ASL file requester
+may return a valid filename but an empty or NULL drawer string. The
+previous picker incorrectly required a **non-empty drawer** and silently
+rejected this case, leaving Selected file blank and Use selection
+disabled. The picker now accepts `fr_File` by itself as a valid relative
+AmigaDOS pathname, or combines drawer + filename when a drawer is
+provided. The pending-file preview and explicit Use selection behavior
+remain unchanged. As with other relative DOS paths, any eventual real
+I/O implementation must resolve or preserve the correct directory
+context; this prototype does not open the file.
+
+Physical device now uses **two equal-width LISTVIEW_KIND columns**,
+Device and Unit, filling the available client width. Partition uses
+**three equal-width columns**, Device, Unit and Partition. Both the
+column list gadgets and their captions use the same geometry function
+based on the actual Intuition window borders and a constant 8-pixel
+gutter. Previously the first two lists had fixed narrow widths even
+when the third column was absent.
+
+This revision is committed but needs m68k Docker compilation and WinUAE
+confirmation in both Source and Destination pickers.
