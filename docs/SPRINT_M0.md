@@ -195,6 +195,6 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 ## WSL2 host integration milestone — 2026-11-17
 
 - [x] User confirmed **28/28 PASS** for full host CTest after fixing the GadTools missing-font `NO_FIT` / `BAD_INPUT` mismatch.
-- [ ] Run a separate host dry run with `-DDOLLY_NATIVE_ONLY=ON`; do not confuse host execution with AmigaOS native build.
+- [x] Host dry run with `-DDOLLY_NATIVE_ONLY=ON`: user-confirmed GCC 15.2.0, Ninja 52/52, CTest **8/8 PASS**, `dolly-native-smoke --selftest: PASS` and `DollyRdb` size **14376 bytes** on x86-64 (not on m68k).
 - [ ] Build `dolly-native-smoke` using an installed `m68k-amigaos-gcc`, then launch in WinUAE / real MC68000.
 - [ ] Run GCC/Clang sanitizers for the full current tree; no new complete sanitizer result has been reported.
