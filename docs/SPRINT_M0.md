@@ -135,6 +135,9 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [x] Added safe device-profile settings proposal: may reduce a Dolly-local block-aligned transfer chunk, never increase it, never auto-authorize DMA or modify OS/RDB.
 - [x] Added corresponding test cases and CMake targets; local isolated CRC32 C99 tests passed under GCC and Clang.
 - [ ] Verify complete current `main` with CMake/CTest and native cross compiler. A reconstructed subset is not sufficient.
-- [ ] Native prelaunch checker for executable, actual file checksum reader, file-bound version metadata and safe loader, GadTools notices.
+- [ ] Integrate **in-process main Dolly self-check after startup**, actual AmigaDOS program-file lookup and CRC32 file stream, file-bound version metadata and GadTools notices (no separate launcher).
 - [ ] Device-proposal review/confirm/rollback and real controller validation.
 - [ ] Separate future **Dolly Rescue** GadTools-only bootable floppy (Issue #20) does not gate M0.
+
+- [x] In-process `dolly_selfcheck_stream()` and decision tests added to normal and native-only CMake modes.
+- [ ] Wire self-check to the actual AmigaDOS Dolly executable before enabling disk operations; ensure failures block device actions without a second program.
