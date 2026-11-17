@@ -16,8 +16,12 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 - Disk-based scratch, optional AddBuffers with consent and rollback, safe/experimental Berserk modes.
 - Dedicated **Sheep Counter** 320×256 progress screen with error counters, sheep mascot and optional 8-bit audio.
 
-## Current scope (M0)
-The first host-side component is a **read-only image header inspector**. This is not yet a native Amiga binary; it does not repair, clone or write disks.
+## Current implementation (M0)
+- Read-only host-side image header inspector (ADF size candidates, RAW/HDF candidate, IFF `FORM DOLY` envelope).
+- Read-only 64-bit host file backend (`DollyBlockSource`) with exact/short reads and range checks.
+- CTest regression cases including sparse-file access beyond 4 GiB.
+
+**No Amiga executable or actual cloning, formatting, filesystem repair, device write or full DOLY parser exists yet.**
 
 ```sh
 cmake -S . -B build
@@ -30,6 +34,6 @@ ctest --test-dir build --output-on-failure
 See [project scope](docs/SPECIFICATION.md), [M0 sprint](docs/SPRINT_M0.md), [Retroware](RETROWARE.md) and [contributing](CONTRIBUTING.md).
 
 ## Licensing
-**Source license has not yet been selected.** Public hosting does not itself grant modification or redistribution rights. Dolly is intended to be free of mandatory fees. Retro-hardware gifts are entirely optional and confer no entitlement.
+Dolly source code is licensed under the **[MIT License](LICENSE)**. Software will remain free of mandatory fees. Gifts of retro-computing hardware are wholly voluntary and confer no entitlement.
 
 **Please do not use M0 software on valuable media; it is an incomplete prototype.**
