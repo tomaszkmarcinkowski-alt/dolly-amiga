@@ -1334,3 +1334,38 @@ Other operations and Source formatting remain unchanged.
 
 No changes to media I/O, operation eligibility or picker LISTVIEW
 lifetime. Native build and WinUAE visual verification pending.
+
+### M1.38 — Progress with Stop/Quit and two unused action placeholders
+
+The upper action row retains three equally sized buttons with
+6px gaps: **Sheep Counter**, a disabled blank button, and a second
+disabled blank button in the former **Quit** position.
+
+The full-width **Start** remains immediately below. The row labeled
+**Progress:** now shows only a concise percentage, e.g. `0%`,
+`50%`, `100%`, in a recessed 66px-wide TEXT_KIND field. No
+block count or parentheses appear in the main view; the separate
+Sheep Counter retains its own block count and percent indicator.
+On the same row, to the **right** of the progress field, place
+equal-width **Stop** and **Quit** BUTTON_KIND gadgets (Stop to the
+left). Both are right aligned; each is 90px wide at typical
+window widths and 70px at client widths below 360px. The client
+minimum width remains unchanged.
+
+**Stop is deliberately nonfunctional and disabled** at this
+stage. Its sole future activation criterion is an explicit
+operation capability for safely interruptible work. The current
+`operation_supports_safe_stop()` stub returns false for all
+operations, including synthetic progress; no cancellation event
+handler is wired. Start/Stop safety cannot be inferred just from
+a running-state flag. Quit retains its existing behavior.
+
+The recessed main status panel remains below the Progress/Stop/Quit
+row. The 195px initial main window height and the M1.37 output
+image format suffix are unchanged. Main gadget pointers for Stop
+and both blank placeholders are reset during resize and teardown
+to prevent stale references.
+
+No changes to source/destination pickers, partition-node bank
+lifetime, Query, Disk Vet or real disk I/O. Cross-build and WinUAE
+verification pending at user request.
