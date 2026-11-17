@@ -483,3 +483,34 @@ and `SHEEP_MIN_W/H`; it is not evidence that this general measurement
 policy is implemented yet. Incorporate a measurable layout preflight
 and corresponding boundary tests before treating the full GUI as
 release-ready.
+
+### M1.15 — measured minimum dimensions on both native windows (requires WinUAE verification)
+
+The **portable C99** `dolly_gui_minimum` module accepts actual measured
+pixel widths of mandatory captions and button labels, current font height,
+true Intuition border thickness and the agreed aspect-dependent inner
+padding. It calculates the smallest outer rectangle for the two current
+layouts, including equal-width action buttons, GadTools number/text
+controls, and the 24x8 Sheep Counter grid. It never guesses text
+widths from character counts.
+
+The AmigaOS 2.04 demo calls `TextLength()` on the opened window's
+RastPort and then sets `WindowLimits()` from that measured minimum,
+before constructing the GadTools gadget list. The window still opens
+in the established location; this change affects its minimum dimensions,
+not the preferred window size. Optional explanatory prose is suppressed
+if its measured width does not fit the current client rectangle.
+
+The portable unit test `test-gui-minimum` checks mandatory equal-width
+button sizing, grid width and height, larger labels, square-pixel
+padding and invalid font metrics. It is added to ordinary and
+native-only CMake CTest configurations. A passing build or test has
+not yet been observed for this branch.
+
+This is the **first preflight integration**, not an exhaustive
+localization/font stress test. Remaining work includes dynamically
+recomputing limits on screen/font changes, testing longer translated
+labels, avoiding clipping under extreme font metrics, and extracting
+other views' constraint descriptions into a common layout engine.
+The auxiliary Sheep Counter still never owns/cancels the core operation,
+and this demo performs no disk I/O.
