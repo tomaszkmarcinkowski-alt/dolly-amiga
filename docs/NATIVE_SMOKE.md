@@ -193,3 +193,43 @@ RC=0
 All three independent allocations restored their initial free Chip RAM.
 These confirm raw planar-buffer feasibility, **not** a rendered Intuition
 screen or the full Sheep Counter memory footprint.
+
+## M1.3 — first real Sheep Counter screen (UNVERIFIED)
+
+Experimental AmigaOS 2.04+ `dolly-screen-smoke` target opens its **own**
+320x256, 2-bitplane (four-colour) Intuition screen, draws a few text lines
+and closes after about 250 display frames. It captures Chip RAM and largest
+contiguous free block before opening, while open, and after closing. It
+requires at least 128 KiB available Chip RAM and a largest contiguous
+block of 64 KiB before attempting to open.
+
+This is **not** the final Sheep Counter: no real sheep graphics, progress
+animations, user input, audio, gadget UI, disk reads or writes. The screen
+smoke is a separate CLI executable; the proven memory-test binary is left
+untouched.
+
+The screen target is compiled only in an actual m68k native-only build and
+links against AmigaOS's system library stubs (`-lamiga`). In the existing
+Windows 11 + WSL2 Ubuntu + Docker workflow, use a fresh build folder:
+
+```sh
+cmake -S . -B build-m68k-screen \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/amigaos-m68k.cmake \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-m68k-screen -j2
+```
+
+Copy `build-m68k-screen/dolly-screen-smoke` to the WinUAE shared
+`DOLLYTEST:` directory, then run:
+
+```text
+Stack 16384
+DOLLYTEST:dolly-screen-smoke
+Echo $RC
+```
+
+Capture the full `SCREEN before`, `SCREEN opened`, `SCREEN closed`
+and `SCREEN PASS/FAIL` output, or any compile/runtime error. A screen
+allocation can legitimately fail on a 512 KiB machine; record and analyze
+rather than increasing RAM. CloseScreen cleanup is mandatory. Do not claim
+a native PASS until the tester has run it under WinUAE.
