@@ -42,6 +42,8 @@ dolly-native-smoke --selftest
 
 Capture output, CPU model, OS version, free memory, binary size, build command and any startup/runtime failures in [Engineering Journal](ENGINEERING_JOURNAL.md).
 
+The self-test prints a **stage number** if it fails and the size of the heap-allocated `DollyRdb` result. Capture both, especially on low-memory Amigas. An emitted PASS is only the memory-based self-test result; physical device I/O is not exercised.
+
 ## Known limitations and follow-ups
 
 1. Confirm NDK v39/AmigaOS 2.04 compatibility for all linked runtime/library symbols (including 64-bit integer helper routines).
