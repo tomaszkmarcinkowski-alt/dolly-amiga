@@ -115,3 +115,54 @@ const char *dolly_gui_fit_name(DollyGuiFit f){
     default:return "Invalid screen/font geometry";
     }
 }
+
+/* Keep font preference separate from the geometry checks so a user-selected
+ * font that cannot fit is never silently rendered outside the screen. */
+DollyGuiFontPlan dolly_gui_plan_with_fonts(
+    DollyGuiView view,DollyGuiScreen screen,
+    DollyGuiFont system_screen_font,
+    DollyGuiFontSettings settings,
+    DollyGuiFont topaz8){
+    DollyGuiFontPlan out={0};
+    DollyGuiFont none={0};
+    DollyGuiLayout attempted;
+    out.selected_font=DOLLY_GUI_FONT_SYSTEM_SCREEN;
+    if(settings.custom_enabled){
+        if(!good_font(settings.custom)){
+            out.custom_unavailable=1;
+        }else{
+            attempted=dolly_gui_plan(view,screen,settings.custom,none);
+            if(attempted.fit==DOLLY_GUI_FIT_PREFERRED){
+                out.layout=attempted;
+                out.selected_font=DOLLY_GUI_FONT_CUSTOM;
+                return out;
+            }
+            out.custom_rejected_for_size=1;
+        }
+    }
+    if(good_font(system_screen_font)){
+        attempted=dolly_gui_plan(view,screen,system_screen_font,none);
+        if(attempted.fit==DOLLY_GUI_FIT_PREFERRED){
+            out.layout=attempted;
+            out.selected_font=DOLLY_GUI_FONT_SYSTEM_SCREEN;
+            return out;
+        }
+        out.screen_rejected_for_size=1;
+    }
+    out.layout=dolly_gui_plan(view,screen,none,topaz8);
+    out.selected_font=DOLLY_GUI_FONT_TOPAZ8;
+    if(out.layout.fit==DOLLY_GUI_FIT_PREFERRED)
+        out.layout.fit=DOLLY_GUI_FIT_TOPAZ8;
+    if(out.layout.fit==DOLLY_GUI_FIT_TOPAZ8 ||
+       out.layout.fit==DOLLY_GUI_FIT_COMPACT_TOPAZ8)
+        out.layout.use_topaz8=1;
+    return out;
+}
+const char *dolly_gui_font_source_name(DollyGuiFontSource source){
+    switch(source){
+    case DOLLY_GUI_FONT_SYSTEM_SCREEN:return "System Screen Font";
+    case DOLLY_GUI_FONT_CUSTOM:return "Custom Dolly font";
+    case DOLLY_GUI_FONT_TOPAZ8:return "Topaz/8 safety fallback";
+    default:return "Unknown font source";
+    }
+}
