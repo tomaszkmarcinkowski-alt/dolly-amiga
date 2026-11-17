@@ -9,6 +9,7 @@ typedef enum DollyInventoryNoticeSeverity {
 typedef struct DollyInventoryNotice {
     const char *code;      /* stable nonlocalized identifier */
     const char *message;   /* preliminary English human-readable text */
+    const char *suggested_action; /* safe next check, NULL only if none is known */
     DollyInventoryNoticeSeverity severity;
 } DollyInventoryNotice;
 typedef int (*DollyInventoryNoticeEmit)(const DollyInventoryNotice *,void *user);
