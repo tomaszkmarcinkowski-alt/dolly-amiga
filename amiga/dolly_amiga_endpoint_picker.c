@@ -31,6 +31,7 @@ extern struct DosLibrary *DOSBase;
 #define PICK_FILE_TEXT 509u
 #define PICK_IMAGE_FORMAT 510u
 #define PICK_FILE_INFO 511u
+#define PICK_SELECTION_TEXT 512u
 
 static STRPTR image_formats[]={
     (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",NULL
@@ -61,7 +62,7 @@ static STRPTR logical_names[]={
 typedef struct PickerGeometry {
     WORD left,right,full_width;
     WORD mode_x,mode_w;
-    WORD list_y,list_h,action_y;
+    WORD list_y,list_h,action_y,preview_y;
     WORD browse_y,path_y,detail_y;
     WORD format_x,format_w;
 } PickerGeometry;
@@ -71,9 +72,10 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     LONG left=20;
     LONG right=(LONG)w->Width-(LONG)w->BorderRight-20;
     LONG action=(LONG)w->Height-(LONG)w->BorderBottom-31;
-    LONG height=action-66-11;
+    LONG preview=action-23;
+    LONG height=preview-66-7;
     if(right<left+320)right=left+320;
-    if(height<83)height=83;
+    if(height<56)height=56;
     g.left=(WORD)left;
     g.right=(WORD)right;
     g.full_width=(WORD)(right-left);
@@ -82,6 +84,7 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.list_y=66;
     g.list_h=(WORD)height;
     g.action_y=(WORD)action;
+    g.preview_y=(WORD)preview;
     g.browse_y=66;
     g.path_y=105;
     g.detail_y=132;
@@ -165,6 +168,71 @@ static void preview_file(DollyEndpointPicker *p) {
         p->file_display[len-2u]='.';
         p->file_display[len-1u]='.';
     }
+}
+/* Preview is provisional: the parent selection only changes after
+ * Use selection. Show the current hierarchy as the user moves through
+ * Device -> Unit -> Partition.
+ */
+static void update_selection_preview(DollyEndpointPicker *p) {
+    char full[160];
+    ULONG length;
+    const char *dev=p->has_device ?
+        (const char *)device_names[p->device] : NULL;
+    const char *unit=p->has_unit ?
+        (const char *)unit_names[p->unit] : NULL;
+    const char *part=p->has_partition ?
+        (const char *)partition_names[p->partition] : NULL;
+    if(p->mode==DOLLY_MODE_LOGICAL) {
+        if(p->has_logical)
+            snprintf(full,sizeof(full),"%s",
+                     (const char *)logical_names[p->logical]);
+        else strcpy(full,"Select logical device...");
+    } else if(!p->has_device) {
+        strcpy(full,"Select device...");
+    } else if(!p->has_unit) {
+        snprintf(full,sizeof(full),"%s / select unit...",dev);
+    } else if(p->mode==DOLLY_MODE_PARTITION && !p->has_partition) {
+        snprintf(full,sizeof(full),"%s / %s / select partition...",dev,unit);
+    } else if(p->mode==DOLLY_MODE_PARTITION) {
+        snprintf(full,sizeof(full),"%s / %s / %s",dev,unit,part);
+    } else {
+        snprintf(full,sizeof(full),"%s / %s (whole unit)",dev,unit);
+    }
+    strncpy(p->selection_display,full,sizeof(p->selection_display)-1u);
+    p->selection_display[sizeof(p->selection_display)-1u]='\0';
+    if(!p->window)return;
+    length=(ULONG)strlen(p->selection_display);
+    while(length>3u &&
+          (LONG)TextLength(p->window->RPort,
+               (STRPTR)p->selection_display,length)>
+               (LONG)picker_geometry(p).full_width-16)
+        p->selection_display[--length]='\0';
+    if(length<(ULONG)strlen(full) && length>=3u) {
+        p->selection_display[length-3u]='.';
+        p->selection_display[length-2u]='.';
+        p->selection_display[length-1u]='.';
+    }
+}
+static struct Gadget *selection_text(struct Gadget *last,
+                                     DollyEndpointPicker *p) {
+    struct NewGadget ng;
+    PickerGeometry g=picker_geometry(p);
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=g.left;ng.ng_TopEdge=g.preview_y;
+    ng.ng_Width=g.full_width;ng.ng_Height=16;
+    ng.ng_GadgetID=PICK_SELECTION_TEXT;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(TEXT_KIND,last,&ng,
+                        GTTX_Text,(ULONG)p->selection_display,
+                        GTTX_Border,TRUE,TAG_DONE);
+}
+static void refresh_selection_preview(DollyEndpointPicker *p) {
+    update_selection_preview(p);
+    if(p->selection_text && p->window)
+        GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
+                          GTTX_Text,(ULONG)p->selection_display,TAG_DONE);
 }
 static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
@@ -363,6 +431,7 @@ static int rebuild(DollyEndpointPicker *p) {
     g=picker_geometry(p);
     preview_file(p);
     file_details(p);
+    if(p->mode!=DOLLY_MODE_FILE)update_selection_preview(p);
     if(p->gadgets) {
         if(!p->gadgets_detached)
             RemoveGList(p->window,p->gadgets,-1);
@@ -377,6 +446,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->partition_list=NULL;p->logical_list=NULL;
     p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
     p->format_cycle=NULL;p->file_info=NULL;
+    p->selection_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
     last=cycle(last,p);
@@ -405,6 +475,11 @@ static int rebuild(DollyEndpointPicker *p) {
                   g.full_width,&p->logical_devices,0);
         if(!last)return 0;
         p->logical_list=last;
+    }
+    if(p->mode!=DOLLY_MODE_FILE) {
+        last=selection_text(last,p);
+        if(!last)return 0;
+        p->selection_text=last;
     }
     if(p->mode==DOLLY_MODE_FILE) {
         /* Reuse the otherwise empty LISTVIEW area. Full client width. */
@@ -579,18 +654,22 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             change_enabled(p);
+            refresh_selection_preview(p);
         } else if(id==PICK_UNIT && code<2u && p->has_device) {
             p->unit=code;p->has_unit=1;p->has_partition=0;
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Selected,(ULONG)~0ul,TAG_DONE);
             change_enabled(p);
+            refresh_selection_preview(p);
         } else if(id==PICK_PARTITION && code<2u && p->has_unit) {
             p->partition=code;p->has_partition=1;
             change_enabled(p);
+            refresh_selection_preview(p);
         } else if(id==PICK_LOGICAL && code<2u) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
+            refresh_selection_preview(p);
         } else if(id==PICK_SELECT) {
             int ok=0;
             if(p->mode==DOLLY_MODE_PHYSICAL && p->has_unit)
