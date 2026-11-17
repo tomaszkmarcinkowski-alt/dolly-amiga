@@ -15,6 +15,7 @@
 #define INV_CLOSE_ID 601u
 #define INV_PART_ID 602u
 #define INV_MAX_PARTITIONS DOLLY_PART_MAX
+#define INV_LIST_WIDTH 224
 
 static void init_rows(DollyNativeInventoryView *v) {
     v->rows.lh_Head=(struct Node *)&v->rows.lh_Tail;
@@ -23,6 +24,7 @@ static void init_rows(DollyNativeInventoryView *v) {
     v->rows.lh_Type=NT_USER;
     v->rows.l_pad=0;
     v->count=0;
+    v->selected_partition=~0u;
 }
 /* Explicit bounded copies avoid strncpy truncation diagnostics with
  * -Werror while still providing guaranteed NUL termination.
@@ -120,6 +122,76 @@ static void draw_text(struct Window *w,struct DrawInfo *info,
     Move(rp,x,y);
     Text(rp,(STRPTR)s,(ULONG)strlen(s));
 }
+/* Right-hand partition details reuse the already validated snapshot.
+ * Selecting a LISTVIEW row never sends a device I/O request.
+ */
+static void draw_partition_details(DollyNativeInventoryView *v,
+                                   struct Screen *screen) {
+    struct DrawInfo *info;
+    struct RastPort *rp;
+    struct Window *w=v->window;
+    const DollyNativePartition *p;
+    LONG top,right;
+    char line[96];
+    if(!w)return;
+    info=GetScreenDrawInfo(screen);
+    if(!info)return;
+    rp=w->RPort;
+    top=(LONG)w->BorderTop;
+    right=(LONG)w->Width-(LONG)w->BorderRight-12;
+    SetDrMd(rp,JAM1);
+    SetAPen(rp,info->dri_Pens[BACKGROUNDPEN]);
+    RectFill(rp,260,top+46,right,top+143);
+    if(v->selected_partition>=v->count ||
+       v->selected_partition>=v->map.count) {
+        draw_text(w,info,266,top+59,
+                  "Select a partition for details");
+        FreeScreenDrawInfo(screen,info);
+        return;
+    }
+    p=&v->map.parts[v->selected_partition];
+    sprintf(line,"Partition: %s",p->label);
+    draw_text(w,info,266,top+57,line);
+    if(p->is_rdb) {
+        if(p->dos_type_present)
+            sprintf(line,"DosType: 0x%08lx",(unsigned long)p->dos_type);
+        else strcpy(line,"DosType: unavailable");
+        draw_text(w,info,266,top+69,line);
+        if(p->boot_priority_present)
+            sprintf(line,"BootPri: %ld",(long)p->boot_priority);
+        else strcpy(line,"BootPri: unavailable");
+        draw_text(w,info,266,top+81,line);
+        if(p->max_transfer_present)
+            sprintf(line,"MaxTransfer: 0x%08lx",
+                    (unsigned long)p->max_transfer);
+        else strcpy(line,"MaxTransfer: unavailable");
+        draw_text(w,info,266,top+93,line);
+        if(p->dma_mask_present)
+            sprintf(line,"Mask: 0x%08lx",(unsigned long)p->dma_mask);
+        else strcpy(line,"Mask: unavailable");
+        draw_text(w,info,266,top+105,line);
+        sprintf(line,"Block: %lu B, SPB: %lu",
+                (unsigned long)p->fs_block_bytes,
+                (unsigned long)p->sectors_per_block);
+        draw_text(w,info,266,top+117,line);
+        sprintf(line,"Cylinders: %lu - %lu",
+                (unsigned long)p->low_cyl,
+                (unsigned long)p->high_cyl);
+        draw_text(w,info,266,top+129,line);
+    } else {
+        sprintf(line,"MBR type: 0x%02lx",(unsigned long)p->mbr_type);
+        draw_text(w,info,266,top+69,line);
+        draw_text(w,info,266,top+81,"DosType/BootPri: not in MBR");
+        draw_text(w,info,266,top+93,"MaxTransfer/Mask: not in MBR");
+        draw_text(w,info,266,top+105,"Cylinder range: not in MBR");
+        sprintf(line,"Block: %lu B",(unsigned long)p->fs_block_bytes);
+        draw_text(w,info,266,top+117,line);
+    }
+    sprintf(line,"Size: %lu MiB",
+            (unsigned long)(p->length_bytes/1048576u));
+    draw_text(w,info,266,top+141,line);
+    FreeScreenDrawInfo(screen,info);
+}
 static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
     struct DrawInfo *info;
     struct Window *w=v->window;
@@ -148,6 +220,7 @@ static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
     RefreshGList(v->gadgets,w,NULL,-1);
     GT_RefreshWindow(w,NULL);
     FreeScreenDrawInfo(screen,info);
+    if(v->count)draw_partition_details(v,screen);
 }
 void dolly_inventory_view_close(DollyNativeInventoryView *v) {
     if(!v)return;
@@ -247,7 +320,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     if(!last){dolly_inventory_view_close(v);return 0;}
     if(v->count) {
         last=create_list(last,v,screen,20,
-                         (LONG)v->window->BorderTop+47,548,93);
+                         (LONG)v->window->BorderTop+47,
+                         INV_LIST_WIDTH,93);
         if(!last){dolly_inventory_view_close(v);return 0;}
     }
     last=create_button(last,v,screen,392,
@@ -273,6 +347,11 @@ void dolly_inventory_view_pump(DollyNativeInventoryView *v) {
         GT_ReplyIMsg(msg);
         if(cls==IDCMP_CLOSEWINDOW || id==INV_CLOSE_ID) {
             dolly_inventory_view_close(v);return;
+        }
+        if(id==INV_PART_ID && cls==IDCMP_GADGETUP &&
+           (unsigned)msg->Code<v->count) {
+            v->selected_partition=(unsigned)msg->Code;
+            draw_partition_details(v,v->window->WScreen);
         }
         if(cls==IDCMP_REFRESHWINDOW)
             paint(v,v->window->WScreen);
