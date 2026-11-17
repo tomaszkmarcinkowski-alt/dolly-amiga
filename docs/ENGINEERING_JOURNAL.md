@@ -621,12 +621,26 @@
 **Źródła:** [Hyperion AmigaOS 3.2](https://www.hyperion-entertainment.com/index.php/where-to-buy/direct-downloads/327-amigaos-32), [OpenAmiga diskimage.device](https://www.a500.org/main-menu/projects/diskimage-device.xhtml).
 
 
+### DJ-0061 · 2026-11-17 · M0 / RDB vs rzeczywista pojemność · CZĘŚCIOWO ZREALIZOWANO, TESTY PODZBIORU PASS
+**Temat:** RDB zapisany w obrazie RAW może deklarować geometrię większą lub mniejszą od docelowego nośnika.
+
+**Wykryta luka:** wcześniejszy audyt `dolly_rdb_audit()` sprawdzał kolizje zakresów i ich wyjście poza kontener, ale **nie klasyfikował osobno rozbieżności między geometrią RDB a niezależnie zmierzoną pojemnością**. Sam większy nośnik nie oznacza, że cały dodatkowy obszar można bezpiecznie zapisać.
+
+**Działanie:** dodano przenośny, niedestruktywny moduł `dolly_capacity_audit()` i testy. Funkcja porównuje `cylinders * heads * sectors * block_size` z pojemnością dostarczoną przez wywołującego, wykrywając przepełnienie 64-bitowe, brak geometrii, zbyt duży/mały nośnik, granice PART i deskryptorów RDB oraz partycje przekraczające deklarowaną geometrię. W kontenerach MBR `0x76` porównanie dotyczy **partycji-kontenera**, nie całej karty. Ostrzeżenia wprowadzono do hostowych CLI `dolly-layout`, `dolly-rdb` i `dolly-inventory`, przy zachowaniu zasady wyłącznie odczytu.
+
+**Test regresyjny:** w pierwszym wariancie fixture użyto niezgodnych danych (100 cylindrów zamiast 1 dla 64 KiB przy 4 głowicach, 32 sektorach i blokach 512 B). Poprawiono zestaw testowy, następnie lokalnie skompilowano odtworzony dokładny algorytm wraz z testem pod `gcc` i `clang` (C99, `-Wall -Wextra -Wpedantic -Werror`) oraz `gcc` z ASan/UBSan: **PASS**. Przypadki: większy nośnik, mniejszy nośnik z partycją poza granicą, poprawny MBR kontener, błędne metadane i brak geometrii, przepełnienie, pojemności 4/8/12 GiB i bloki 1024 B.
+
+**Ograniczenia:** wyniki testów dotyczą nowego **podzbioru**, nie wszystkich zmodyfikowanych CLI ani całego aktualnego `main`. Samo sprawdzanie pliku RAW na hoście używa jego rozmiaru, podczas gdy na Amidze konieczny jest niezależny pomiar pojemności rzeczywistego urządzenia. Moduł **nie potwierdza**, że końcowe bajty nośnika są wolne do zapisu. Nie proponuje ani nie wykonuje żadnej zmiany RDB. Natywny build 68000 i WinUAE pozostają otwarte.
+
+**Odnośnik:** [DOL-074 / Issue #23](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/23).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0061 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0062 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
