@@ -19,9 +19,10 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
         /* Two GadTools buttons on one row; 12px text padding per button.
          * Main explanatory sentence is optional at very narrow widths.
          */
+        /* Both buttons share an equal-width row in the current layout. */
         client_w=max_u32(m.heading_width,
-                 m.show_button_text_width+12u+
-                 m.quit_button_text_width+12u+6u);
+                 2u*max_u32(m.show_button_text_width+12u,
+                            m.quit_button_text_width+12u)+6u);
         client_w=max_u32(client_w,168u); /* read-only count + caption */
         /* heading baseline, buttons, number & minimum vertical spacing */
         client_h=m.line_height+19u+15u+12u+m.line_height+20u;
