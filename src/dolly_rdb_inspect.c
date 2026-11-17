@@ -1,5 +1,6 @@
 /* Host-only read-only RDB inspector. */
 #include "dolly_rdb.h"
+#include "dolly_rdb_audit.h"
 #include "dolly_maxtransfer.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -30,6 +31,14 @@ int main(int argc,char **argv){
         base,r.block_bytes,r.header_block);
  printf("Geometry: %u cylinders, %u heads, %u sectors\n",r.cylinders,r.heads,r.sectors);
  printf("Partitions: %u\n",r.partition_count);
+ {
+  DollyRdbAudit audit=dolly_rdb_audit(&r,base,dolly_block_size(source)-base);
+  if(audit.flags)
+   fprintf(stderr,"WARNING: RDB collision audit flags=0x%08" PRIX32
+           " (partition indices %u / %u); not safe to modify\n",
+           audit.flags,audit.first_partition,audit.second_partition);
+ }
+
  for(i=0;i<r.partition_count;i++){
   DollyPartition *p=&r.partitions[i];
   printf("  %s: PART=%u cylinders=%u..%u start=%" PRIu64 " length=%" PRIu64 " DosType=%08" PRIX32 "\n",
