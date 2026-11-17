@@ -218,12 +218,32 @@
 **Źródło praktyczne:** [oficjalna dokumentacja Emu68/PiStorm — przygotowanie karty SD](https://pistorm.github.io/tutorials/sd_setup/). [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
 
 
+
+### DJ-0023 · 2026-11-17 · RDB / błędna hybryda · ZWERYFIKOWANE LOKALNIE; CAŁE CI OTWARTE
+**Temat:** Poprawny MBR może maskować uszkodzony kandydat RDB zapisany na tym samym nośniku.
+
+**Wykrycie:** po dodaniu rozpoznawania współistnienia MBR+RDB parser rozróżniał jedynie poprawne RDB i brak RDB. Nieprawidłowa suma kontrolna `RDSK` mogła pozostać niewidoczna, mimo że czytelny MBR nadal pozwalał na korzystanie z części nośnika.
+
+**Działanie:** do `DollyPartitionMap` dodano `suspect_whole_disk_rdb`. Nie unieważnia automatycznie poprawnego MBR, ale `dolly-layout` ostrzega o możliwych uszkodzonych metadanych RDB. Zob. [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
+
+**Test:** syntetyczny MBR ze skasowaną checksumą dyskowego RDB i z poprawnym RDB; lokalnie odtworzony zestaw przechodzi 5/5 CTest po uwzględnieniu wcześniejszej poprawki rozróżniającej `NOT_FOUND` i `BAD_CHECKSUM`.
+
+**Ograniczenia:** wynik nie dowodzi żadnej fizycznej kolizji; trzeba zweryfikować `FSHD/LSEG/BADB`, kolejne kopie `RDSK` i rzeczywiste profile sterowników. Pełny aktualny build GitHub/68000 nadal niepotwierdzony.
+
+### DJ-0024 · 2026-11-17 · 32-bitowe systemy hostowe · POPRAWIONE; TEST NA 32-BITOWYM HOŚCIE OTWARTY
+**Temat:** Typ `uint64_t` w silniku nie zapewnia 64-bitowych offsetów plików, jeśli libc używa 32-bitowego `off_t`.
+
+**Działanie:** moduły hostowych plików i testy `fseeko/ftello` używają przed nagłówkami `_FILE_OFFSET_BITS=64`. To jest mechanizm POSIX large-file support, niezależny od implementacji I/O natywnej Amigi.
+
+**Test:** odtworzony lokalny projekt GCC/CTest 5/5 PASS, ale środowisko jest 64-bitowe. Właściwy regresyjny build i odczyt >4 GiB na 32-bitowym Linuxie nadal pozostają do wykonania.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0023 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0025 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
