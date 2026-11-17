@@ -13,7 +13,7 @@ int dolly_endpoint_set_unit(DollyEndpoint *e,unsigned d,unsigned u) {
 }
 int dolly_endpoint_set_partition(DollyEndpoint *e,unsigned d,
                                  unsigned u,unsigned p) {
-    if(p>1u || !dolly_endpoint_set_unit(e,d,u))return 0;
+    if(p>15u || !dolly_endpoint_set_unit(e,d,u))return 0;
     e->kind=DOLLY_ENDPOINT_PARTITION;
     e->partition=(uint8_t)p;
     return 1;
