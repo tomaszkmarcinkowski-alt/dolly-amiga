@@ -50,6 +50,54 @@ static void print_memory_samples(void) {
                s->name, s->chip, s->fast, s->total, s->largest);
     }
 }
+/* Synthetic planar display allocation only: no screens, DMA or disk I/O.
+ * 320x256 at 2, 3 or 4 bitplanes (40 bytes/row/plane).
+ * A fixed 64 KiB unallocated cushion is deliberately conservative.
+ * These are capacity probes, NOT GUI memory requirements.
+ */
+static int run_chip_budget(void) {
+    static const unsigned planes[] = {2u, 3u, 4u};
+    const unsigned long plane_size = 40ul * 256ul;
+    const unsigned long reserve = 65536ul;
+    unsigned i;
+    int failed = 0;
+    printf("CHIP budget: synthetic 320x256 bitplanes; reserve=%lu\n", reserve);
+    for (i = 0; i < sizeof(planes)/sizeof(planes[0]); ++i) {
+        unsigned long bytes = plane_size * planes[i];
+        unsigned long before = (unsigned long)AvailMem(MEMF_CHIP);
+        unsigned long largest = (unsigned long)AvailMem(MEMF_CHIP | MEMF_LARGEST);
+        unsigned long after;
+        unsigned long restored;
+        unsigned char *p;
+        if (bytes > largest || before < bytes ||
+            before - bytes < reserve || largest - bytes < reserve) {
+            printf("CHIP %u planes bytes=%lu status=SKIP free=%lu largest=%lu\n",
+                   planes[i], bytes, before, largest);
+            continue;
+        }
+        p = (unsigned char *)AllocMem(bytes, MEMF_CHIP);
+        if (!p) {
+            printf("CHIP %u planes bytes=%lu status=FAIL alloc\n", planes[i], bytes);
+            failed = 1;
+            continue;
+        }
+        p[0] = 0x55u;
+        p[bytes-1] = 0xaau;
+        after = (unsigned long)AvailMem(MEMF_CHIP);
+        {
+            int intact = p[0] == 0x55u && p[bytes-1] == 0xaau;
+            FreeMem(p, bytes);
+                restored = (unsigned long)AvailMem(MEMF_CHIP);
+            printf("CHIP %u planes bytes=%lu status=%s free_before=%lu free_during=%lu free_after=%lu\n",
+               planes[i], bytes,
+               (intact && restored == before) ?
+               "PASS" : "FAIL",
+               before, after, restored);
+            if (!intact || restored != before) failed = 1;
+        }
+    }
+    return failed ? 10 : 0;
+}
 #else
 #define record_memory(name) ((void)0)
 #define print_memory_samples() ((void)0)
@@ -209,6 +257,10 @@ int main(int argc,char **argv){
     if(argc==2 && strcmp(argv[1],"--version")==0){
         puts(dolly_version_text());return 0;
     }
+#ifdef DOLLY_AMIGAOS_MEMORY_PROFILING
+    if(argc==2 && strcmp(argv[1],"--chip-budget")==0)
+        return run_chip_budget();
+#endif
     if(argc==2 && strcmp(argv[1],"--selftest")==0){
         int result=run_selftest();
         puts(result?"Dolly native smoke: PASS":"Dolly native smoke: FAIL");
@@ -217,7 +269,7 @@ int main(int argc,char **argv){
         print_memory_samples();
         return result?0:10;
     }
-    puts("Usage: dolly-native-smoke --version | --selftest | --help");
+    puts("Usage: dolly-native-smoke --version | --selftest | --chip-budget | --help");
     puts("No physical device is accessed; no disk writes are possible.");
     return argc==1 || (argc==2 && strcmp(argv[1],"--help")==0)?0:20;
 }
