@@ -82,6 +82,8 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
    p->buffer_count_present = env_table_size>=11;
    p->buffer_memory_type_present = env_table_size>=12;
    p->dma_mask_present = env_table_size>=14;
+   p->boot_priority_present = env_table_size>=15;
+   if(p->boot_priority_present) p->boot_priority=(int32_t)be32(buf+128+15*4);
    if(p->buffer_count_present) p->buffer_count=be32(buf+128+11*4);
    if(p->buffer_memory_type_present) p->buffer_memory_type=be32(buf+128+12*4);
    if(p->dma_mask_present) p->dma_mask=be32(buf+128+14*4);
