@@ -344,3 +344,25 @@ Tests:
   unavailable until a tested real unit is integrated
 
 This patch is **not yet compiled or WinUAE tested**.
+
+## M. A1200/OS3.1 IDE: every disk DOS entry fails driver BSTR validation
+
+New user WinUAE result: DB0:/CC0:/OS:/WB_1.3:/WB_2.x:/GRY:/DL0:
+reach DOS startup geometry, including ordinary \`table=16\` and
+\`blockwords=128\`, but fail \`fssm_Device\` BSTR validation.
+Even the directly mounted IDE disk on \`scsi.device\` does not
+appear as a physical candidate. Do not further relax geometry
+checks or guess/force scsi.device unit numbers.
+
+The next no-I/O diagnostic now captures, **only for failed driver
+BSTR validation**, the raw BCPL pointer, its translated address,
+Exec TypeOfMem result, reported BSTR length (only if the first byte
+is in valid memory) and up to 8 validated bytes in hexadecimal.
+This enables differentiation among invalid pointer, unusual memory
+mapping, empty/oversized BSTR and actual unexpected contents.
+
+Test M-01: build and run \`dolly-physical-probe --inspect\` in the
+same A1200/OS3.1/WinUAE configuration. Record one or two complete
+entries of OS:/WB_1.3:/DL0: with the new bracketed diagnostics.
+Never run \`--probe INDEX\` until a correctly identified candidate
+appears; current normal enumeration performs no physical I/O.
