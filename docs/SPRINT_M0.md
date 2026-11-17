@@ -172,3 +172,11 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] GadTools/CLI: default `Make backup`, always offer explicit `Continue without backup` with an additional confirmation about possible irreversible data loss. No preselected bypass.
 - [ ] If backup fails, allow Retry / Another destination / Cancel / explicit Continue without backup; report that no verified backup exists.
 - [ ] Keep hardware identification, writable target, filesystem layout, DMA checks and other independent safety gates mandatory. Skipping backup cannot override these controls.
+
+## Image mounting roadmap — not an M0 blocker (2026-11-17)
+
+- [x] Scope DOL-079 for **AmigaOS 3.2+ only**: `trackfile.device`/`DAControl` native ADF mounting.
+- [ ] Implement mount/unmount of verified ADF or compatible RAW **floppy** images, with safe source preservation and temporary-image lifecycle.
+- [ ] Prepare eligible XAD and IFF DOLY images as verified ADF before passing them to the OS 3.2 facility. Large RAW/HDF whole-disk mounting is a distinct future backend capability, **not presumed supported** by `trackfile.device`.
+- [ ] Verify in WinUAE AmigaOS 3.2+, including read-only behavior, dirty temporary images, busy volume/eject and failure handling.
+- [x] Defer AmigaOS 2.x–3.1 mount support (possible FMS/`diskimage.device`) explicitly to post-MVP DOL-080; no extra driver dependencies in baseline.
