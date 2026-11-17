@@ -18,6 +18,8 @@ typedef struct DollyResourceSpec {
     const char *relative_path; /* category subdirectory in DOLLY: */
     DollyResourceKind kind;
     uint32_t expected_format; /* each kind may have its own ABI/schema */
+    uint32_t expected_crc32; /* release-manifest CRC32 of actual file bytes */
+    uint64_t expected_bytes; /* release-manifest byte size */
 } DollyResourceSpec;
 typedef enum DollyResourceProbeState {
     DOLLY_RESOURCE_ABSENT=0,
@@ -29,7 +31,9 @@ typedef struct DollyResourceProbeResult {
     DollyResourceProbeState state;
     const char *release_id;  /* exact Dolly build/release ID; NULL => reject */
     uint32_t format_version; /* validated format ABI/schema, not version alone */
-    uint8_t integrity_ok;    /* OS loader validates file + metadata binding */
+    uint8_t integrity_ok;    /* scanner also checks actual size and CRC32 */
+    uint32_t actual_crc32;   /* streamed from the actual resource bytes */
+    uint64_t actual_bytes;
 } DollyResourceProbeResult;
 /* Inspect the actual resource via read-only operation. Returned release_id
  * must remain valid for the scan and immediate reporting callback. On native OS,
@@ -46,6 +50,7 @@ typedef struct DollyResourceNotice {
     const char *required_release;
     const char *found_release; /* may be NULL */
     uint32_t expected_format,found_format;
+    uint32_t expected_crc32,found_crc32;
 } DollyResourceNotice;
 typedef void (*DollyResourceReport)(const DollyResourceNotice *,void *context);
 typedef enum DollyResourceScanStatus {
@@ -60,7 +65,7 @@ typedef struct DollyResourceScanResult {
 } DollyResourceScanResult;
 /* required_release must be a nonempty exact current-build identifier.
  * each spec contains its expected parser/plugin format version;
- * the caller must not load any plugin unless BOTH checks pass. Any resource
+ * the caller must not load any plugin unless release, format, size and\n * CRC32 all match. Any resource
  * whose version/integrity cannot be proved is rejected. Optional failures
  * do not block the rest of Dolly. */
 DollyResourceScanResult dolly_resources_scan_optional(
