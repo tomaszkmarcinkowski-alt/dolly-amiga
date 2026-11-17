@@ -1,6 +1,7 @@
 #ifndef DOLLY_AMIGA_ENDPOINT_PICKER_H
 #define DOLLY_AMIGA_ENDPOINT_PICKER_H
 #include "dolly_endpoint.h"
+#include "dolly_amiga_dos_devices.h"
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <libraries/gadtools.h>
@@ -15,7 +16,8 @@ typedef struct DollyEndpointPicker {
     struct Gadget *format_cycle,*file_info,*selection_text;
     struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[2],unit_nodes[2],partition_nodes[2];
-    struct Node logical_nodes[2];
+    struct Node logical_nodes[DOLLY_DOS_MAX_DEVICES];
+    DollyDosDevices dos_devices;
     DollyEndpoint result;
     DollyEndpoint pending_file;
     char file_display[256];
@@ -25,6 +27,7 @@ typedef struct DollyEndpointPicker {
     unsigned device,unit,partition,logical;
     DollyEndpointMode mode;
     unsigned has_device,has_unit,has_partition,has_logical;
+    unsigned logical_count;
     unsigned role;
     unsigned char changed;
     unsigned char gadgets_detached;
