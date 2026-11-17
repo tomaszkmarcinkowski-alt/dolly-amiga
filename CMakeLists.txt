@@ -66,6 +66,12 @@ if(DOLLY_NATIVE_ONLY)
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-sheep-window PRIVATE -m68000)
     target_link_libraries(dolly-sheep-window PRIVATE amiga)
+    # Two concurrent views share a single C99 OperationSession.
+    add_executable(dolly-two-window-demo amiga/dolly_two_window_demo.c)
+    target_compile_options(dolly-two-window-demo PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-two-window-demo PRIVATE -m68000)
+    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation amiga)
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice
