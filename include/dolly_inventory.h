@@ -15,6 +15,13 @@ typedef enum DollyInventoryOrigin {
     DOLLY_INV_RDB_PART = 0, DOLLY_INV_DERIVED, DOLLY_INV_MBR,
     DOLLY_INV_RDB_HEADER
 } DollyInventoryOrigin;
+/* Evidence describes what a value MEANS, independently of which object supplied it. */
+typedef enum DollyInventoryEvidence {
+    DOLLY_EVIDENCE_DECLARED = 0,  /* Recorded metadata; not verified hardware */
+    DOLLY_EVIDENCE_OBSERVED,      /* Direct device/runtime query */
+    DOLLY_EVIDENCE_DERIVED,       /* Calculated from other fields */
+    DOLLY_EVIDENCE_ESTIMATED      /* An approximation, not a measurement */
+} DollyInventoryEvidence;
 typedef struct DollyInventoryField {
     const char *key;
     const char *label;
@@ -22,6 +29,7 @@ typedef struct DollyInventoryField {
     DollyInventoryValueKind kind;
     DollyInventoryAvailability availability;
     DollyInventoryOrigin origin;
+    DollyInventoryEvidence evidence;
     uint64_t number;
     const char *text;
 } DollyInventoryField;
@@ -35,4 +43,5 @@ int dolly_inventory_mbr_partition(const DollyMbrPartition *partition,
 int dolly_inventory_rdb_header(const DollyRdb *rdb,
                                DollyInventoryEmit emit, void *user);
 const char *dolly_inventory_availability_name(DollyInventoryAvailability availability);
+const char *dolly_inventory_evidence_name(DollyInventoryEvidence evidence);
 #endif
