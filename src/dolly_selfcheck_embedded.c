@@ -5,8 +5,13 @@
  * The packager edits its 8 ASCII CRC digits and 16-byte release field
  * AFTER linking. Keep exactly one instance in the file.
  * Do not mark static or strip this object from the final executable. */
-const unsigned char dolly_selfcheck_record[DOLLY_SELF_RECORD_SIZE] =
-    "DOLLY:CRC32:V1!!00000000DOLLY-UNSTAMPED!";
+/* Explicit byte initializers: exactly 40 bytes, no NUL terminator.
+ * A C string literal would contain 41 bytes and trigger -Werror. */
+const unsigned char dolly_selfcheck_record[DOLLY_SELF_RECORD_SIZE] = {
+    'D','O','L','L','Y',':','C','R','C','3','2',':','V','1','!','!',
+    '0','0','0','0','0','0','0','0',
+    'D','O','L','L','Y','-','U','N','S','T','A','M','P','E','D','!'
+};
 
 static int hex_value(unsigned char ch){
     if(ch>='0'&&ch<='9')return (int)(ch-'0');
