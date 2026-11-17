@@ -352,18 +352,29 @@ static void draw_cell(unsigned idx,int active) {
          x+1,y+1,x+width-1,y+height-1);
     if(active)draw_marker(rp,x+1,y+1,width-1,height-1);
 }
+/* The bezel is system-supplied and recessed just like the grid's frame.
+ * The fill has no drawn outline: background / FILLPEN only in the well.
+ */
 static void draw_progress_bar(void) {
     DemoLayout *d=&sheep_view.l;
     struct RastPort *rp=sheep_view.window->RPort;
-    LONG bar_w=d->bar_right-d->left+1;
+    struct TagItem tags[3];
+    LONG interior_w=d->bar_right-d->left-3;
     LONG filled=(LONG)(operation.completed_blocks*
-                       (unsigned long)(bar_w-2)/GRID_TOTAL);
-    fill(rp,system_pen(SHADOWPEN),d->left,d->bar_y,d->bar_right,d->bar_y+7);
+                       (unsigned long)interior_w/GRID_TOTAL);
+    tags[0].ti_Tag=GT_VisualInfo;
+    tags[0].ti_Data=(ULONG)sheep_view.visual;
+    tags[1].ti_Tag=GTBB_Recessed;
+    tags[1].ti_Data=TRUE;
+    tags[2].ti_Tag=TAG_DONE;
+    tags[2].ti_Data=0;
+    DrawBevelBoxA(rp,d->left,d->bar_y,d->bar_right-d->left+1,
+                  10,tags);
     fill(rp,system_pen(BACKGROUNDPEN),
-         d->left+1,d->bar_y+1,d->bar_right-1,d->bar_y+6);
+         d->left+2,d->bar_y+2,d->bar_right-2,d->bar_y+7);
     if(filled>0)
         fill(rp,system_pen(FILLPEN),
-             d->left+1,d->bar_y+1,d->left+filled,d->bar_y+6);
+             d->left+2,d->bar_y+2,d->left+1+filled,d->bar_y+7);
 }
 static void draw_sheep_static(void) {
     DemoLayout *d=&sheep_view.l;
@@ -421,14 +432,14 @@ static void progress_view_update(unsigned old) {
     if(old<GRID_TOTAL)draw_cell(old,0);
     if(operation.completed_blocks<GRID_TOTAL)
         draw_cell((unsigned)operation.completed_blocks,1);
-    bar_w=d->bar_right-d->left-1;
+    bar_w=d->bar_right-d->left-3;
     old_pixels=(LONG)(old*(unsigned long)bar_w/GRID_TOTAL);
     new_pixels=(LONG)(operation.completed_blocks*
                       (unsigned long)bar_w/GRID_TOTAL);
     if(new_pixels>old_pixels)
         fill(sheep_view.window->RPort,system_pen(FILLPEN),
-             d->left+1+old_pixels,d->bar_y+1,
-             d->left+new_pixels,d->bar_y+6);
+             d->left+2+old_pixels,d->bar_y+2,
+             d->left+1+new_pixels,d->bar_y+7);
     update_numbers(&sheep_view);
 }
 static void process_view(DollyDemoView *v,int main_window,int *quit) {
