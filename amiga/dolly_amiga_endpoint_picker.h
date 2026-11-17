@@ -15,7 +15,7 @@ typedef struct DollyEndpointPicker {
     struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
-    struct Gadget *disk_size_text;
+    struct Gadget *disk_size_text,*query_button;
     struct List devices,units,partitions,logical_devices;
     struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX];
     struct Node partition_nodes[2];
@@ -23,6 +23,8 @@ typedef struct DollyEndpointPicker {
     char unit_names[DOLLY_PHYS_MAX][20];
     ULONG physical_units[DOLLY_PHYS_MAX];
     unsigned device_count,unit_count;
+    unsigned char queried;
+    unsigned char query_attempted;
     DollyPhysicalCatalog physical_catalog;
     struct Node logical_nodes[DOLLY_DOS_MAX_DEVICES];
     DollyDosDevices dos_devices;
