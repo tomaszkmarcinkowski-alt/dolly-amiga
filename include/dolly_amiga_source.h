@@ -2,7 +2,12 @@
 #define DOLLY_AMIGA_SOURCE_H
 /* Experimental native backend, READ ONLY. Requires AmigaOS NDK. */
 #include "dolly_block_source.h"
+#include "dolly_dma_policy.h"
 #include <stdint.h>
+/* Report every DMA-related refusal to caller; CLI/GadTools must display it.
+ * Message is borrowed static text, valid during the callback. */
+typedef void (*DollyAmigaDmaReportFn)(DollyDmaStatus reason,
+                                     const char *message,void *user);
 typedef struct DollyAmigaDeviceOptions {
     const char *device_name;
     uint32_t unit;
@@ -13,6 +18,8 @@ typedef struct DollyAmigaDeviceOptions {
     uint32_t dma_alignment;      /* required alignment: power of 2 >= 2 */
     uint8_t dma_profile_verified;/* fail closed unless explicitly set to 1 */
     uint8_t require_24bit_dma;   /* request MEMF_24BITDMA when required */
+    DollyAmigaDmaReportFn report_dma_problem; /* optional callback */
+    void *report_user;
 } DollyAmigaDeviceOptions;
 /* No writes, no guessing size, no TD64 unless NSD capability is verified.
  * NDK compilation and actual-device operation remain UNVERIFIED. */
