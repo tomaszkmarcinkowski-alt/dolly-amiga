@@ -64,6 +64,17 @@ int main(void){
     topaz.available=0;
     result=dolly_gui_plan_with_fonts(DOLLY_GUI_INVENTORY,screen,big,settings,topaz);
     assert(result.layout.fit==DOLLY_GUI_NO_FIT);
+    /* A valid screen without ANY usable font is NO_FIT, not BAD_INPUT.
+     * Preserve BAD_INPUT for genuinely invalid screen dimensions. */
+    {
+        DollyGuiFont no_font={0};
+        DollyGuiLayout no_fit=dolly_gui_plan(DOLLY_GUI_WARNING,screen,no_font,no_font);
+        assert(no_fit.fit==DOLLY_GUI_NO_FIT);
+        screen.reserved_top=screen.screen_height;
+        no_fit=dolly_gui_plan(DOLLY_GUI_WARNING,screen,no_font,no_font);
+        assert(no_fit.fit==DOLLY_GUI_BAD_INPUT);
+        screen.reserved_top=10;
+    }
     topaz.available=1;
     /* Smaller maximum window: compact page or fail closed. */
     screen.max_window_width=390;screen.max_window_height=170;
