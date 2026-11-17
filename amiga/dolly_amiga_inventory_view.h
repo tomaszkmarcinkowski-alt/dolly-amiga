@@ -25,6 +25,7 @@ typedef struct DollyNativeInventoryView {
     char geometry_info[112];
     char status[112];
     unsigned count;
+    unsigned selected_partition;
     unsigned char verified;
 } DollyNativeInventoryView;
 int dolly_inventory_view_open(DollyNativeInventoryView *view,
