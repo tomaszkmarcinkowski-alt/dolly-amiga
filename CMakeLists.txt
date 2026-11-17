@@ -83,3 +83,11 @@ target_link_libraries(dolly-iff PRIVATE dollyiff)
 # Read-only host CLI for both MBR and nested RDB.
 add_executable(dolly-layout src/dolly_layout.c)
 target_link_libraries(dolly-layout PRIVATE dollymap)
+
+# Optional Python integration test constructs synthetic files on demand.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME cli_synthetic_smoke
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_cli_smoke.py
+      $<TARGET_FILE:dolly-layout> $<TARGET_FILE:dolly-iff>)
+endif()
