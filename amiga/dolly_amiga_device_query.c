@@ -9,6 +9,12 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Reject corrupt/nonstandard geometry instead of enabling selection
+ * based on an arbitrary nonzero size. Both probes use this policy.
+ */
+static int valid_sector_bytes(ULONG n) {
+    return n>=128ul && n<=65536ul && (n&(n-1ul))==0;
+}
 static ULONG read_be32(const UBYTE *p) {
     return ((ULONG)p[0]<<24)|((ULONG)p[1]<<16)|
            ((ULONG)p[2]<<8)|(ULONG)p[3];
@@ -76,7 +82,8 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
     io->iotd_Req.io_Offset=0;
     io->iotd_Req.io_Flags=0;
     rc=DoIO((struct IORequest *)io);
-    if(rc==0 && geom.dg_TotalSectors && geom.dg_SectorSize) {
+    if(rc==0 && geom.dg_TotalSectors &&
+       valid_sector_bytes(geom.dg_SectorSize)) {
         capacity_string(size,size_capacity,
             (uint64_t)geom.dg_TotalSectors*
             (uint64_t)geom.dg_SectorSize);
@@ -85,6 +92,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             geometry->block_count=geom.dg_TotalSectors;
             geometry->block_bytes=geom.dg_SectorSize;
             geometry->capacity_valid=1;
+            geometry->capacity_source=DOLLY_GEOMETRY_TRACKDISK;
         }
     }
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
@@ -135,8 +143,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             if(rc==0 && sc.scsi_Status==0 && sc.scsi_Actual>=8) {
                 last=read_be32(data);
                 block=read_be32(data+4);
-                if(last!=0xfffffffful &&
-                   block>=128ul && block<=65536ul) {
+                if(last!=0xfffffffful && valid_sector_bytes(block)) {
                     capacity_string(size,size_capacity,
                        ((uint64_t)last+1u)*(uint64_t)block);
                     have_capacity=1;
@@ -144,10 +151,20 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                         geometry->block_count=(uint64_t)last+1u;
                         geometry->block_bytes=block;
                         geometry->capacity_valid=1;
+                        geometry->capacity_source=DOLLY_GEOMETRY_SCSI_CAPACITY10;
                     }
                 }
             }
         }
+    }
+    /* A successful INQUIRY alone never verifies physical media. */
+    if(have_capacity && !have_name && geometry) {
+        char info[56];
+        sprintf(info,"%lu B/sector (%s)",
+                (unsigned long)geometry->block_bytes,
+                geometry->capacity_source==DOLLY_GEOMETRY_TRACKDISK ?
+                "TD geometry" : "SCSI capacity");
+        assign_string(name,name_capacity,info);
     }
 cleanup:
     if(opened)CloseDevice((struct IORequest *)io);
