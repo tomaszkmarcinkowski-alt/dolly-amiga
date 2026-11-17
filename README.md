@@ -101,3 +101,9 @@ The planned controller knowledge base under `DOLLY:Plugins/Devices/` can give **
 We use **exact Dolly release/build identity + CRC32** for the main executable and all optional assets; the per-resource format/API is checked for plugins. The **main executable embeds its own CRC32 and build ID**, alongside the standard AmigaDOS `$VER:` identifier. The post-link stamping tool and a C99 streaming checksum implementation are available. These detect **accidental** corruption, not malicious tampering. The C99 in-process executable CRC32 check is implemented as a portable module; integration into Dolly's **actual AmigaOS startup**, plus native file probing, remains open — see [integrity policy](docs/INTEGRITY.md).
 
 A compatible controller database can prepare a user-approved proposal to **reduce** Dolly's local transfer size, but it cannot modify RDB, AmigaDOS settings or automatically authorize DMA. The optional [Dolly Rescue floppy](docs/RESCUE_FLOPPY.md) remains a future post-M0 deliverable.
+
+## M0: RAW image / RDB capacity mismatch detection
+
+Dolly now has a **read-only capacity audit** for an RDB placed on a medium or within an MBR 0x76 container of different size. It warns when RDB geometry describes more capacity than is observed, when a PART or metadata block exceeds the containing region, or when the observed region is larger than the RDB geometry. An extra tail is **not certified unallocated or safe for writing**. Host RDB/layout/Sheep Inventory CLI paths emit the notices.
+
+Synthetic standalone capacity tests passed locally with GCC, Clang and ASan/UBSan, including 4/8/12 GiB arithmetic; the complete current GitHub build and real AmigaOS device-size discovery are still unverified. See [DOL-074](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/23) and [M0 sprint](docs/SPRINT_M0.md).
