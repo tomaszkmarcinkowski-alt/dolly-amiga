@@ -43,6 +43,9 @@ int main(int argc,char **argv){
   DollyPartition *p=&r.partitions[i];
   printf("  %s: PART=%u cylinders=%u..%u start=%" PRIu64 " length=%" PRIu64 " DosType=%08" PRIX32 "\n",
          p->name,p->descriptor_block,p->low_cylinder,p->high_cylinder,p->start_bytes,p->length_bytes,p->dos_type);
+  if(p->sectors_per_block!=1)
+   fprintf(stderr,"WARNING: %s de_SectorPerBlock=%" PRIu32
+           " (expected 1); verify geometry\n",p->name,p->sectors_per_block);
   {
    DollyMaxTransferClass c=dolly_maxtransfer_classify(p->max_transfer_bytes,p->max_transfer_present);
    if(p->max_transfer_present){
