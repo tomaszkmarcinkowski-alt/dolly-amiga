@@ -1457,3 +1457,19 @@ The physical commit path independently rechecks `capacity_valid`,
 not only the GadTools enabled state. Query never writes media; it does
 not certify the controller for future imaging or repair operations.
 Cross-build and visual testing remain pending.
+
+### M1.45 — first Sheep Inventory window
+
+The approved Dolly main layout remains frozen. Only the version string
+changes to `Dolly M1.45`. Choosing the Inventory operation and pressing
+Start now launches a separate read-only native GadTools view; no simulated
+progress is started for Inventory. The two blank buttons remain disabled.
+The inventory snapshot is generated on demand from the selected physical
+device/unit path and the already available, bounded Query and partition
+scan functions. For unsupported endpoint types the window clearly reports
+that no native provider exists. Device information and partition names
+are not silently reused after selecting another source.
+
+The M1.45 window has a fixed 606x204 outer rectangle designed for the
+640x256 baseline. Its real hardware behavior and pixel-fit are pending
+WinUAE verification; no media writer is connected.
