@@ -888,3 +888,39 @@ This remains a discovery preview suitable for 68000/Kickstart 2.04.
 See docs/TEST_MATRIX.md (DISC-10–DISC-20). Cross-compiler and WinUAE
 runtime verification are pending. RTG tests and memory profiling
 remain deferred by request.
+
+### M1.22 — conservative DOS filter and second disk-information inset
+
+The read-only AmigaDOS enumerator now ignores the six explicitly
+specified **known non-block handler names** RAW:, CON:, RAM:, SER:,
+PAR:, PRT:, with case-insensitive full-name matching before snapshot.
+There is **no universal DOS-list bit** equivalent to "verified block
+device": DLT_DEVICE includes stream handlers and other software-only
+devices, and other third-party nonblock handlers may remain. In a
+later stage classify candidates by their startup environments and
+driver capabilities, with graceful "unknown" fallback.
+
+Physical and Partition pickers now show a second full-width inset
+TEXT_KIND panel under the existing endpoint-selection preview.
+The new panel is reserved for actual driver-supplied SCSI INQUIRY
+identity and independently obtained disk capacity. The two panels
+remain responsive to chooser resizing. For the 606x195 minimum,
+spacing is reduced to approximately 3 pixels between the list and
+first inset, between insets, and between the second inset and buttons.
+The LISTVIEW receives the remaining height. Logical and File modes
+retain their single/pre-existing panels.
+
+**No hardware probe is yet performed.** Physical device and Partition
+still show an explicitly synthetic inventory. Consequently the disk
+identity inset honestly says "INQUIRY: not queried (demo) | Size:
+unavailable" after a unit selection. It would be incorrect and risky
+to issue hardware SCSI commands to those invented driver/unit
+indices, or to derive the size from INQUIRY (which does not include
+disk capacity). Future verified physical enumeration can pass known
+driver/unit tuples to a read-only HD_SCSICMD INQUIRY and a separate
+TD_GETGEOMETRY / SCSI READ CAPACITY query. Device command and
+resource error paths require their own dedicated WinUAE coverage
+before connecting this UI to a real drive.
+
+See DISC-21 through DISC-29 in docs/TEST_MATRIX.md. Not yet
+cross-compiled or runtime tested. RTG and memory profiling deferred.
