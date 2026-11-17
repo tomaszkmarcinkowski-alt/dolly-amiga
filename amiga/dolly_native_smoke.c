@@ -131,7 +131,7 @@ int main(int argc,char **argv){
         puts(result?"Dolly native smoke: PASS":"Dolly native smoke: FAIL");
         return result?0:10;
     }
-    puts("Usage: dolly-native-smoke --version | --selftest");
+    puts("Usage: dolly-native-smoke --version | --selftest | --help");
     puts("No physical device is accessed; no disk writes are possible.");
-    return argc==1?0:20;
+    return argc==1 || (argc==2 && strcmp(argv[1],"--help")==0)?0:20;
 }
