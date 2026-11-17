@@ -17,6 +17,7 @@ typedef enum DollyResourceKind {
 typedef struct DollyResourceSpec {
     const char *relative_path; /* category subdirectory in DOLLY: */
     DollyResourceKind kind;
+    uint32_t expected_format; /* each kind may have its own ABI/schema */
 } DollyResourceSpec;
 typedef enum DollyResourceProbeState {
     DOLLY_RESOURCE_ABSENT=0,
@@ -31,7 +32,7 @@ typedef struct DollyResourceProbeResult {
     uint8_t integrity_ok;    /* OS loader validates file + metadata binding */
 } DollyResourceProbeResult;
 /* Inspect the actual resource via read-only operation. Returned release_id
- * is borrowed and must remain alive until callback returns. On native OS,
+ * must remain valid for the scan and immediate reporting callback. On native OS,
  * ensure version metadata is bound to the exact file (hash or embedded
  * header), not merely a plausible sidecar filename. */
 typedef DollyResourceProbeResult (*DollyResourceInspect)(
@@ -57,13 +58,13 @@ typedef struct DollyResourceScanResult {
     DollyResourceScanStatus status;
 } DollyResourceScanResult;
 /* required_release must be a nonempty exact current-build identifier.
- * required_format is the specific parser/plugin API version for this kind;
+ * each spec contains its expected parser/plugin format version;
  * the caller must not load any plugin unless BOTH checks pass. Any resource
  * whose version/integrity cannot be proved is rejected. Optional failures
  * do not block the rest of Dolly. */
 DollyResourceScanResult dolly_resources_scan_optional(
     const DollyResourceSpec *items,size_t count,
-    const char *required_release,uint32_t required_format,
+    const char *required_release,
     DollyResourceInspect inspect,void *inspect_context,
     DollyResourceReport report,void *report_context);
 const char *dolly_resource_kind_directory(DollyResourceKind kind);
