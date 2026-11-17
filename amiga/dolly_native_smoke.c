@@ -116,6 +116,15 @@ static int run_selftest(void){
     if(dolly_io_plan_read(UINT64_C(0x100000000),512,512,4096,1,&plan)
        !=DOLLY_BLOCK_OK || plan.offset_high!=1 ||
        plan.command!=DOLLY_NSCMD_TD_READ64)goto cleanup;
+    /* Fail closed on intentionally corrupted on-disk metadata. */
+    disk_bytes[64]^=1;
+    parsed=dolly_rdb_scan(source,0,SMOKE_BS,1,rdb);
+    disk_bytes[64]^=1;
+    if(parsed!=DOLLY_RDB_BAD_CHECKSUM)goto cleanup;
+    disk_bytes[SMOKE_BS+196]^=1; /* PART DosType, covered by checksum */
+    parsed=dolly_rdb_scan(source,0,SMOKE_BS,2,rdb);
+    disk_bytes[SMOKE_BS+196]^=1;
+    if(parsed!=DOLLY_RDB_BAD_CHECKSUM)goto cleanup;
     success=1;
 cleanup:
     if(rdb)free(rdb);
