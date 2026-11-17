@@ -21,6 +21,17 @@
 - [x] Preliminary whole-device RDB/MBR coexistence warnings and overlap flags
 - [x] Additional RDB/PART collision auditing and minimum checksum coverage validation (partial local regression tests)
 
+## Recent M0 quality improvements (2026-11-17)
+
+- [x] RDB/PART collision audit and CLI warnings (Issue #12; reserved metadata still incomplete).
+- [x] Read-only detection of both MBR and disk-wide RDB, including overlapping ranges and damaged candidates.
+- [x] Reject checksums that do not cover the required fields in RDSK and PART.
+- [x] Request 64-bit host `off_t` for large-file access; real 32-bit host test remains open.
+- [x] Add deterministic 600-iteration MBR/RDB mutation-stability test.
+- [x] Keep assertions enabled in GCC/Clang CTest executables even in Release builds.
+
+**Locally verified:** reconstructed earlier source snapshot + new RDB changes: GCC CTest **6/6 PASS**, GCC Release CTest **6/6 PASS**; standalone RDB collision audit under Clang ASan/UBSan **PASS**. **Not equivalent to** a complete current GitHub checkout or native 68000 validation.
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
