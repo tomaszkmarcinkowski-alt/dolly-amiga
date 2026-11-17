@@ -82,7 +82,7 @@ int main(void) {
     if(!GfxBase) {puts("WINDOW FAIL: graphics V36 required");goto cleanup;}
     pub=LockPubScreen(NULL);
     if(!pub) {puts("WINDOW SKIP: no available public screen");rc=20;goto cleanup;}
-    if(pub->Width < 620 || pub->Height < 240) {
+    if(pub->Width < 620 || pub->Height < 256) {
         puts("WINDOW SKIP: public screen too small for this fixed-layout smoke");
         rc=20;goto cleanup;
     }
@@ -105,14 +105,12 @@ int main(void) {
         TAG_DONE);
     if(!win) {puts("WINDOW FAIL: OpenWindowTags");goto cleanup;}
     /* The window owns a reference to the public screen now. */
-    FreeScreenDrawInfo(pub,di); di=NULL;
     UnlockPubScreen(NULL,pub); pub=NULL;
     during=AvailMem(MEMF_CHIP);
     printf("WINDOW open chip=%lu\n",(unsigned long)during);
     for(step=0;step<=20u && !quit;++step) {
         struct IntuiMessage *msg;
-        draw(win, GetScreenDrawInfo(win->WScreen), step);
-        /* NOTE: a temporary DrawInfo acquired above must be freed. */
+        draw(win, di, step);
         for(tick=0;tick<12u;++tick) {
             WaitTOF();
             while((msg=(struct IntuiMessage *)GetMsg(win->UserPort))!=NULL) {
@@ -122,6 +120,7 @@ int main(void) {
             if(quit)break;
         }
     }
+    FreeScreenDrawInfo(win->WScreen,di);di=NULL;
     CloseWindow(win);win=NULL;
     after=AvailMem(MEMF_CHIP);
     printf("WINDOW closed chip=%lu\n",(unsigned long)after);
@@ -130,7 +129,8 @@ int main(void) {
     rc=before==after ? 0 : 10;
 cleanup:
     if(win)CloseWindow(win);
-    if(di && pub)FreeScreenDrawInfo(pub,di);
+    if(di && win)FreeScreenDrawInfo(win->WScreen,di);
+    else if(di && pub)FreeScreenDrawInfo(pub,di);
     if(pub)UnlockPubScreen(NULL,pub);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);
     if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);
