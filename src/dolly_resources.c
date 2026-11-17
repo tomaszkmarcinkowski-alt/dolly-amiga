@@ -1,5 +1,6 @@
 #include "dolly_resources.h"
 #include <stdint.h>
+#include <string.h>
 static const char *const disabled[DOLLY_RESOURCE_KIND_COUNT]={
     "Optional GUI backend is unavailable; built-in GadTools remains available.",
     "Optional filesystem extension is unavailable; basic disk inspection remains available.",
@@ -34,6 +35,8 @@ DollyResourceScanResult dolly_resources_scan_optional(
         DollyPathStatus st;
         const DollyResourceSpec *item=&items[i];
         DollyResourceNotice notice;
+        const char *prefix;
+        int probe;
         if((unsigned)item->kind>=DOLLY_RESOURCE_KIND_COUNT){
             result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
         }
@@ -43,14 +46,25 @@ DollyResourceScanResult dolly_resources_scan_optional(
                  DOLLY_RESOURCE_SCAN_PATH_TOO_LONG:DOLLY_RESOURCE_SCAN_INVALID;
             return result;
         }
-        if(exists(path,exists_context))continue;
-        result.missing_files++;
+        prefix=dolly_resource_kind_directory(item->kind);
+        if(!prefix || strncmp(item->relative_path,prefix,strlen(prefix))!=0){
+            result.status=DOLLY_RESOURCE_SCAN_INVALID;return result;
+        }
+        probe=exists(path,exists_context);
+        if(probe>0)continue;
+        if(probe<0)result.unreadable_files++;
+        else result.missing_files++;
         result.missing_kinds|=UINT32_C(1)<<(unsigned)item->kind;
-        notice.code="DOLLY_OPTIONAL_RESOURCE_MISSING";
-        notice.headline="Wilki wykradly pliki - niektore owce nie moga pracowac!";
+        notice.code=probe<0?"DOLLY_OPTIONAL_RESOURCE_UNREADABLE":
+                             "DOLLY_OPTIONAL_RESOURCE_MISSING";
+        notice.headline=probe<0?
+            "Owce znalazly plik, ale nie moga go odczytac!":
+            "Wilki wykradly pliki - niektore owce nie moga pracowac!";
         notice.missing_path=path;
         notice.disabled_feature=disabled[item->kind];
-        notice.suggested_action=actions[item->kind];
+        notice.suggested_action=probe<0?
+            "Check file access and installation integrity; do not bypass safety checks.":
+            actions[item->kind];
         if(report)report(&notice,report_context);
     }
     return result;
