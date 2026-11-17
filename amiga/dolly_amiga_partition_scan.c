@@ -179,9 +179,10 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
         if(!p[4] && !first && !count)continue;
         if(!first || !count || (p[0]!=0 && p[0]!=0x80) ||
            p[4]==0xeeu || p[4]==0x05u || p[4]==0x0fu ||
-           p[4]==0x85u || begin>r->total_bytes ||
+           p[4]==0x85u || p[4]==0x76u ||
+           begin>r->total_bytes ||
            length>r->total_bytes-begin) {
-            strcpy(out->status,"Unsupported MBR/GPT/extended layout");
+            strcpy(out->status,"Unsupported MBR/GPT/extended/nested RDB");
             return 0;
         }
         part=&out->parts[out->count++];
