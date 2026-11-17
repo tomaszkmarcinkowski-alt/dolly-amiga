@@ -595,12 +595,24 @@
 
 **Testy/status:** dodano [DOL-078 / Issue #26](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/26), aktualizacje powiązanych RDB Issues i sprintu. **Brak implementacji mechanizmu i testów na nośnikach.** Nadal obowiązuje zakaz włączania niedostatecznie zweryfikowanych zapisów w M0.
 
+### DJ-0059 · 2026-11-17 · Bezpieczeństwo / backup przed zapisem · KOREKTA WCZEŚNIEJSZEJ DECYZJI
+**Temat:** Backup powinien być silnie zalecany, ale **nigdy obowiązkowy**.
+
+**Korekta na życzenie użytkownika:** zmieniono ustalenie z DJ-0058. Użytkownik może modyfikować puste lub nieistotne nośniki albo zwyczajnie nie mieć gdzie zapisać dużego obrazu. Wobec tego **każda operacja destruktywna musi umożliwiać świadomą kontynuację bez kopii**, również Restore i przebudowa RDB oraz przyszła redukcja partycji. Nie stosować bezwzględnego bloku tylko z powodu braku backupu.
+
+**UX:** Dolly najpierw wyraźnie proponuje kopię i przedstawia dokładny zakres, konsekwencje i sposób odtworzenia. Domyślny wybór to wykonanie kopii. Opcja „Kontynuuj bez kopii” wymaga **dodatkowego, osobnego potwierdzenia** ryzyka nieodwracalnej utraty danych. Nie wolno domyślnie zaznaczać rezygnacji. W razie nieudanego backupu zaoferować ponowienie, inną lokalizację, anulowanie lub świadomą kontynuację bez kopii. Nie podawać błędnie, że kopia została wykonana.
+
+**Rozdzielenie zabezpieczeń:** zgoda na brak kopii nie jest zgodą na pominięcie analizy geometrii, granic RDB, stanu systemu plików, weryfikacji kontrolera DMA czy blokad przy rzeczywiście nieobsługiwanych operacjach. Inne kontrole bezpieczeństwa pozostają niezależne.
+
+**Działanie:** poprawiono DOL-078 / [Issue #26](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/26) i powiązane [Issues #22, #24, #25](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues), backlog oraz dokumentację sprintu. **Zmiana jest polityką projektową: nie istnieje jeszcze implementacja i nie przeprowadzono testów natywnych.**
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0059 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0060 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
