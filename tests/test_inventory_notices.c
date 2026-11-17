@@ -9,6 +9,10 @@ typedef struct State {
 static int collect(const DollyInventoryNotice *n,void *ctx){
     State *s=(State *)ctx;s->count++;
     assert(n->code&&n->message&&*n->code&&*n->message);
+    assert(n->suggested_action && strlen(n->suggested_action)>20);
+    assert(strstr(n->suggested_action,"automatically") == NULL ||
+           !strcmp(n->code,"MAXTRANSFER_BELOW_REFERENCE"));
+
     if(n->severity==DOLLY_NOTICE_WARNING)s->warnings++;
     if(n->severity==DOLLY_NOTICE_INFO)s->infos++;
     if(!strcmp(n->code,"MAXTRANSFER_ABOVE_REFERENCE"))s->maxwarnings++;
