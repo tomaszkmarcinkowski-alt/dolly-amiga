@@ -28,6 +28,22 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
+# Shared content-based minimum size preflight (pure C99; host + m68k).
+add_library(dollyguimin STATIC src/dolly_gui_minimum.c)
+target_include_directories(dollyguimin PUBLIC ${PROJECT_SOURCE_DIR}/include)
+add_executable(test-gui-minimum tests/test_gui_minimum.c)
+target_link_libraries(test-gui-minimum PRIVATE dollyguimin)
+add_test(NAME gui_content_minimum COMMAND test-gui-minimum)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyguimin PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(test-gui-minimum PRIVATE -UNDEBUG)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyguimin PRIVATE -m68000)
+    target_compile_options(test-gui-minimum PRIVATE -m68000)
+    target_link_options(test-gui-minimum PRIVATE -m68000)
+  endif()
+endif()
+
 if(DOLLY_NATIVE_ONLY)
   enable_testing()
   add_executable(dolly-native-smoke
@@ -71,7 +87,7 @@ if(DOLLY_NATIVE_ONLY)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
-    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation amiga)
+    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation dollyguimin amiga)
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice

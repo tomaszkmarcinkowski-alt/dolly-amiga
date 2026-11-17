@@ -4,6 +4,7 @@
  * No actual disk/device operations. Sheep Hide never cancels operation.
  */
 #include "dolly_operation_session.h"
+#include "dolly_gui_minimum.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
@@ -34,10 +35,6 @@ struct Library *GadToolsBase;
 #define SHEEP_COUNT_ID 205u
 #define SHEEP_ERRORS_ID 206u
 #define SHEEP_PERCENT_ID 207u
-#define MAIN_MIN_W 300u
-#define MAIN_MIN_H 112u
-#define SHEEP_MIN_W 420u
-#define SHEEP_MIN_H 205u
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
@@ -130,12 +127,12 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_w=d.right-d.left+1;
     avail_h=d.bottom-d.top+1;
     if(main_window) {
-        if(avail_w<250 || avail_h<70)return 0;
+        if(avail_w<190 || avail_h<70)return 0;
         d.controls_y=d.top+19;
         d.number_w=avail_w/3;
         if(d.number_w>124)d.number_w=124;
     } else {
-        if(avail_w<380 || avail_h<160)return 0;
+        if(avail_w<248 || avail_h<140)return 0;
         d.hide_w=76;
         d.hide_x=d.right-d.hide_w+1;
         d.controls_y=d.bottom-15;
@@ -278,6 +275,45 @@ static void destroy_view(DollyDemoView *v) {
     v->show=NULL;v->quit=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
 }
+/* Measure the actual active font and window chrome, then tell Intuition
+ * the smallest outer rectangle that fits the required GadTools controls.
+ * Optional explanatory prose is not a sizing constraint.
+ */
+static int set_content_minimum(DollyDemoView *v,int main_window) {
+    DollyGuiMinMetrics m;
+    DollyGuiMinimum minimum;
+    struct Window *w=v->window;
+    struct RastPort *rp=w->RPort;
+    memset(&m,0,sizeof(m));
+    if(!rp->Font)return 0;
+    m.border_left=(ULONG)w->BorderLeft;
+    m.border_right=(ULONG)w->BorderRight;
+    m.border_top=(ULONG)w->BorderTop;
+    m.border_bottom=(ULONG)w->BorderBottom;
+    m.padding_x=(screen_info->dri_Resolution.X==
+                 screen_info->dri_Resolution.Y)?2u:4u;
+    m.padding_y=2u;
+    m.line_height=(ULONG)rp->Font->tf_YSize;
+    if(main_window) {
+        m.heading_width=(ULONG)TextLength(rp,
+                (STRPTR)"Dolly main window (synthetic)",29);
+        m.show_button_text_width=(ULONG)TextLength(rp,
+                (STRPTR)"Sheep Counter",13);
+        m.quit_button_text_width=(ULONG)TextLength(rp,
+                (STRPTR)"Quit demo",9);
+    } else {
+        m.heading_width=(ULONG)TextLength(rp,
+                (STRPTR)"Surface scan (synthetic, read only)",35);
+        m.hide_button_text_width=(ULONG)TextLength(rp,
+                (STRPTR)"Hide",4);
+    }
+    minimum=dolly_gui_measure_minimum(
+        main_window?DOLLY_GUI_WINDOW_MAIN:DOLLY_GUI_WINDOW_SHEEP,m);
+    if(!minimum.valid || minimum.outer_width>(ULONG)w->Width ||
+       minimum.outer_height>(ULONG)w->Height)return 0;
+    return WindowLimits(w,(LONG)minimum.outer_width,
+                        (LONG)minimum.outer_height,0,0) != FALSE;
+}
 static int open_view(DollyDemoView *v,int main_window,const char *title,
                      ULONG left,ULONG top,ULONG width,ULONG height) {
     v->visual=GetVisualInfo(public_screen,TAG_DONE);
@@ -287,8 +323,8 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
         WA_Title,(ULONG)title,
         WA_Left,left,WA_Top,top,
         WA_Width,width,WA_Height,height,
-        WA_MinWidth,main_window?MAIN_MIN_W:SHEEP_MIN_W,
-        WA_MinHeight,main_window?MAIN_MIN_H:SHEEP_MIN_H,
+        /* Safe initial limits; replaced by measured WindowLimits() below. */
+        WA_MinWidth,100,WA_MinHeight,75,
         WA_MaxWidth,(ULONG)public_screen->Width,
         WA_MaxHeight,(ULONG)public_screen->Height-
                      ((ULONG)public_screen->BarHeight+1ul),
@@ -299,6 +335,10 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
                  IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
         TAG_DONE);
     if(!v->window)return 0;
+    if(!set_content_minimum(v,main_window)) {
+        puts("WINDOW FAIL: measured minimum does not fit");
+        return 0;
+    }
     return rebuild_gadgets(v,main_window);
 }
 static void clear_client(DollyDemoView *v) {
@@ -326,8 +366,17 @@ static void draw_main_static(void) {
     if(!main_view.window)return;
     /* Labels are not painted over system GadTools images. */
     label(main_view.window,d->left,d->top+10,"Dolly main window (synthetic)");
-    label(main_view.window,d->left,d->controls_y+31,
-          "Sheep Counter is an auxiliary window.");
+    /* This descriptive sentence is optional and may be suppressed at
+     * narrow widths; required controls set the minimum geometry.
+     */
+    {
+        static const char explanation[]="Sheep Counter is an auxiliary window.";
+        struct RastPort *rp=main_view.window->RPort;
+        LONG text_w=(LONG)TextLength(rp,(STRPTR)explanation,
+                                    (ULONG)strlen(explanation));
+        if(text_w<=d->right-d->left+1)
+            label(main_view.window,d->left,d->controls_y+31,explanation);
+    }
     label(main_view.window,d->left,d->bottom-20,"Blocks:");
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
