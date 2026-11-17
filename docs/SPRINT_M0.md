@@ -180,3 +180,14 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [ ] Prepare eligible XAD and IFF DOLY images as verified ADF before passing them to the OS 3.2 facility. Large RAW/HDF whole-disk mounting is a distinct future backend capability, **not presumed supported** by `trackfile.device`.
 - [ ] Verify in WinUAE AmigaOS 3.2+, including read-only behavior, dirty temporary images, busy volume/eject and failure handling.
 - [x] Defer AmigaOS 2.x–3.1 mount support (possible FMS/`diskimage.device`) explicitly to post-MVP DOL-080; no extra driver dependencies in baseline.
+
+## M0 read-only RDB capacity audit — 2026-11-17
+
+- [x] Implement `dolly_capacity_audit()`: compare RDB-declared geometry to an **independent** observed byte capacity, distinguishing extra trailing bytes, shortfall, PART beyond physical bounds, metadata beyond bounds, PART beyond declared geometry, incomplete geometry and overflow.
+- [x] For nested RDB, compare with the MBR container size, never assume the remainder of the whole device is available.
+- [x] Include warning output in host `dolly-layout`, `dolly-rdb` and Sheep Inventory CLI.
+- [x] Add to regular and native-only CMake as a portable, no-I/O library and test.
+- [x] Locally compiled/tested the new module and regression fixture under **GCC, Clang, GCC ASan/UBSan: PASS**, including 4/8/12 GiB byte counts and 1024-byte blocks. This verifies the reconstructed **capacity module subset only**, not the current full GitHub tree.
+- [ ] Obtain actual device capacity with provenance on classic Amiga drivers (including 64-bit size support), not merely RDB values or host-image file length.
+- [ ] Distinguish merely *larger observed size* from actually unallocated, safe-to-use trailing storage after inspecting reserved metadata, other partition formats and mounted volumes.
+- [ ] Complete current `main` build/CTest, 68000 NDK compilation and WinUAE/physical verification. No physical writes enabled.
