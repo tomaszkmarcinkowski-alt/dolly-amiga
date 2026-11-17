@@ -51,6 +51,14 @@
 - [x] Host CI job added for the native-only source subset (GitHub run result not yet confirmed).
 - [ ] Actual m68k AmigaOS compiler/NDK build, WinUAE run and hardware resource measurements.
 
+## DMA policy and host native smoke — 2026-11-17
+
+- [x] New `dolly_dma_policy` checks raw I/O buffer address mask, alignment and aperture overflow.
+- [x] Experimental Amiga backend now refuses unverified DMA profiles and optionally requests `MEMF_24BITDMA`.
+- [x] Mock Exec regressions cover missing READ64 capability, partial reads and injected I/O errors; reconstructed subset passes GCC/Clang/ASan/UBSan locally.
+- [x] Native-only memory smoke extended with DMA policy checks; reconstructed subset passes GCC/Clang/ASan/UBSan locally.
+- [ ] Complete current-`main` CTest/Actions verification and native m68k/AmigaOS execution.
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
