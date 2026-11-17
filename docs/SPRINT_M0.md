@@ -151,3 +151,17 @@ This GUI work does not make M0 media operations safe or replace the pending nati
 - [x] Run Python stamping/verify tests on a local host binary (PASS); the actual Amiga hunk executable and `C:Version FILE` are still untested.
 - [ ] Generate numeric OS version and embedded release ID from one canonical build source; avoid manual divergence.
 - [ ] Locate/stream actual Dolly executable in AmigaOS, call selfcheck before disk I/O, and show actionable GadTools failure message.
+
+## Future destructive-operation safety contract — 2026-11-17
+
+- [x] Document universal pre-destructive **verified backup image offer** DOL-078; applies to RDB Restore, future RDB growth and post-MVP partition shrink, but **not** read-only scans.
+- [x] Establish scope distinction: metadata RDB backup is not a substitute for full partition image where filesystem data can be moved or changed.
+- [ ] Implement a generic `backup required / optional / not needed` policy, destination overlap checks, measured byte count and readback CRC32 before enabling any physical write operation.
+- [ ] WinUAE and real hardware failure/recovery tests; **no destructive operation enabled in M0**.
+
+## Newly scoped RDB enhancements
+
+- [ ] DOL-073 — complete RDB backup and carefully guarded Restore (Issue #22).
+- [ ] DOL-074 — read-only actual-capacity versus RDB/container range warnings (Issue #23).
+- [ ] DOL-075 — larger-media RDB geometry adaptation without enlarging existing partitions (Issue #24).
+- [ ] DOL-076/077 — **post-MVP** data-preserving shrink plus filesystem bitmap/reference audit (Issue #25).
