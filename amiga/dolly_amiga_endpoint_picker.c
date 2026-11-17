@@ -32,10 +32,17 @@ static STRPTR partition_names[2]={(STRPTR)"DH0: (demo)",
 
 static void make_list(struct List *l,struct Node *nodes,STRPTR *names) {
     unsigned i;
-    NewList(l);
+    /* Exec list sentinel setup. No NewList() declaration is required
+     * from optional compiler helper headers in the old NDK.
+     */
+    l->lh_Head=(struct Node *)&l->lh_Tail;
+    l->lh_Tail=NULL;
+    l->lh_TailPred=(struct Node *)&l->lh_Head;
+    l->lh_Type=NT_USER;
+    l->l_pad=0;
     for(i=0;i<2u;++i) {
         memset(&nodes[i],0,sizeof(nodes[i]));
-        nodes[i].ln_Name=names[i];
+        nodes[i].ln_Name=(char *)names[i];
         AddTail(l,&nodes[i]);
     }
 }
@@ -112,8 +119,8 @@ static int pick_file(DollyEndpoint *result,unsigned destination) {
         TAG_DONE);
     if(!fr)return 0;
     if(AslRequest(fr,NULL) && fr->fr_Drawer && fr->fr_File) {
-        dn=strlen(fr->fr_Drawer);
-        fn=strlen(fr->fr_File);
+        dn=strlen((const char *)fr->fr_Drawer);
+        fn=strlen((const char *)fr->fr_File);
         slash=dn>0u && fr->fr_Drawer[dn-1u]!=':' &&
               fr->fr_Drawer[dn-1u]!='/';
         if(dn>0u && fn>0u &&
