@@ -66,6 +66,9 @@
 - [x] Added catalog unit tests and Python CLI smoke tests; complete current-main CTest execution still requires verification.
 - [ ] Display these steps automatically in native CLI/GadTools with proper PL/EN Locale support.
 
+- [x] Shared Sheep Inventory warnings now carry a safe suggested check; CLI displays it after warning text.
+- [x] CLI smoke assertion added for a visible MaxTransfer troubleshooting hint; current full CTest result unverified.
+
 ## Unfinished / gating native release
 - [ ] Compile with installed real NDK and a 68000-compatible toolchain
 - [ ] Test in WinUAE and on actual AmigaOS 2.04+
