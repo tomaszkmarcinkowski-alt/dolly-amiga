@@ -1100,3 +1100,46 @@ The two recessed boxes remain independent. Device probing in the
 GUI is not enabled, as its physical lists are still synthetic.
 Trackdisk is excluded from generic disk discovery, while
 carddisk remains a candidate for later PCMCIA SRAM testing.
+
+### M1.27 — explicit user-driven physical Query in accepted M1.24 GUI
+
+Physical device and Partition no longer use guessed synthetic
+driver/unit combinations. Their first and second GadTools LISTVIEWs
+are populated from a bounded private snapshot of registered
+AmigaDOS FileSysStartupMsg driver/unit pairs (same basic pointer,
+DosEnvec and BSTR checks proven by the M1.26 Shell diagnostic).
+Duplicate physical units collapse; trackdisk.device is filtered out;
+carddisk.device is retained. Opening either chooser performs DOS
+list enumeration **only**, without OpenDevice or any device I/O.
+
+The already accepted **Selected device / Selected partition** inset
+now has an 80px **Query** button immediately to its right, in the
+same row. Selecting or double-clicking an entry NEVER calls the
+driver: only an IDCMP_GADGETUP event from this specific Query button
+invokes the read-only hardware query for the currently verified
+driver/unit tuple. The selection inset's text is clipped to make
+room for Query. Query is disabled until a valid unit is selected.
+
+Only after a deliberate Query click, Dolly calls TD_GETGEOMETRY,
+HD_SCSICMD INQUIRY, and when geometry fails READ CAPACITY(10).
+Each result occupies the already separate, recessed
+**Device name** and **Size** fields. The buffer/CDB for SCSI
+commands uses Chip RAM and each result is independently reported
+as Unavailable if unsupported. Changing the selected device/unit
+or mode invalidates all previous results. Resizing does not
+re-issue queries and preserves the last queried display.
+
+Partition mode preserves three columns but deliberately leaves the
+partition list disabled and empty until real RDB/MBR partition
+discovery exists; no fabricated partitions can be selected.
+A physical unit can be committed without having pressed Query,
+as choosing a device is distinct from probing it.
+The main window shows the stable "driver.device / Unit N" identity
+stored in the endpoint, instead of a transient list index.
+There is still no disk imaging/writing action introduced.
+
+**Safety limitation:** the user-initiated DoIO calls are currently
+synchronous without a driver timeout, so the GUI may block if a
+driver never responds. Test only in controlled WinUAE with a test
+HDF before using real hardware, especially carddisk/SRAM.
+No RTG or memory profiling yet.
