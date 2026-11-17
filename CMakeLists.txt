@@ -152,7 +152,7 @@ target_link_libraries(dolly-inventory PRIVATE dollyinventory dollymap dollymaxtr
 # Unified non-destructive notices used by future Sheep Inventory UI.
 add_library(dollyinventorynotices STATIC src/dolly_inventory_notices.c)
 target_include_directories(dollyinventorynotices PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(dollyinventorynotices PUBLIC dollymaxtransfer)
+target_link_libraries(dollyinventorynotices PUBLIC dollymaxtransfer dollyrdbaudit)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyinventorynotices PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
