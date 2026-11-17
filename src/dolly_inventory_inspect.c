@@ -34,11 +34,15 @@ static int emit_notice(const DollyInventoryNotice *notice,void *ctx){
             notice->code,notice->message);
     return ferror(out)?1:0;
 }
-static void show_rdb(const DollyRdb *r,const char *type){
+static void show_rdb(const DollyRdb *r,const char *type,
+                     uint64_t container_base,uint64_t container_length){
     unsigned i;
     printf("%s: RDSK block %u, partitions %u\n",type,r->header_block,r->partition_count);
     if(dolly_inventory_rdb_header(r,emit_field,stdout)!=0)
         fprintf(stderr,"RDSK inventory rendering stopped\n");
+    if(dolly_inventory_rdb_notices(r,container_base,container_length,
+                                    emit_notice,stdout)!=0)
+        fprintf(stderr,"RDB audit notices rendering stopped\n");
     for(i=0;i<r->partition_count;i++){
         printf("PART #%u\n",i+1);
         if(dolly_inventory_partition(&r->partitions[i],emit_field,stdout)!=0)
@@ -81,9 +85,9 @@ int main(int argc,char **argv){
                i+1,p->type,p->start_bytes,p->length_bytes);
         if(dolly_inventory_mbr_partition(p,emit_field,stdout)!=0)
             fprintf(stderr,"MBR inventory rendering stopped\n");
-        if(p->contains_rdb)show_rdb(&p->nested_rdb,"Nested RDB");
+        if(p->contains_rdb)show_rdb(&p->nested_rdb,"Nested RDB",p->start_bytes,p->length_bytes);
     }
-    if(map->has_whole_disk_rdb)show_rdb(&map->whole_disk_rdb,"Whole-disk RDB");
+    if(map->has_whole_disk_rdb)show_rdb(&map->whole_disk_rdb,"Whole-disk RDB",0,dolly_block_size(source));
     if(map->hybrid_mbr_rdb || map->suspect_whole_disk_rdb)
         puts("WARNING: hybrid/suspect whole-device RDB; do not modify based on this report.");
     free(map);dolly_block_close(source);
