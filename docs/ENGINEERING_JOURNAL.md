@@ -577,12 +577,30 @@
 **Do wykonania:** natywne odnalezienie rzeczywiście uruchomionego pliku AmigaDOS, odczyt i weryfikacja przy starcie przed aktywowaniem I/O, widoczny komunikat błędu GadTools, wspólne generowanie numerów wersji i test `Version FILE` na Amidze. [Issue #19](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/19), [specyfikacja](INTEGRITY.md).
 
 
+### DJ-0057 · 2026-11-17 · RDB / migracja nośników · NOWE WYMAGANIA, BRAK IMPLEMENTACJI
+**Temat:** Obraz RAW zapisany na większym lub mniejszym nośniku może pozostawić RDB niezgodny z fizyczną pojemnością.
+
+**Decyzja:** zaplanowano niezależnie pełny Backup/Restore RDB (DOL-073), odczytową diagnostykę deklarowanego RDB wobec rzeczywistej pojemności i granic kontenera (DOL-074), dopasowanie geometrii RDB do większego urządzenia **bez** samoczynnego powiększania partycji (DOL-075) oraz **po MVP** redukcję partycji z zachowaniem danych i osobny audyt bitmap/alokacji/odwołań do bloków (DOL-076/077).
+
+**Ryzyka:** sam skrócony `de_HighCyl` nie stanowi bezpiecznego zmniejszenia filesystemu. Bitmapa wolnych bloków nie dowodzi, że poza nową granicą nie ma wskazywanych danych lub metadanych. Przy PiStorm/Emu68 i MBR 0x76 granice właściwej partycji-kontenera ograniczają RDB niezależnie od pojemności całej karty.
+
+**Działanie:** backlog DOL-073 do DOL-077 oraz [Issues #22–#25](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). **Testów ani kodu nowych operacji jeszcze nie wykonano; w M0 nie uruchamiamy destruktywnych zmian.**
+
+### DJ-0058 · 2026-11-17 · Bezpieczeństwo / kopia przed zapisem · DECYZJA PRODUKTOWA
+**Temat:** Standardowe proponowanie backupu przed każdą operacją destruktywną.
+
+**Propozycja użytkownika:** Dolly ma oferować utworzenie obrazu obiektu, który ma zostać zmodyfikowany. Po rozszerzeniu wymogu na wspólne zasady diagnostyki obowiązuje to RDB, partycje, wolumeny, obrazy i cały nośnik zależnie od faktycznego zakresu operacji.
+
+**Decyzja:** przed zmianą pokazać źródło, zakres LBA/bajtów, skutek, wielkość kopii i niezależną lokalizację docelową. Backup zapisywać strumieniowo, sprawdzać rozmiar i CRC32, a gdy to możliwe ponownie odczytywać zapisany obraz. **Nie wykonywać destruktywnej operacji, jeśli kopia była wymagana i nie powiodła się.** Dla mniej ryzykownych operacji ewentualna rezygnacja tylko po jawnym potwierdzeniu. Przy Restore/przebudowie RDB wymagana jest zweryfikowana kopia odpowiednich metadanych, przy relokacji/redukcji partycji — pełna kopia zagrożonych danych; kopia samego RDB nie chroni danych filesystemu.
+
+**Testy/status:** dodano [DOL-078 / Issue #26](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/26), aktualizacje powiązanych RDB Issues i sprintu. **Brak implementacji mechanizmu i testów na nośnikach.** Nadal obowiązuje zakaz włączania niedostatecznie zweryfikowanych zapisów w M0.
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0057 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0059 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
