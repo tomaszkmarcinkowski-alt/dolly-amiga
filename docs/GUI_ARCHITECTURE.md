@@ -345,3 +345,44 @@ before the counter rendering, screen appearance or memory footprint
 can be called validated. Production code will use existing GadTools
 controls whenever appropriate, with direct drawing reserved for custom
 progress maps/visuals for which GadTools has no suitable gadget.
+
+### M1.12 — responsive main + Sheep Counter windows (unverified)
+
+User feedback on the first two-window demonstration: main window and
+Sheep Counter work correctly as separate views, but neither had resize
+gadgets; Sheep Counter's 24x8 grid had no recessed frame; both windows
+left too much unused area. Requested client-space margins: **4px
+horizontal + 2px vertical on non-square pixel displays** or **2px
+horizontal + 2px vertical on square-pixel displays**, measured from the
+actual inside edges of the system window border.
+
+AmigaOS 2.x provides real `Window.BorderLeft/Right/Top/Bottom` and the
+display's pixel resolution ratio in `DrawInfo.dri_Resolution.X/Y`. It
+does not provide a universal intrinsic padding parameter for custom
+GadTools client layouts, so the user-requested padding is explicitly
+applied relative to the runtime border widths.
+
+The new two-window integration demo now opens **both windows resizable**
+with `WA_SizeGadget`, minimum dimensions, and `IDCMP_NEWSIZE`.
+It rebuilds native GadTools gadgets when resized and repositions
+them to the bottom/top of usable client space. Sheep Counter's
+24x8 grid uses almost all remaining central area, with a
+`DrawBevelBoxA(GTBB_Recessed)` container and system palette.
+Each cell's span is calculated proportionally from its grid boundary
+to distribute fractional unused pixels instead of leaving large
+right/bottom gutters.
+
+Routine progress is **incremental**: update the previous/current cells,
+only the newly filled progress-bar span, and NUMBER_KIND counters via
+`GT_SetGadgetAttrs`. Static labels and the full grid are redrawn on
+window resize and refresh only. `Hide` still closes solely the
+auxiliary window and the shared OperationSession continues. Sheep
+Counter opens maximized below the screen bar (+1px clearance); the
+main window remains open behind it.
+
+The code has **not yet been compiled or executed** on the user's
+Docker/WSL2 setup. Acceptance requires MC68000, 512 KiB Chip RAM,
+Kickstart 2.04, 640x256 Workbench: resize both windows to minima and
+back, verify all controls accessible, grid frame inside boundaries,
+no excessive flicker, Hide/reopen preserves progress, and successful
+cleanup. No physical device operations are performed by this demo.
