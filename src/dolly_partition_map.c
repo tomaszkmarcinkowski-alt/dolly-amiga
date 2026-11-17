@@ -99,6 +99,9 @@ DollyMapStatus dolly_partition_map_scan(DollyBlockSource *source,
      out->hybrid_mbr_overlap=1;
    }
   }
+ }else if(rs!=DOLLY_RDB_NOT_FOUND){
+  /* Do not silently hide a corrupt disk-wide RDB behind a valid MBR. */
+  out->suspect_whole_disk_rdb=1;
  }
  return DOLLY_MAP_OK;
 }
