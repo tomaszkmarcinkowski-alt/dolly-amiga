@@ -55,6 +55,10 @@ Read the chronological [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md) fo
 
 The experimental host utilities also detect collisions between RDB partitions, `RDSK` and `PART` metadata. `dolly-layout` reports when MBR and a whole-device RDB are both present; neither view is automatically assumed safe for writes. This is preliminary inspection, not full hybrid-drive support. See [Issue #12](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/12).
 
+## DMA safety policy (experimental)
+
+The read-only AmigaOS adapter now **refuses unknown DMA profiles**, and the host mock exercises address-mask/24-bit-memory constraints, NSD capability absence, short reads and I/O errors. See [DMA safety design](docs/DMA_SAFETY.md). This is *not* real controller certification.
+
 ## Motorola 68000 smoke milestone (source only)
 
 An experimental, POSIX-free `dolly-native-smoke` target now exercises synthetic RDB parsing and read planning **in memory**; it cannot access disks. Native 68000 compilation and WinUAE execution are still pending. See [Native smoke test and cross-build instructions](docs/NATIVE_SMOKE.md).
