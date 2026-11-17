@@ -868,3 +868,19 @@ in this stage.
 M1.36 is a layout/label-only update. Functional engine still only
 simulates progress and is not authorized to copy or write real media.
 Cross-compile and WinUAE testing are pending.
+
+## AE. M1.37 — compact main and Create Image output format
+
+| ID | WinUAE scenario | Expected |
+|---|---|---|
+| GUI-140 | Open Dolly main on 640×256 | Shorter initial window (195px outer), status fully visible |
+| GUI-141 | Middle button | Blank caption, still disabled; Inventory remains in Operation Cycle |
+| GUI-142 | Resize main (minimum and larger) | No overlap or chopped status/progress at lower bound |
+| GUI-143 | Create Image -> Destination File -> HDF | Recessed target path ends in ` (HDF)` |
+| GUI-144 | Change Destination output format -> RAW/ADF/IFF DOLY | Corresponding suffix updated after committing selector |
+| GUI-145 | Destination name very long | Truncation preserves complete trailing format suffix |
+| GUI-146 | Copy File->File and Restore Image | No appended output format suffix |
+| GUI-147 | Reopen Destination picker | Output image_format persisted; file path not modified |
+| GUI-148 | Source and Destination Partition Query | M1.33 double-buffered LISTVIEW behavior unchanged |
+
+M1.37 source changes are not yet cross-compiled or exercised in WinUAE.
