@@ -1,0 +1,41 @@
+#include "dolly_inventory_notices.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+typedef struct State {
+    unsigned count,warnings,infos,maxwarnings,sectorwarnings,maskwarnings;
+} State;
+static int collect(const DollyInventoryNotice *n,void *ctx){
+    State *s=(State *)ctx;s->count++;
+    assert(n->code&&n->message&&*n->code&&*n->message);
+    if(n->severity==DOLLY_NOTICE_WARNING)s->warnings++;
+    if(n->severity==DOLLY_NOTICE_INFO)s->infos++;
+    if(!strcmp(n->code,"MAXTRANSFER_ABOVE_REFERENCE"))s->maxwarnings++;
+    if(!strcmp(n->code,"SECTORS_PER_BLOCK_NONSTANDARD"))s->sectorwarnings++;
+    if(!strcmp(n->code,"MEMORY_MASK_ZERO"))s->maskwarnings++;
+    return 0;
+}
+static int stop(const DollyInventoryNotice *n,void *ctx){
+    unsigned *x=(unsigned *)ctx;(void)n;(*x)++;return 17;
+}
+int main(void){
+    DollyPartition p;State s;unsigned early=0;
+    memset(&p,0,sizeof(p));memset(&s,0,sizeof(s));
+    p.sectors_per_block=1;p.max_transfer_present=1;
+    p.max_transfer_bytes=0x1fe00u;p.dos_type_present=1;
+    assert(dolly_inventory_partition_notices(&p,collect,&s)==0);
+    assert(s.count==0);
+    p.max_transfer_bytes=0x7fffffffu;
+    p.sectors_per_block=0;p.dma_mask_present=1;p.dma_mask=0;
+    assert(dolly_inventory_partition_notices(&p,collect,&s)==0);
+    assert(s.warnings==3&&s.maxwarnings==1&&s.sectorwarnings==1&&s.maskwarnings==1);
+    assert(dolly_inventory_partition_notices(&p,stop,&early)==17&&early==1);
+    memset(&s,0,sizeof(s));
+    p.max_transfer_present=0;p.sectors_per_block=1;p.dma_mask=0xffffffffu;p.dos_type_present=0;
+    assert(dolly_inventory_partition_notices(&p,collect,&s)==0);
+    assert(s.count==2&&s.infos==2);
+    assert(dolly_inventory_partition_notices(NULL,collect,&s)==-1);
+    assert(!strcmp(dolly_notice_severity_name(DOLLY_NOTICE_WARNING),"WARNING"));
+    puts("Inventory advisory tests passed");return 0;
+}
