@@ -5,11 +5,11 @@
 ## Why a streaming model?
 Classic Amigas may have little free Fast RAM and very limited stack space. The first implementation emits one `DollyInventoryField` at a time via a callback; the GUI or CLI consumes each field immediately without allocating an inventory list or copying the entire RDB layout again.
 
-`dolly_inventory_partition()` currently emits 9 fields:
+`dolly_inventory_partition()` currently emits 12 fields:
 - Partition name and PART descriptor block;
 - DosType, low and high cylinder;
 - Start offset, byte length and end-exclusive offset;
-- RDB filesystem `de_MaxTransfer` (not Dolly's raw backend transfer limit).
+- RDB filesystem `de_MaxTransfer` (not Dolly's raw backend transfer limit);\n- `de_NumBuffers`, `de_BufMemType` and `de_Mask`, each with its own presence flag.
 
 Each field contains a stable key, display label, unit, typed value (`uint64_t` or text), data origin (`RDB_PART` or `DERIVED`), and an availability flag. Missing DosType and missing MaxTransfer are intentionally distinct from numeric zero. Overflow during end-offset computation is presented as unavailable.
 
@@ -37,3 +37,13 @@ The CLI reads primary MBR and nested RDB or a whole-device RDB and formats PART 
 
 ## Verification
 The standalone `dolly_inventory_partition` C99 source and test passed local GCC `-Wall -Wextra -Werror -pedantic` compilation and execution, including missing fields, arithmetic overflow and early stopping. A host CLI was compiled and executed against a synthetic nested-RDB image using a locally reconstructed previous parser snapshot. **Full current GitHub CMake/CTest and native Motorola 68000 builds remain unverified.**
+
+## Incremental providers added (November 2026)
+
+The common callback now supports three provenance types beyond computed values: `RDB PART`, `MBR`, and `RDSK` header. The MBR provider emits 7 fields; the RDB header provider emits 7; and the partition provider emits 12. These are **preliminary**, not exhaustive.
+
+Availability states distinguish `present`, `not present`, `not queried`, `unsupported` and `inconsistent`. Only `present` is currently generated from parsed header fields; the others are reserved for deeper inspection providers and are not substitutes for observed failures.
+
+Cross-source contradictions (e.g. mounted vs on-disk settings) must report both values and their origins, never collapse them into one without explanation. `de_Mask` represents AmigaDOS's address mask; interpreting its safety requires identifying the real controller and buffer path.
+
+Local host unit verification for the extended streaming interface passed GCC/Clang. A full current-repository CTest run is **not yet independently confirmed**.
