@@ -50,6 +50,12 @@ typedef struct DollyEndpointPicker {
     DollyImageFormat output_format;
     unsigned device,unit,partition,logical;
     DollyEndpointMode mode;
+    /* Cycle labels are filtered per operation/role. Cycle indexes
+     * are NOT DollyEndpointMode enum values after filtering.
+     */
+    STRPTR allowed_mode_labels[5];
+    DollyEndpointMode allowed_mode_ids[4];
+    unsigned allowed_mask,mode_count,mode_index;
     unsigned has_device,has_unit,has_partition,has_logical;
     unsigned logical_count;
     unsigned role;
@@ -60,7 +66,8 @@ typedef struct DollyEndpointPicker {
 /* role: 0 source, 1 target. Two distinct, identical selectors. */
 int dolly_picker_open(DollyEndpointPicker *picker,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
-                      DollyEndpointMode preferred_mode);
+                      DollyEndpointMode preferred_mode,
+                      unsigned allowed_mask);
 void dolly_picker_pump(DollyEndpointPicker *picker);
 void dolly_picker_close(DollyEndpointPicker *picker);
 #endif
