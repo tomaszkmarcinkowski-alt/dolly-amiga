@@ -9,6 +9,7 @@
 #include <intuition/screens.h>
 #include <graphics/gfxbase.h>
 #include <graphics/rastport.h>
+#include <graphics/text.h>
 #include <libraries/gadtools.h>
 #include <proto/exec.h>
 #include <proto/intuition.h>
@@ -70,7 +71,6 @@ static int calculate(Ui *u) {
     l->button_y=l->bottom-16;
     l->number_y=l->button_y;
     l->number_w=(l->button_x-l->left-32)/2;
-    if(l->number_w>148)l->number_w=148;
     l->progress_x=l->left;
     l->progress_w=l->right-l->left;
     l->progress_y=l->button_y-27;
