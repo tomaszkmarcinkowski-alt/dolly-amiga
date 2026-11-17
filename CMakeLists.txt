@@ -103,11 +103,13 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_endpoint_picker.c
       amiga/dolly_amiga_dos_devices.c
       amiga/dolly_amiga_physical_catalog.c
-      amiga/dolly_amiga_device_query.c)
+      amiga/dolly_amiga_device_query.c
+      amiga/dolly_amiga_partition_query.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
-    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation dollyguimin dollyendpoint amiga)
+    target_link_libraries(dolly-two-window-demo PRIVATE
+      dollyoperation dollyguimin dollyendpoint dollymap amiga)
     # M1.23 independent diagnostic: enumerate without device I/O by
     # default; optional "--probe" sends only read-only queries.
     add_executable(dolly-physical-probe amiga/dolly_amiga_physical_probe.c)
