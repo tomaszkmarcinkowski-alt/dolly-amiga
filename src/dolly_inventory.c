@@ -27,7 +27,8 @@ int dolly_inventory_partition(const DollyPartition *p,
     EMIT_NUMBER("descriptor_block","PART descriptor block","block",
                 p->descriptor_block,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
     EMIT_NUMBER("dos_type","DosType","hex32",
-                p->dos_type,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
+                p->dos_type,DOLLY_INV_RDB_PART,
+                p->dos_type_present?DOLLY_INV_PRESENT:DOLLY_INV_UNAVAILABLE);
     EMIT_NUMBER("low_cylinder","Low cylinder","cylinder",
                 p->low_cylinder,DOLLY_INV_RDB_PART,DOLLY_INV_PRESENT);
     EMIT_NUMBER("high_cylinder","High cylinder","cylinder",
