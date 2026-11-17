@@ -185,7 +185,15 @@ static int replace_gadgets(Ui *u) {
         FreeGadgets(u->gadgets);
         u->gadgets=NULL;u->blocks=NULL;u->errors=NULL;
     }
-    if(!calculate(u) || !make_gadgets(u))return 0;
+    if(!calculate(u))return 0;
+    /* Clear the old layout BEFORE attaching GadTools widgets; never paint
+     * over gadget imagery after GT_RefreshWindow().
+     */
+    rect(u->win->RPort,u->back,
+         (LONG)u->win->BorderLeft,(LONG)u->win->BorderTop,
+         (LONG)u->win->Width-u->win->BorderRight-1,
+         (LONG)u->win->Height-u->win->BorderBottom-1);
+    if(!make_gadgets(u))return 0;
     AddGList(u->win,u->gadgets,(ULONG)-1,-1,NULL);
     RefreshGList(u->gadgets,u->win,NULL,-1);
     GT_RefreshWindow(u->win,NULL);
@@ -289,6 +297,10 @@ int main(void) {
 cleanup:
     if(u.win) {
         if(u.gadgets)RemoveGList(u.win,u.gadgets,-1);
+        if(u.di) {
+            FreeScreenDrawInfo(u.win->WScreen,u.di);
+            u.di=NULL;
+        }
         CloseWindow(u.win);
     }
     if(u.gadgets)FreeGadgets(u.gadgets);
