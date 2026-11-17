@@ -74,12 +74,12 @@ int main(void){
     r=dolly_resources_scan_optional(wrong_directory,1,"Dolly-0.1.7+abc123",
                                      probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_INVALID&&f.calls==6);
-    r=dolly_resources_scan_optional(NULL,0,"Dolly-0.1.7+abc123",3,
+    r=dolly_resources_scan_optional(NULL,0,"Dolly-0.1.7+abc123",
                                      probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_OK);
     r=dolly_resources_scan_optional(files,1,NULL,probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
-    r=dolly_resources_scan_optional(files,1,"Dolly-0.1.7+abc123",
+    r=dolly_resources_scan_optional(files,1,"",
                                       probe,&f,notice,&f);
     assert(r.status==DOLLY_RESOURCE_SCAN_INVALID);
     {
