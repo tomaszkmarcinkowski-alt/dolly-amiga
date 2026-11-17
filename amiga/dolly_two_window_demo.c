@@ -789,7 +789,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             else if(id==MAIN_SOURCE_ID) {
                 dolly_picker_close(&target_picker);
                 if(!dolly_picker_open(&source_picker,public_screen,0,
-                                      &selected_source))
+                                      &selected_source,DOLLY_MODE_PHYSICAL))
                     dolly_picker_close(&source_picker);
                 update_main_actions();
             } else if(id==MAIN_TARGET_ID &&
@@ -797,7 +797,9 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                         (DollyDemoOperation)selected_operation)) {
                 dolly_picker_close(&source_picker);
                 if(!dolly_picker_open(&target_picker,public_screen,1,
-                                      &selected_target))
+                                      &selected_target,
+                                      selected_operation==DOLLY_DEMO_CREATE_IMAGE ?
+                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
             } else if(id==MAIN_OPERATION_ID && code<5u) {
