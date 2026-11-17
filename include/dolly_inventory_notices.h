@@ -15,5 +15,10 @@ typedef int (*DollyInventoryNoticeEmit)(const DollyInventoryNotice *,void *user)
 /* Returns zero on success; nonzero callback value stops enumeration. */
 int dolly_inventory_partition_notices(const DollyPartition *partition,
                                       DollyInventoryNoticeEmit emit,void *user);
+/* Audit all recognized PART ranges against each other and RDB/PART metadata.
+ * Container bounds are bytes (the host image size for whole-disk RDB). */
+int dolly_inventory_rdb_notices(const DollyRdb *rdb,
+                               uint64_t container_base,uint64_t container_length,
+                               DollyInventoryNoticeEmit emit,void *user);
 const char *dolly_notice_severity_name(DollyInventoryNoticeSeverity severity);
 #endif
