@@ -850,3 +850,21 @@ All M1.35 rows remain **pending** until the feature branch is built
 and tested. Berserk is only a future policy parameter, with no
 active UI toggle or authorization to write. No RTG/memory profiling
 in this stage.
+
+## AD. M1.36 — main-window visual polish
+
+| ID | 640×256 WinUAE regression | Expected |
+|---|---|---|
+| GUI-131 | Open main window | Operation, Info, Source, Destination in order; no decorative heading |
+| GUI-132 | Sheep Counter / Sheep Inventory / Quit | Equal widths and even gaps, no overlap |
+| GUI-133 | Sheep Inventory | Always disabled; never launches a window or operation |
+| GUI-134 | Main titles, buttons, Operation Cycle | No visible "demo" or "preview" suffixes; title "Dolly" |
+| GUI-135 | Main Progress at idle | `0 / 192 (0%)`, recessed field and Progress label |
+| GUI-136 | Run demo engine (no actual I/O) | Percentage reaches 100% without overflowing its field |
+| GUI-137 | Lower status area | Compact gap beneath Progress; recessed status remains legible |
+| GUI-138 | Resize and relayout | No overlap/clipping at 640×256 and on proportional screens |
+| GUI-139 | Open Source / Destination and Query RDB | Previously verified M1.33/M1.35 picker behavior unchanged |
+
+M1.36 is a layout/label-only update. Functional engine still only
+simulates progress and is not authorized to copy or write real media.
+Cross-compile and WinUAE testing are pending.
