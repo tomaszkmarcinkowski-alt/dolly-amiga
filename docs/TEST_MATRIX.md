@@ -42,6 +42,28 @@ The **first next test** should be GUI-13..17 on the current WinUAE
 reference setup, alongside GUI-03..11 regression. Do not record a PASS
 until results are observed.
 
+## A.1 Picker commit and double-click regression (next 640x256 run)
+
+| ID | Input | Expected |
+|---|---|---|
+| GUI-22 | Physical device: Device 0, Unit 0, Use selection | Main Source/Destination shows whole unit; chooser closes; Start gated correctly |
+| GUI-23 | Partition: Device 0, Unit 0, Partition 1, Use selection | Main label includes partition index; chooser closes |
+| GUI-24 | Logical device: volume 0, Use selection | Main label shows chosen mounted volume |
+| GUI-25 | Physical: double-click selected Unit | Equivalent to Use selection, commits once |
+| GUI-26 | Logical: double-click selected Volume | Equivalent to Use selection, commits once |
+| GUI-27 | Partition: double-click partition only | Equivalent to Use selection; parent Device/Unit double-clicks do not commit |
+| GUI-28 | Fast clicks on different Unit/Volume rows | Never commit when rows differ |
+| GUI-29 | Resize/switch type between clicks | Double-click timer invalidated, no accidental commit |
+| GUI-30 | File picker ASL and Use selection | File remains explicit-confirm only, no regression |
+| GUI-31 | Cancel after partial hierarchy | Previous selection in main window unchanged |
+| GUI-32 | Source and Destination for Copy | Both independently commit; target conflicts still refused |
+
+This test group was added after user reported that Physical and
+Partition selections did not appear in the main window. The picker
+now registers complete LISTVIEWIDCMP, CYCLEIDCMP and BUTTONIDCMP
+event masks and routes button/double-click through one commit function.
+**Pending compilation and WinUAE verification.**
+
 ## B. Next implementation: real, read-only discovery
 
 | ID | Test | Pass criteria |
