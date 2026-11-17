@@ -135,8 +135,7 @@ static void probe(const ProbeCandidate *c) {
     struct DriveGeometry geom;
     struct SCSICmd sc;
     UBYTE *data=NULL;
-    UBYTE cdb[6]={0x12u,0,0,0,36u,0};
-    LONG status;
+     LONG status;
     port=CreateMsgPort();
     if(!port)goto done;
     io=(struct IOStdReq *)CreateIORequest(port,sizeof(*io));
@@ -166,9 +165,12 @@ static void probe(const ProbeCandidate *c) {
     if(data) {
         char vendor[9],product[17],revision[5];
         memset(&sc,0,sizeof(sc));
+        /* CDB and reply both in Chip RAM for legacy DMA drivers. */
+        data[40]=0x12u;
+        data[44]=36u;
         sc.scsi_Data=(UWORD *)data;
         sc.scsi_Length=36;
-        sc.scsi_Command=cdb;
+        sc.scsi_Command=data+40;
         sc.scsi_CmdLength=6;
         sc.scsi_Flags=SCSIF_READ;
         io->io_Command=HD_SCSICMD;
@@ -190,8 +192,26 @@ done:
     if(port)DeleteMsgPort(port);
 }
 int main(int argc,char **argv) {
-    unsigned i;
+    unsigned i,selected=MAX_CANDIDATES;
     int perform=argc>1 && strcmp(argv[1],"--probe")==0;
+    if(perform) {
+        const char *arg=argc>2 ? argv[2] : "";
+        unsigned n=0;
+        if(!*arg) {
+            puts("Usage: dolly-physical-probe --probe INDEX");
+            return 5;
+        }
+        while(*arg>='0' && *arg<='9') {
+            n=n*10u+(unsigned)(*arg-'0');
+            if(n>=MAX_CANDIDATES)break;
+            ++arg;
+        }
+        if(*arg!='\0' || n>=MAX_CANDIDATES) {
+            puts("Invalid candidate index.");
+            return 5;
+        }
+        selected=n;
+    }
     puts("Dolly M1.23: read-only AmigaDOS physical candidates");
     snapshot();
     printf("Candidates: %u (skipped/unknown: %u)\n",count,skipped);
@@ -199,8 +219,11 @@ int main(int argc,char **argv) {
         printf("%u: %s unit %lu (from %s:)\n",i,
                candidates[i].driver,(unsigned long)candidates[i].unit,
                candidates[i].volume);
-        if(perform)probe(&candidates[i]);
+        if(perform && selected==i)probe(&candidates[i]);
     }
-    if(!perform)puts("No device opened. Run with --probe for read-only queries.");
+    if(!perform)
+        puts("No device opened. Use --probe INDEX for read-only queries.");
+    else if(selected>=count)
+        puts("Selected candidate not found; no device opened.");
     return 0;
 }
