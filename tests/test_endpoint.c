@@ -51,7 +51,15 @@ int main(void) {
     strcpy(dst.path,"DH1:");
     assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(!dolly_endpoint_set_file(&dst,""));
-    assert(!dolly_endpoint_set_unit(&dst,2,0));
+    assert(dolly_endpoint_set_unit(&dst,2,0));
+    assert(!dolly_endpoint_set_unit(&dst,16,0));
+    assert(dolly_endpoint_set_unit(&src,0,0));
+    assert(dolly_endpoint_set_unit(&dst,1,0));
+    strcpy(src.path,"scsi.device / Unit 0");
+    strcpy(dst.path,"scsi.device / Unit 0");
+    assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
+    strcpy(dst.path,"uaehf.device / Unit 0");
+    assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(dolly_demo_needs_target(DOLLY_DEMO_COPY));
     assert(!dolly_demo_needs_target(DOLLY_DEMO_SCAN));
     puts("endpoint selection: PASS");

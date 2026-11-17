@@ -117,7 +117,11 @@ static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
                    "<logical device not resolved>");
         return;
     }
-    sprintf(tmp,"Demo device %u / unit %u",
+    if(e->path[0]) {
+        text_copy(out,cap,e->path);
+        return;
+    }
+    sprintf(tmp,"Device %u / unit %u",
             (unsigned)e->device,(unsigned)e->unit);
     if(e->kind==DOLLY_ENDPOINT_PARTITION)
         sprintf(tmp+strlen(tmp)," / partition %u",(unsigned)e->partition);
