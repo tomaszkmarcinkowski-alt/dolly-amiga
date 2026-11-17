@@ -24,6 +24,9 @@ static int emit_field(const DollyInventoryField *f,void *ctx){
     }else{
         fprintf(out,"  %-23s %" PRIu64 " %s (source: %s)\n",f->label,f->number,f->unit,source);
     }
+    if(!strcmp(f->key,"sectors_per_block") &&
+       f->availability==DOLLY_INV_PRESENT && f->number!=1)
+        fprintf(out,"    WARNING: nonstandard de_SectorPerBlock (expected 1); inspect geometry\n");
     if(!strcmp(f->key,"max_transfer")){
         DollyMaxTransferClass category=dolly_maxtransfer_classify(
             (uint32_t)f->number,f->availability==DOLLY_INV_PRESENT);
