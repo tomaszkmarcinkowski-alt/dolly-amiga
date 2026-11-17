@@ -377,12 +377,37 @@
 **Testy:** kod opublikowano, ale brak cross-kompilatora i WinUAE w bieżącym środowisku; natywne zachowanie `exit()`, `printf()` i liczb 64-bitowych pozostaje do sprawdzenia. W CI dodano osobny hostowy przebieg `DOLLY_NATIVE_ONLY`, którego status nadal nie jest potwierdzony.
 
 
+### DJ-0038 · 2026-11-17 · AmigaOS / DMA · POTWIERDZONA LUKA PROJEKTOWA, OSŁONA WDROŻONA; SPRZĘT OTWARTY
+**Temat:** `MEMF_PUBLIC` nie dowodzi, że pamięć jest osiągalna przez każdy kontroler dysku.
+
+**Wykrycie:** pierwotny adapter `OpenDevice/DoIO` alokował bounce buffer jako `AllocMem(..., MEMF_PUBLIC)`. Starsze kontrolery DMA (np. część rozwiązań Zorro II) mogą wymagać pamięci w 24-bitowej przestrzeni adresowej oraz ograniczeń wyrównania i długości transferów.
+
+**Działanie:** dodano `dolly_dma_policy` z kontrolą adresu początkowego, końca bufora, maski, wyrównania i przepełnienia. Opcje urządzenia wymagają teraz `dma_profile_verified=1` oraz jawnych `dma_address_mask` / `dma_alignment`; brak lub nieprawidłowość skutkuje odmową otwarcia, przed odczytem jakichkolwiek danych. Gdy profil tego wymaga, adapter dodaje `MEMF_24BITDMA` do alokacji. `de_Mask` odczytane z RDB samo w sobie **nie potwierdza** profilu DMA urządzenia.
+
+**Szczegół:** przy `Mask=0x00FFFFFE` ostatni bajt poprawnego bufora może mieć nieparzysty adres — bit 0 maski dotyczy **początku** bufora, a nie końca transmisji. Odrzucenie każdej końcówki nieparzystej błędnie blokowałoby prawidłowe transfery. Algorytm osobno sprawdza początek i przekroczenie dopuszczalnego zakresu adresowego.
+
+**Testy:** samodzielny moduł DMA na GCC/Clang C99 `-Wall -Wextra -Wpedantic -Werror`: **PASS**. Odtworzona ścieżka adapter + fake Exec z testami nowych profilów, NSD64, uszkodzeń i krótkich transferów: **GCC PASS, Clang PASS, GCC ASan/UBSan PASS**. Nie jest to pełny checkout najnowszego `main` ani natywny build m68k.
+
+**Pozostałe ryzyka:** spójność cache, rzeczywista topologia magistrali, fizyczny typ pamięci, sterowniki, media change i ograniczenia MaxTransfer wciąż wymagają testów na WinUAE i na sprzęcie. `MEMF_24BITDMA` ma określone zastosowania, nie należy stosować go bezmyślnie do wszystkich urządzeń.
+
+**Odnośniki:** [opis bezpieczeństwa DMA](DMA_SAFETY.md), [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8), [klasyczne exec/memory.h](https://d0.se/include/exec/memory.h).
+
+### DJ-0039 · 2026-11-17 · Testy backendu / NSD · HOST MOCK PASS
+**Temat:** Pomyślne `NSCMD_DEVICEQUERY` nie musi oznaczać obsługi `NSCMD_TD_READ64`.
+
+**Problem:** sterownik może odpowiadać na zapytanie NSD, lecz w `SupportedCommands` reklamować tylko zwykły `CMD_READ`. Dolly musi wówczas odmówić 64-bitowego transferu, zamiast polegać wyłącznie na sukcesie zapytania.
+
+**Działanie:** rozszerzono testowy Exec o odpowiedź NSD bez `READ64`, drugi transfer zwracający krótszy wynik oraz błąd I/O. Weryfikujemy, że `DollyBlockSource` nie przypisuje pomyślnego wyniku do tych przypadków, zachowuje licznik wcześniej przekazanych bajtów i nie pobiera danych z uszkodzonego transferu.
+
+**Test:** lokalny GCC/Clang oraz ASan/UBSan z leak checking — **PASS**; brak testów z prawdziwym urządzeniem.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0038 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0040 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
