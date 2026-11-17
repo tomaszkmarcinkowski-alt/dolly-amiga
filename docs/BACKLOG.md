@@ -1,6 +1,6 @@
 # Dolly — Product Backlog (wersja publiczna)
 
-**58 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
+**59 wstępnych user stories** (szacunki punktów i przydziały do etapów są orientacyjne). Główne śledzenie wybranych prac: [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues). Pełny backlog nie oznacza, że wszystkie zadania są już utworzone jako Issues.
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
@@ -495,3 +495,16 @@
 ---
 
 **Uwaga o aktualności:** M0 zawiera już częściowe implementacje wybranych historii. Szczegółowy status należy sprawdzać w Issues i [SPRINT_M0](SPRINT_M0.md), a nie w samych estymacjach backlogu.
+
+
+## Epic: Storage safety / MaxTransfer diagnostics
+
+### DOL-059 — Sprawdzanie de_MaxTransfer dla każdej partycji
+
+**Priorytet:** P1 · **Etap:** M0/M1 · **Story Points:** 3 · [Issue #11](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/11)
+
+**User story:** Jako użytkownik klonujący lub diagnozujący dysk Amigi chcę znać wartość MaxTransfer na każdej partycji i otrzymać ostrzeżenie, gdy przekracza konserwatywne `0x1FE00`, aby uniknąć ryzyka cichego uszkodzenia danych na niektórych konfiguracjach IDE.
+
+**Akceptacja:** Raport pokazuje HEX i bajty, rozróżnia wartość `0x1FE00`, większą, mniejszą, zerową i niedostępną; ostrzega bez automatycznej zmiany. Uwzględnia profil sterownika, gdy jest znany. Nie utożsamia filesystemowego `de_MaxTransfer` z limitem pojedynczej operacji surowego I/O.
+
+**Stan:** wstępna diagnostyka hostowa i CLI dodana; porównanie z aktywnymi mountlistami i profilami sterowników pozostaje otwarte.
