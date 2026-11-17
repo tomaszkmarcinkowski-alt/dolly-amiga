@@ -769,3 +769,38 @@
 **Zakres:** rozpoznanie API i licencji, niezależne sterowniki (lub adaptery), montowanie i odmontowanie ADF/RAW, konwersja XAD/DOLY tylko tam, gdzie możliwa, osobne wsparcie HDF/RDB jeśli sterownik rzeczywiście je obsługuje. Przy braku mechanizmu wyświetlać jasny komunikat o niedostępnej funkcji i kontynuować normalne działanie Dolly.
 
 **Status:** backlog post-MVP; brak implementacji.
+
+
+## M1.35 — operacje kontekstowe i dalszy rozwój kopiowania (listopad 2026)
+
+### DOL-081 — File → File: kopiowanie obrazów i konwersja między formatami
+
+**Priorytet:** P1 · **Etap:** po stabilizacji selektorów i backendu zapisu · **Status:** backlog, bez konwersji w M1.35.
+
+**Cel:** umożliwić użycie pliku jako Source i jako Destination w operacji Copy. Dwie osobne ścieżki działania: wierne kopiowanie pliku oraz konwersja formatów obrazów, gdy parser wejściowy i writer wyjściowy obsługują dany format. Kandydaci: RAW, HDF z/bez RDB (rozróżniać znaczenie struktury), ADF oraz IFF DOLY. Sama zmiana rozszerzenia nigdy nie jest konwersją.
+
+**Warunki:** wykrycie formatu z zawartości, możliwość ustawienia wyjściowego formatu, walidacja pojemności/geometrii, obsługa błędów i przerwania bez uszkodzenia źródła, wykrywanie tej samej ścieżki, bezpieczny plik tymczasowy i zatwierdzenie dopiero po ukończeniu. Unsupported/incompatible format => jawne odrzucenie. W pierwszym kroku GUI pokazuje File → File w Copy, natomiast silnik pozostaje demonstracyjny.
+
+### DOL-082 — Jawny wybór metody kopiowania
+
+**Priorytet:** P1 · **Etap:** przed wdrożeniem faktycznego kopiowania · **Status:** backlog.
+
+**Cel:** po wyborze Source i Destination użytkownik wybiera metodę: domyślnie sektor-po-sektor (Raw/Exact), opcjonalnie pomijanie pustych bloków / sparse (tylko gdy semantyka formatu na to pozwala), w przyszłości kopiowanie użytych bloków (wymaga zweryfikowanego filesystemu). Dla File → File rozdzielić Exact copy i Convert image; wybór metody nie może sugerować możliwości, których odpowiedni backend nie posiada.
+
+**Warunki:** metoda dobierana i weryfikowana przez niezależną macierz możliwości backendów, niezależne od typu operacji Retry/Verify, weryfikacja zgodności rozmiaru i struktury, blokada nakładających się zakresów, wyraźne ostrzeżenia dla destrukcyjnych operacji Berserk. Opcje niewspierane pozostają nieaktywne; UI nie uruchamia niezaimplementowanej metody.
+
+### DOL-083 — Disk Vet: source-only punkt wejścia do DiskDoctor
+
+**Priorytet:** P1 · **Etap:** po implementacji analizy i planowania napraw · **Status:** w M1.35 tylko pozycja Operation i Source Cycle.
+
+**Cel:** nowa żartobliwa nazwa interfejsowa **Disk Vet** z opisem "filesystem first aid", powiązana z istniejącym epikiem DOCTOR (m.in. DOL-037 oraz DOL-038). Dopuszczalne wskazanie Source jako Physical, Partition, Logical lub plik obrazu. Destination nie jest wymagane w obecnym szkielecie. Docelowo możliwy bezpieczny recovery na inny nośnik, ale wyłącznie jako osobny, zatwierdzony workflow.
+
+**Warunki:** w M1.35 Start dla Disk Vet bezwarunkowo wyłączony; żadnych zapisów, napraw ani fałszywych raportów. W przyszłości wymagane odczytowe rozpoznanie FS, podgląd planu napraw, kopia bezpieczeństwa, świadoma zgoda przed zapisem.
+
+### DOL-084 — Centralna polityka Operation → Source/Destination i Berserk
+
+**Priorytet:** P0 dla GUI · **Etap:** M1.35 oraz późniejsze rozszerzenia · **Status:** M1.35 implementuje filtrowanie dla Normal.
+
+**Cel:** zachować GadTools Cycle Operation na górze głównego okna, a Source/Destination Cycle budować z maski dozwolonych DollyEndpointMode; dokładne mapowanie indeksu Cycle na identyfikator trybu. W Normal: Copy Unit→Unit, Partition→Partition, Logical→Logical, File→File; Restore File→Unit/Partition; Create image Unit/Partition/Logical→File; Scan i Inventory source-only; Disk Vet source-only. Destination pozostaje niedostępne, dopóki Source nie wybierze zgodnego typu.
+
+**Warunki:** istniejące niezgodne wybory zachować do poprawienia, ale blokować Start; nie usuwać ich po zmianie Operation. Berserk jest na razie wyłącznie parametrem polityki (bez przełącznika w GUI i bez zezwolenia na zapis). W przyszłości jawne potwierdzenia operacji wyjątkowych oraz sprawdzanie geometrii, wspólnych zakresów i aliasów urządzeń.

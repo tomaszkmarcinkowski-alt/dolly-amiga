@@ -44,6 +44,47 @@ DollyEndpointMode dolly_endpoint_mode(const DollyEndpoint *e) {
     default:return DOLLY_MODE_PHYSICAL;
     }
 }
+int dolly_mode_allowed(unsigned mask,DollyEndpointMode mode) {
+    if((unsigned)mode>3u)return 0;
+    return (mask & DOLLY_MODE_BIT(mode))!=0u;
+}
+unsigned dolly_allowed_modes(DollyDemoOperation op,unsigned role,
+                             DollyEndpointKind source_kind,
+                             unsigned berserk) {
+    const unsigned P=DOLLY_MODE_BIT(DOLLY_MODE_PHYSICAL);
+    const unsigned L=DOLLY_MODE_BIT(DOLLY_MODE_LOGICAL);
+    const unsigned R=DOLLY_MODE_BIT(DOLLY_MODE_PARTITION);
+    const unsigned F=DOLLY_MODE_BIT(DOLLY_MODE_FILE);
+    if((unsigned)op>DOLLY_DEMO_DISK_VET || role>1u)return 0;
+    if(role==0u) {
+        switch(op) {
+        case DOLLY_DEMO_SCAN:return P|L|R;
+        case DOLLY_DEMO_INVENTORY:return P|L|R|F;
+        case DOLLY_DEMO_COPY:return P|L|R|F;
+        case DOLLY_DEMO_RESTORE:return F;
+        case DOLLY_DEMO_CREATE_IMAGE:return P|L|R;
+        case DOLLY_DEMO_DISK_VET:return P|L|R|F;
+        default:return 0;
+        }
+    }
+    switch(op) {
+    case DOLLY_DEMO_COPY:
+        switch(source_kind) {
+        case DOLLY_ENDPOINT_UNIT:return P|(berserk?R:0u);
+        case DOLLY_ENDPOINT_PARTITION:return R|(berserk?P:0u);
+        case DOLLY_ENDPOINT_LOGICAL:return L|(berserk?(P|R):0u);
+        case DOLLY_ENDPOINT_FILE:return F;
+        default:return 0; /* choose Source before Destination */
+        }
+    case DOLLY_DEMO_RESTORE:
+        return source_kind==DOLLY_ENDPOINT_FILE ?
+               (P|R|(berserk?L:0u)):0;
+    case DOLLY_DEMO_CREATE_IMAGE:
+        return source_kind!=DOLLY_ENDPOINT_NONE &&
+               source_kind!=DOLLY_ENDPOINT_FILE?F:0;
+    default:return 0;
+    }
+}
 int dolly_demo_needs_target(DollyDemoOperation op) {
     return op==DOLLY_DEMO_COPY || op==DOLLY_DEMO_RESTORE ||
            op==DOLLY_DEMO_CREATE_IMAGE;
@@ -78,27 +119,32 @@ static int same_physical_unit(const DollyEndpoint *a,
 int dolly_demo_can_start(DollyDemoOperation op,
                          const DollyEndpoint *source,
                          const DollyEndpoint *target) {
-    if((unsigned)op>4u || !source ||
+    DollyEndpointMode source_mode,target_mode;
+    unsigned allowed;
+    if((unsigned)op>DOLLY_DEMO_DISK_VET || !source ||
        source->kind==DOLLY_ENDPOINT_NONE)return 0;
-    if(op==DOLLY_DEMO_RESTORE && source->kind!=DOLLY_ENDPOINT_FILE)
-        return 0;
-    if(dolly_demo_needs_target(op) &&
-       (!target || target->kind==DOLLY_ENDPOINT_NONE))return 0;
-    if(op==DOLLY_DEMO_CREATE_IMAGE &&
-       target->kind!=DOLLY_ENDPOINT_FILE)return 0;
-    if(dolly_demo_needs_target(op) &&
-       source->kind==DOLLY_ENDPOINT_FILE &&
+    /* Disk Vet is listed for workflow planning only. No
+     * filesystem repair backend or executable operation exists.
+     */
+    if(op==DOLLY_DEMO_DISK_VET)return 0;
+    source_mode=dolly_endpoint_mode(source);
+    allowed=dolly_allowed_modes(op,0u,DOLLY_ENDPOINT_NONE,0u);
+    if(!dolly_mode_allowed(allowed,source_mode))return 0;
+    if(!dolly_demo_needs_target(op))return 1;
+    if(!target || target->kind==DOLLY_ENDPOINT_NONE)return 0;
+    target_mode=dolly_endpoint_mode(target);
+    allowed=dolly_allowed_modes(op,1u,source->kind,0u);
+    if(!dolly_mode_allowed(allowed,target_mode))return 0;
+    if(source->kind==DOLLY_ENDPOINT_FILE &&
        target->kind==DOLLY_ENDPOINT_FILE &&
        strcmp(source->path,target->path)==0)return 0;
-    if(dolly_demo_needs_target(op) &&
-       source->kind==DOLLY_ENDPOINT_LOGICAL &&
+    if(source->kind==DOLLY_ENDPOINT_LOGICAL &&
        target->kind==DOLLY_ENDPOINT_LOGICAL &&
        ((source->path[0] && target->path[0] &&
           strcmp(source->path,target->path)==0) ||
         ((!source->path[0] || !target->path[0]) &&
          source->logical==target->logical)))return 0;
-    if(dolly_demo_needs_target(op) &&
-       (source->kind==DOLLY_ENDPOINT_UNIT ||
+    if((source->kind==DOLLY_ENDPOINT_UNIT ||
         source->kind==DOLLY_ENDPOINT_PARTITION) &&
        (target->kind==DOLLY_ENDPOINT_UNIT ||
         target->kind==DOLLY_ENDPOINT_PARTITION) &&
@@ -107,8 +153,8 @@ int dolly_demo_can_start(DollyDemoOperation op,
         target->kind==DOLLY_ENDPOINT_UNIT ||
         source->partition==target->partition))
         return 0;
-    /* Logical-vs-physical aliasing is unknown before real discovery:
-     * this is a demo validation only, never authorization to write.
+    /* Logical-vs-physical aliasing remains unknown in this demo.
+     * These checks NEVER authorize future hardware writes.
      */
     return 1;
 }

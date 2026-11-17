@@ -88,16 +88,32 @@ static STRPTR demo_operations[]={
     (STRPTR)"Inventory preview",
     (STRPTR)"Copy disk/file demo",
     (STRPTR)"Restore image demo",
-    (STRPTR)"Create image demo",NULL
+    (STRPTR)"Create image demo",
+    (STRPTR)"Disk Vet (coming soon)",NULL
 };
 static const char *demo_descriptions[]={
     "Read-only scan of source blocks.",
     "Inspect device and partition layout.",
     "Copy blocks from source to destination.",
     "Restore a file image to a destination.",
-    "Create an image file from a selected source."
+    "Create an image file from a selected source.",
+    "Disk Vet: filesystem first aid (planned)."
 };
 static UWORD selected_operation=0;
+static unsigned berserk_mode=0; /* Future explicit opt-in; NORMAL only for now. */
+static unsigned source_mode_mask(void) {
+    return dolly_allowed_modes((DollyDemoOperation)selected_operation,
+                               0u,DOLLY_ENDPOINT_NONE,berserk_mode);
+}
+static unsigned destination_mode_mask(void) {
+    if(selected_source.kind==DOLLY_ENDPOINT_NONE ||
+       !dolly_mode_allowed(source_mode_mask(),
+                          dolly_endpoint_mode(&selected_source)))
+        return 0u;
+    return dolly_allowed_modes((DollyDemoOperation)selected_operation,
+                               1u,selected_source.kind,berserk_mode);
+}
+
 static void text_copy(char *dst,size_t cap,const char *src) {
     size_t n=src?strlen(src):0u;
     if(n>=cap)n=cap-1u;
@@ -150,19 +166,26 @@ static void update_main_status(void) {
     if(operation.state==DOLLY_OP_RUNNING)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Synthetic operation running...");
+    else if(selected_operation==DOLLY_DEMO_DISK_VET)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Disk Vet planned; no repairs available yet.");
     else if(!selected_source.kind)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Choose source.");
+    else if(!dolly_mode_allowed(source_mode_mask(),
+                                dolly_endpoint_mode(&selected_source)))
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Source incompatible. Choose a new source.");
     else if(need && !selected_target.kind)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Choose destination.");
-    else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
-            selected_target.kind!=DOLLY_ENDPOINT_FILE)
+    else if(need && !dolly_mode_allowed(destination_mode_mask(),
+                                    dolly_endpoint_mode(&selected_target)))
         text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  "Create image needs a destination file.");
+                  "Destination incompatible. Choose again.");
     else if(!can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  "Source and destination overlap.");
+                  "Check source/destination identity or overlap.");
     else
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Ready. No disk I/O.");
@@ -246,9 +269,10 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_h=d.bottom-d.top+1;
     if(main_window) {
         if(avail_w<320 || avail_h<175)return 0;
-        d.main_device_y=d.top+18;
-        d.main_target_y=d.top+38;
-        d.main_operation_y=d.top+58;
+        /* Operation precedes both endpoint selectors. */
+        d.main_operation_y=d.top+18;
+        d.main_device_y=d.top+38;
+        d.main_target_y=d.top+58;
         d.main_desc_y=d.top+78;
         d.controls_y=d.top+100;
         d.main_count_y=d.top+143;
@@ -304,8 +328,9 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
                              (DollyDemoOperation)selected_operation,
                              &selected_source,&selected_target))) ||
                           (id==MAIN_TARGET_ID &&
-                           !dolly_demo_needs_target(
-                             (DollyDemoOperation)selected_operation))),
+                           (!dolly_demo_needs_target(
+                             (DollyDemoOperation)selected_operation) ||
+                            !destination_mode_mask()))),
                         TAG_DONE);
 }
 static struct Gadget *make_number(struct Gadget *last,DollyDemoView *v,
@@ -499,7 +524,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
         {
-            static const char heading[]="Dolly / Device & operation";
+            static const char heading[]="Dolly / Operation & devices";
             static const char choice[]="Restore a file image to a destination.";
             ULONG a=(ULONG)TextLength(rp,(STRPTR)heading,
                                        (ULONG)strlen(heading));
@@ -578,7 +603,7 @@ static void draw_main_static(void) {
     DemoLayout *d=&main_view.l;
     struct TagItem tags[3];
     if(!main_view.window)return;
-    label(main_view.window,d->left,d->top+10,"Dolly / Device & operation");
+    label(main_view.window,d->left,d->top+10,"Dolly / Operation & devices");
     label(main_view.window,d->left,d->main_operation_y+11,"Operation:");
     label(main_view.window,d->left,d->main_desc_y+11,"Info:");
     label(main_view.window,d->left,d->main_count_y+11,"Blocks:");
@@ -724,11 +749,12 @@ static void update_main_actions(void) {
     if(main_view.target_button)
         GT_SetGadgetAttrs(main_view.target_button,main_view.window,NULL,
                           GA_Disabled,(ULONG)(active ||
-                          !dolly_demo_needs_target(
-                            (DollyDemoOperation)selected_operation)),TAG_DONE);
+                          !destination_mode_mask()),TAG_DONE);
     if(main_view.op_selector)
         GT_SetGadgetAttrs(main_view.op_selector,main_view.window,NULL,
-                          GA_Disabled,(ULONG)active,TAG_DONE);
+                          GA_Disabled,(ULONG)(active ||
+                              source_picker.window ||
+                              target_picker.window),TAG_DONE);
 }
 static void refresh_main_selection(void) {
     if(!main_view.window)return;
@@ -797,20 +823,23 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 if(!dolly_picker_open(&source_picker,public_screen,0,
                                       &selected_source,
                                       selected_operation==DOLLY_DEMO_RESTORE ?
-                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL))
+                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL,
+                                      source_mode_mask()))
                     dolly_picker_close(&source_picker);
                 update_main_actions();
             } else if(id==MAIN_TARGET_ID &&
-                      dolly_demo_needs_target(
-                        (DollyDemoOperation)selected_operation)) {
+                      destination_mode_mask()!=0u) {
                 dolly_picker_close(&source_picker);
                 if(!dolly_picker_open(&target_picker,public_screen,1,
                                       &selected_target,
-                                      selected_operation==DOLLY_DEMO_CREATE_IMAGE ?
-                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL))
+                                      selected_operation==DOLLY_DEMO_CREATE_IMAGE ||
+                                      selected_source.kind==DOLLY_ENDPOINT_FILE ?
+                                      DOLLY_MODE_FILE:DOLLY_MODE_PHYSICAL,
+                                      destination_mode_mask()))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
-            } else if(id==MAIN_OPERATION_ID && code<5u) {
+            } else if(id==MAIN_OPERATION_ID && code<6u &&
+                      !source_picker.window && !target_picker.window) {
                 selected_operation=code;
                 refresh_main_selection();
             } else if(id==MAIN_START_ID &&
