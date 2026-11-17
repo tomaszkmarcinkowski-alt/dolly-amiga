@@ -14,6 +14,7 @@
 
 #define INV_CLOSE_ID 601u
 #define INV_PART_ID 602u
+#define INV_MAX_PARTITIONS DOLLY_PART_MAX
 
 static void init_rows(DollyNativeInventoryView *v) {
     v->rows.lh_Head=(struct Node *)&v->rows.lh_Tail;
@@ -38,7 +39,7 @@ static void copy_text(char *dst,unsigned size,const char *s) {
 static void add_row(DollyNativeInventoryView *v,const char *description) {
     struct Node *n;
     unsigned i=v->count;
-    if(i>=DOLLY_INVENTORY_ROWS)return;
+    if(i>=INV_MAX_PARTITIONS)return;
     copy_text(v->row_text[i],sizeof(v->row_text[i]),description);
     n=&v->nodes[i];
     memset(n,0,sizeof(*n));
@@ -108,6 +109,8 @@ static struct Gadget *create_list(struct Gadget *previous,
     return CreateGadget(LISTVIEW_KIND,previous,&ng,
                         GTLV_Labels,(ULONG)&v->rows,
                         GTLV_ShowSelected,(ULONG)NULL,
+                        GTLV_Selected,(ULONG)~0ul,
+                        GA_Disabled,TRUE,
                         TAG_DONE);
 }
 static void draw_text(struct Window *w,struct DrawInfo *info,
@@ -140,6 +143,8 @@ static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
     draw_text(w,info,94,top+27,v->disk_size);
     draw_text(w,info,244,top+27,v->geometry_info);
     draw_text(w,info,20,top+42,"Partitions (read-only snapshot):");
+    if(!v->count)
+        draw_text(w,info,24,top+60,"No partitions to display");
     draw_text(w,info,20,bottom-29,v->status);
     RefreshGList(v->gadgets,w,NULL,-1);
     GT_RefreshWindow(w,NULL);
@@ -215,7 +220,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
         copy_text(v->status,sizeof(v->status),
                   "Inventory of this source type is not yet supported");
     }
-    if(!v->count)add_row(v,"No validated partition entries");
+    /* A zero-partition result is NOT a LISTVIEW with placeholder
+     * nodes. Display that state as plain text instead. */
     v->visual=GetVisualInfo(screen,TAG_DONE);
     if(!v->visual)return 0;
     v->window=OpenWindowTags(NULL,
@@ -234,9 +240,11 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     if(!v->window){dolly_inventory_view_close(v);return 0;}
     last=CreateContext(&v->gadgets);
     if(!last){dolly_inventory_view_close(v);return 0;}
-    last=create_list(last,v,screen,20,
-                     (LONG)v->window->BorderTop+47,548,93);
-    if(!last){dolly_inventory_view_close(v);return 0;}
+    if(v->count) {
+        last=create_list(last,v,screen,20,
+                         (LONG)v->window->BorderTop+47,548,93);
+        if(!last){dolly_inventory_view_close(v);return 0;}
+    }
     last=create_button(last,v,screen,392,
                        (LONG)v->window->Height-(LONG)v->window->BorderBottom-19,
                        176);
