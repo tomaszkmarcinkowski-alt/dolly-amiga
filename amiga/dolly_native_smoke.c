@@ -17,6 +17,44 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef DOLLY_AMIGAOS_MEMORY_PROFILING
+#include <exec/memory.h>
+#include <proto/exec.h>
+
+/* Checkpoint samples, not a peak-usage profiler. No heap allocation. */
+typedef struct {
+    const char *name;
+    unsigned long chip;
+    unsigned long fast;
+    unsigned long total;
+    unsigned long largest;
+} DollyMemorySample;
+static DollyMemorySample memory_samples[4];
+static unsigned memory_sample_count;
+
+static void record_memory(const char *name) {
+    DollyMemorySample *sample;
+    if (memory_sample_count >= 4) return;
+    sample = &memory_samples[memory_sample_count++];
+    sample->name = name;
+    sample->chip = (unsigned long)AvailMem(MEMF_CHIP);
+    sample->fast = (unsigned long)AvailMem(MEMF_FAST);
+    sample->total = (unsigned long)AvailMem(MEMF_ANY);
+    sample->largest = (unsigned long)AvailMem(MEMF_ANY | MEMF_LARGEST);
+}
+static void print_memory_samples(void) {
+    unsigned i;
+    for (i = 0; i < memory_sample_count; ++i) {
+        const DollyMemorySample *s = &memory_samples[i];
+        printf("MEM %-12s chip=%lu fast=%lu total=%lu largest=%lu\n",
+               s->name, s->chip, s->fast, s->total, s->largest);
+    }
+}
+#else
+#define record_memory(name) ((void)0)
+#define print_memory_samples() ((void)0)
+#endif
+
 #define SMOKE_BS 512u
 #define SMOKE_CAPACITY 4096u
 static unsigned char disk_bytes[SMOKE_CAPACITY];
@@ -98,6 +136,7 @@ static int run_selftest(void){
     char resource_path[80];
     int success=0;
     smoke_stage=7;
+    record_memory("start");
     /* Refer to the global record without emitting a second magic string:
      * the post-link stamping tool requires a unique record marker. */
     if(strstr(dolly_version_text(),"$VER: Dolly ")==NULL ||
@@ -117,6 +156,7 @@ static int run_selftest(void){
     /* Allocate RDB result on the heap, never on the Amiga task stack. */
     rdb=(DollyRdb *)malloc(sizeof(*rdb));
     if(!rdb)goto cleanup;
+    record_memory("allocated");
     smoke_stage=2;
     parsed=dolly_rdb_scan(source,0,SMOKE_BS,4,rdb);
     if(parsed!=DOLLY_RDB_OK || rdb->partition_count!=1)goto cleanup;
@@ -125,6 +165,7 @@ static int run_selftest(void){
        rdb->partitions[0].length_bytes!=512)goto cleanup;
     if(!rdb->partitions[0].max_transfer_present ||
        rdb->partitions[0].max_transfer_bytes!=0x1fe00)goto cleanup;
+    record_memory("parsed");
     smoke_stage=3;
     audit=dolly_rdb_audit(rdb,0,SMOKE_CAPACITY);
     if(audit.flags)goto cleanup;
@@ -161,6 +202,7 @@ static int run_selftest(void){
 cleanup:
     if(rdb)free(rdb);
     if(source)dolly_block_close(source);
+    record_memory("released");
     return success;
 }
 int main(int argc,char **argv){
@@ -172,6 +214,7 @@ int main(int argc,char **argv){
         puts(result?"Dolly native smoke: PASS":"Dolly native smoke: FAIL");
         if(!result)printf("Failed at stage %u\n",smoke_stage);
         printf("RDB result allocation: %lu bytes\n",(unsigned long)sizeof(DollyRdb));
+        print_memory_samples();
         return result?0:10;
     }
     puts("Usage: dolly-native-smoke --version | --selftest | --help");
