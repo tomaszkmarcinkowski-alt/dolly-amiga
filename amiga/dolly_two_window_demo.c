@@ -524,7 +524,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
         {
-            static const char heading[]="Dolly / Device & operation";
+            static const char heading[]="Dolly / Operation & devices";
             static const char choice[]="Restore a file image to a destination.";
             ULONG a=(ULONG)TextLength(rp,(STRPTR)heading,
                                        (ULONG)strlen(heading));
@@ -603,7 +603,7 @@ static void draw_main_static(void) {
     DemoLayout *d=&main_view.l;
     struct TagItem tags[3];
     if(!main_view.window)return;
-    label(main_view.window,d->left,d->top+10,"Dolly / Device & operation");
+    label(main_view.window,d->left,d->top+10,"Dolly / Operation & devices");
     label(main_view.window,d->left,d->main_operation_y+11,"Operation:");
     label(main_view.window,d->left,d->main_desc_y+11,"Info:");
     label(main_view.window,d->left,d->main_count_y+11,"Blocks:");
