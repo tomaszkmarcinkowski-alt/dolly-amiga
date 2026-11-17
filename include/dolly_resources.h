@@ -25,6 +25,8 @@ typedef struct DollyResourceNotice {
     const char *disabled_feature;
     const char *suggested_action;
 } DollyResourceNotice;
+/* Probe result: 1 exists/readable, 0 absent, -1 inaccessible/I/O error.
+ * Negative outcomes MUST NOT be treated as a successful resource load. */
 typedef int (*DollyResourceExists)(const char *logical_path,void *context);
 typedef void (*DollyResourceReport)(const DollyResourceNotice *,void *context);
 typedef enum DollyResourceScanStatus {
@@ -35,6 +37,7 @@ typedef enum DollyResourceScanStatus {
 typedef struct DollyResourceScanResult {
     uint32_t missing_kinds; /* bit per DollyResourceKind */
     unsigned missing_files;
+    unsigned unreadable_files;
     DollyResourceScanStatus status;
 } DollyResourceScanResult;
 /* All manifest entries are OPTIONAL in this API. Required core assets are
