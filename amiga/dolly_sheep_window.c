@@ -59,7 +59,8 @@ static void write_text(struct RastPort *rp,UWORD pen,LONG x,LONG baseline,
     Text(rp,(STRPTR)value,(ULONG)strlen(value));
 }
 static int calculate(Ui *u) {
-    Layout *l=&u->l;
+    Layout proposed;
+    Layout *l=&proposed;
     LONG inner_w,inner_h,top,bottom,grid_height;
     struct Window *w=u->win;
     inner_w=(LONG)w->Width-w->BorderLeft-w->BorderRight;
@@ -86,6 +87,8 @@ static int calculate(Ui *u) {
     l->stepx=l->progress_w/(LONG)COLS;
     l->stepy=grid_height/(LONG)ROWS;
     if(l->stepx<10 || l->stepy<10)return 0;
+    /* Commit only after full validation; a rejected resize keeps old state. */
+    u->l=proposed;
     return 1;
 }
 static void draw_cell(Ui *u,unsigned idx,int active) {
