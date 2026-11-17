@@ -884,3 +884,22 @@ Cross-compile and WinUAE testing are pending.
 | GUI-148 | Source and Destination Partition Query | M1.33 double-buffered LISTVIEW behavior unchanged |
 
 M1.37 source changes are not yet cross-compiled or exercised in WinUAE.
+
+## AF. M1.38 — Stop / Quit alongside compact Progress
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-149 | Main upper action row | Sheep Counter, blank disabled, blank disabled; equal widths |
+| GUI-150 | Main Progress row | Only percentage in recessed field (0%, 50%, 100%); no block count or parentheses |
+| GUI-151 | Stop / Quit | Same line as Progress; Stop immediately left of Quit; identical widths |
+| GUI-152 | Stop while idle and while operation running | Always disabled; no cancellation handler or fake behavior |
+| GUI-153 | Quit on Progress row | Exits through the original Quit path |
+| GUI-154 | Minimum-width resize | Buttons shrink from 90px to 70px together, no overlap with 66px percentage well |
+| GUI-155 | Sheep Counter | Full block count plus separate percent indicator still shown |
+| GUI-156 | Create Image destination | Filename (HDF/RAW/ADF/IFF DOLY) suffix retained |
+| GUI-157 | Main window size | Initial 195px outer, recessed status fully visible, no new empty row |
+| GUI-158 | Existing Source / Destination Query | No regression from main-window-only change |
+
+Not yet built or tested in AmigaOS/WinUAE. No operation is currently
+classified as safely stoppable; capability and actual cancellation
+semantics must be specified and tested in a later task.

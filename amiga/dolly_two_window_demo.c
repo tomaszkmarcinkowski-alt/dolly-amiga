@@ -50,11 +50,14 @@ struct Library *AslBase;
 #define MAIN_SOURCE_TEXT_ID 215u
 #define MAIN_TARGET_TEXT_ID 216u
 #define MAIN_INVENTORY_ID 217u
+#define MAIN_STOP_ID 218u
+#define MAIN_PLACEHOLDER_ID 219u
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
     LONG main_device_y, main_target_y, main_operation_y;
     LONG main_desc_y, main_status_y, main_count_y;
+    LONG progress_x, progress_w, stop_x, quit_x, stop_quit_w;
     LONG pad_x, pad_y;
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h;
@@ -64,7 +67,8 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *inventory, *quit, *start, *hide, *count, *errors, *percent;
+    struct Gadget *show, *inventory, *placeholder, *stop, *quit;
+    struct Gadget *start, *hide, *count, *errors, *percent;
     struct Gadget *device,*target_button,*source_text,*target_text;
     struct Gadget *description,*op_selector,*status;
     char source_label[72],target_label[72],desc_label[96];
@@ -269,23 +273,28 @@ static void append_u32(char **out,char *limit,unsigned long n) {
 static void append_char(char **out,char *limit,char c) {
     if(*out<limit) *(*out)++=c;
 }
+/* A future copy/recovery backend may opt into interruption only after
+ * specifying safe cancellation boundaries. At present no such backend
+ * has passed that review, so Stop cannot be enabled or invoked.
+ */
+static int operation_supports_safe_stop(void) {
+    return 0;
+}
 static void update_labels(DollyDemoView *v) {
     char *p=v->block_label;
     char *limit=v->block_label+sizeof(v->block_label)-1;
     unsigned long current=(unsigned long)operation.completed_blocks;
     unsigned long total=(unsigned long)operation.total_blocks;
     unsigned long percent=total ? current*100ul/total : 0ul;
-    append_u32(&p,limit,current);
-    append_char(&p,limit,' ');
-    append_char(&p,limit,'/');
-    append_char(&p,limit,' ');
-    append_u32(&p,limit,total);
     if(v==&main_view) {
-        append_char(&p,limit,' ');
-        append_char(&p,limit,'(');
         append_u32(&p,limit,percent>100ul?100ul:percent);
         append_char(&p,limit,'%');
-        append_char(&p,limit,')');
+    } else {
+        append_u32(&p,limit,current);
+        append_char(&p,limit,' ');
+        append_char(&p,limit,'/');
+        append_char(&p,limit,' ');
+        append_u32(&p,limit,total);
     }
     *p='\0';
     p=v->percent_label;
@@ -340,6 +349,18 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         d.controls_y=d.top+87;
         d.main_count_y=d.top+129;
         d.main_status_y=d.top+151;
+        /* Fixed compact percent well, Stop/Quit aligned to the right.
+         * Keep enough room even at the 320px minimum client width.
+         */
+        d.progress_x=d.left+86;
+        d.progress_w=66;
+        /* Keep 320px client layouts viable: shorten both buttons
+         * together instead of raising the minimum width.
+         */
+        d.stop_quit_w=avail_w<360?70:90;
+        d.quit_x=d.right-d.stop_quit_w+1;
+        d.stop_x=d.quit_x-d.stop_quit_w-6;
+        if(d.stop_x<d.progress_x+d.progress_w+6)return 0;
         d.number_w=avail_w/3;
         if(d.number_w>150)d.number_w=150;
     } else {
@@ -381,7 +402,11 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     ng.ng_GadgetText=(STRPTR)title;
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)(
-                          (id==MAIN_INVENTORY_ID) ||
+                          (id==MAIN_INVENTORY_ID ||
+                           id==MAIN_PLACEHOLDER_ID) ||
+                          (id==MAIN_STOP_ID &&
+                           (operation.state!=DOLLY_OP_RUNNING ||
+                            !operation_supports_safe_stop())) ||
                           (id==MAIN_SHOW_ID &&
                            operation.state!=DOLLY_OP_RUNNING &&
                            operation.state!=DOLLY_OP_PAUSED) ||
@@ -465,7 +490,8 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
             RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
-        v->show=NULL;v->inventory=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+        v->show=NULL;v->inventory=NULL;v->placeholder=NULL;
+        v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;
         v->device=NULL;v->target_button=NULL;
         v->source_text=NULL;v->target_text=NULL;
@@ -514,19 +540,27 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          three_width,"");
         if(!last)return 0;
         v->inventory=last;
-        last=make_button(last,v,MAIN_QUIT_ID,
+        last=make_button(last,v,MAIN_PLACEHOLDER_ID,
                          d->left+2*(three_width+three_gap),d->controls_y,
-                         three_width,"Quit");
+                         three_width,"");
         if(!last)return 0;
-        v->quit=last;
+        v->placeholder=last;
         last=make_button(last,v,MAIN_START_ID,d->left,
                          d->controls_y+19,d->right-d->left+1,"Start");
         if(!last)return 0;
         v->start=last;
-        last=make_text(last,v,MAIN_COUNT_ID,d->left+86,d->main_count_y,
-                       d->number_w,v->block_label,TRUE);
+        last=make_text(last,v,MAIN_COUNT_ID,d->progress_x,d->main_count_y,
+                       d->progress_w,v->block_label,TRUE);
         if(!last)return 0;
         v->count=last;
+        last=make_button(last,v,MAIN_STOP_ID,
+                         d->stop_x,d->main_count_y,d->stop_quit_w,"Stop");
+        if(!last)return 0;
+        v->stop=last;
+        last=make_button(last,v,MAIN_QUIT_ID,
+                         d->quit_x,d->main_count_y,d->stop_quit_w,"Quit");
+        if(!last)return 0;
+        v->quit=last;
         last=make_text(last,v,MAIN_STATUS_ID,d->left+3,d->main_status_y,
                        d->right-d->left-5,v->status_label,FALSE);
         if(!last)return 0;
@@ -567,7 +601,8 @@ static void destroy_view(DollyDemoView *v) {
     }
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
-    v->show=NULL;v->inventory=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+    v->show=NULL;v->inventory=NULL;v->placeholder=NULL;
+    v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
     v->device=NULL;v->target_button=NULL;
     v->source_text=NULL;v->target_text=NULL;
@@ -605,7 +640,7 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         m.show_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Sheep Counter",13);
         m.quit_button_text_width=(ULONG)TextLength(rp,
-                (STRPTR)"Sheep Inventory",15);
+                (STRPTR)"Quit",4);
     } else {
         m.heading_width=(ULONG)TextLength(rp,
                 (STRPTR)"Surface Scan - Sheep Counter",28);
@@ -805,6 +840,13 @@ static void update_main_actions(void) {
     if(main_view.inventory)
         GT_SetGadgetAttrs(main_view.inventory,main_view.window,NULL,
                           GA_Disabled,TRUE,TAG_DONE);
+    if(main_view.placeholder)
+        GT_SetGadgetAttrs(main_view.placeholder,main_view.window,NULL,
+                          GA_Disabled,TRUE,TAG_DONE);
+    if(main_view.stop)
+        GT_SetGadgetAttrs(main_view.stop,main_view.window,NULL,
+                          GA_Disabled,(ULONG)(operation.state!=DOLLY_OP_RUNNING ||
+                                  !operation_supports_safe_stop()),TAG_DONE);
     if(main_view.show)
         GT_SetGadgetAttrs(main_view.show,main_view.window,NULL,
                           GA_Disabled,(ULONG)!active,TAG_DONE);
