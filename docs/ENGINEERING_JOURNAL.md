@@ -281,12 +281,35 @@
 **Weryfikacja:** dodano asercję w `tests/test_rdb.c` i skompilowano samodzielny test strumienia pól z poprawionym modelem pod GCC/Clang. Cały bieżący CTest repozytorium pozostaje do niezależnej weryfikacji.
 
 
+### DJ-0029 · 2026-11-17 · Sheep Inventory / rozszerzenie diagnostyki · PROTOTYP PRZETESTOWANY LOKALNIE
+**Temat:** Strumieniowe rekordy informacji dla MBR i RDSK obok partycji PART.
+
+**Odkrycie:** jedna biblioteka może emitować informacje diagnostyczne dla różnych klas obiektów przez ten sam callback, bez rozbudowanego GUI i bez dużego bufora raportu. Odbiorca rozróżnia źródło (`MBR`, `RDB PART`, `RDB header`, `derived`) i jednostkę.
+
+**Implementacja:** `dolly_inventory_mbr_partition` (7 pól), `dolly_inventory_rdb_header` (7 pól), `dolly_inventory_partition` (16 pól po późniejszych rozszerzeniach), CLI `dolly-inventory`. Nowe statusy pól: `NOT_QUERIED`, `UNSUPPORTED`, `INCONSISTENT`, oprócz `PRESENT`/`UNAVAILABLE`.
+
+**Test:** testy samego zrekonstruowanego modułu Inventory GCC/Clang C99 `-Wall -Wextra -Werror -pedantic`: **PASS**. Nie jest to pełny build aktualnego `main`.
+
+**Następne:** identyfikatory i pochodzenie informacji w UI, źródła urządzeń i woluminów, dane aktywnego montowania, spójne formatowanie HEX/dec i anulowalne kosztowne analizy. [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
+
+### DJ-0030 · 2026-11-17 · AmigaDOS / syntetyczne fixtury · POPRAWIONO PRZYKŁADY; PEŁNE CI OTWARTE
+**Temat:** `de_SectorPerBlock` w testowych `DosEnvec` wynosiło 0, choć klasyczna dokumentacja wymaga wartości `1`.
+
+**Wykrycie:** fixtury generowały tablice `DosEnvec` wypełnione zerami i ustawiały jedynie wybrane pola. Odczytowe testy nie wykrywały nieprawidłowego `de_SectorPerBlock`, bo parser nie używał tego pola do liczenia zakresów.
+
+**Działanie:** w fixturach RDB/MBR i testach CLI ustawiono `de_SectorPerBlock=1`; w inspektorach `dolly-rdb`, `dolly-layout` i `dolly-inventory` dodano ostrzeżenie dla wartości innej niż 1. Nie zmienia to żadnych danych nośnika.
+
+**Źródło:** [AmigaOS Expansion Library — DosEnvec](https://wiki.amigaos.net/wiki/Expansion_Library) (`de_SectorPerBlock`: not used, must be 1).
+
+**Test:** wcześniejszy strumieniowy test Inventory GCC/Clang PASS; pełny obecny zestaw CTest z nowymi fixture'ami nadal niepotwierdzony. Jest to **ostrzeżenie o niespójności**, a nie automatyczny wyrok o uszkodzeniu dysku.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0029 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0031 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
