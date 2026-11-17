@@ -1018,7 +1018,7 @@ static void release_picker_gadgets(DollyEndpointPicker *p) {
  * reaches the AmigaShell window.
  */
 static void picker_trace(const DollyEndpointPicker *p,const char *phase) {
-    printf("DOLLY M1.31 %s %s\\n",
+    printf("DOLLY M1.31 %s %s\n",
            p->role?"DEST":"SOURCE",phase);
     fflush(stdout);
 }
