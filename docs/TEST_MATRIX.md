@@ -976,3 +976,18 @@ Source changes not yet cross-compiled or tested in WinUAE. Device selection is n
 | GUI-189 | Main window | M1.41 layout remains frozen; SHINEPEN version reads `Dolly M1.44` |
 
 Native cross-build and WinUAE tests remain pending; this is not media-write certification.
+
+## AM. M1.45 — first native Sheep Inventory view
+
+| ID | WinUAE check | Expected |
+|---|---|---|
+| GUI-190 | Select Inventory operation, Source Physical, press Start | Opens separate Dolly - Sheep Inventory; no synthetic Sheep Counter operation |
+| GUI-191 | Query supported 512 B/sector physical unit | Shows queried device name, capacity and source of geometry |
+| GUI-192 | Drive with valid RDB/MBR | Read-only scan lists up to 16 partition labels and reports declared partition count |
+| GUI-193 | Unsupported/failed RDB/MBR or sector size !=512 | Explicit unavailable/unsupported message, not a fabricated partition list |
+| GUI-194 | Logical/File source selected | Explicit not-yet-supported Inventory notice; never opens guessed physical unit |
+| GUI-195 | Close Inventory and reopen | Fresh Query; no stale list nodes or geometry |
+| GUI-196 | Quit while Inventory open | Inventory gadgets/window released before closing libraries |
+| GUI-197 | Main window and picker | Approved M1.41 layout unchanged; only build label M1.45 |
+
+This code has not been cross-compiled or tested in WinUAE. Device reads occur only after pressing Inventory Start and are limited to the existing read-only query/partition scanner. Partition labels and RDB fields are *declared metadata*, not independently verified filesystem state.
