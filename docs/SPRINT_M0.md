@@ -53,7 +53,7 @@
 
 ## DMA policy and host native smoke — 2026-11-17
 
-- [x] New `dolly_dma_policy` checks raw I/O buffer address mask, alignment and aperture overflow.
+- [x] New `dolly_dma_policy` checks raw I/O buffer address mask, alignment, aperture overflow **and holes inside sparse masks**; 6000 deterministic oracle cases passed locally.
 - [x] Experimental Amiga backend now refuses unverified DMA profiles and optionally requests `MEMF_24BITDMA`.
 - [x] Mock Exec regressions cover missing READ64 capability, partial reads and injected I/O errors; reconstructed subset passes GCC/Clang/ASan/UBSan locally.
 - [x] Native-only memory smoke extended with DMA policy checks; reconstructed subset passes GCC/Clang/ASan/UBSan locally.
