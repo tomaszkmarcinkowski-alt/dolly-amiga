@@ -29,6 +29,11 @@ def main():
             p.error("unsafe or duplicate manifest path")
         paths.add(relative)
         file = root.joinpath(*parts)
+        # Reject escaping through a symlink in any parent component.
+        try:
+            file.resolve(strict=True).relative_to(root)
+        except (OSError, ValueError):
+            p.error(f"missing/unsafe path: {relative}")
         if file.is_symlink() or not file.is_file():
             p.error(f"missing/invalid file: {relative}")
         size = file.stat().st_size
