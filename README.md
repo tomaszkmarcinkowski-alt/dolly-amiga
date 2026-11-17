@@ -8,7 +8,7 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 
 ## Goals
 - AmigaOS 2.04+, Motorola 68000 baseline, no FPU or MMU required.
-- CLI plus GadTools GUI and optional ReAction GUI.
+- CLI plus **built-in GadTools GUI**; independent optional ReAction and future MUI modules (toolkit loader still planned).
 - Read/write ADF, HDF, RAW; IFF `FORM DOLY` image container with segmented/compressed data.
 - RDB, nested/hybrid MBR/RDB, PiStorm/Emu68 layouts and later GPT.
 - RAW cloning and filesystem-aware resizing for OFS/FFS (`DOS\0`–`DOS\7`).
@@ -79,3 +79,9 @@ Dolly's experimental read-only RDB tools now report per-partition `de_MaxTransfe
 Dolly source code is licensed under the **[MIT License](LICENSE)**. Software will remain free of mandatory fees. Gifts of retro-computing hardware are wholly voluntary and confer no entitlement.
 
 **Please do not use M0 software on valuable media; it is an incomplete prototype.**
+
+## Low-resolution GUI and live screen changes (design stage)
+
+Dolly's native baseline is **640×256 with topaz.font/8**, including window borders, title and buttons. Default UI text follows the current **system Screen Font**; an explicitly selected custom Dolly font takes precedence *only if it fits*. Otherwise views reflow using Screen Font, then Topaz/8 and compact pagination. If even the compact layout cannot fit, no inaccessible window should open.
+
+The portable screen watcher coalesces screen mode/font change events. On AmigaOS 2.x+ the experimental `StartNotify` adapter watches `ENV:sys/screenmode.prefs` and `screenfont.prefs`. A future optional `screennotify.library` adapter will handle additional public-screen lifecycle notifications. **These are source-level prototypes, not a tested native GadTools UI.** See [GUI architecture](docs/GUI_ARCHITECTURE.md), [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14) and [Issue #15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15).
