@@ -107,11 +107,11 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         grid_bottom=d.bar_y-7;
         d.grid_x=d.left+3;
         d.grid_y=d.top+19;
-        d.cell_w=(avail_w-8)/(LONG)GRID_COLS;
-        d.cell_h=(grid_bottom-d.grid_y)/(LONG)GRID_ROWS;
+        d.grid_w=avail_w-8;
+        d.grid_h=grid_bottom-d.grid_y;
+        d.cell_w=d.grid_w/(LONG)GRID_COLS;
+        d.cell_h=d.grid_h/(LONG)GRID_ROWS;
         if(d.cell_w<10 || d.cell_h<9)return 0;
-        d.grid_w=d.cell_w*(LONG)GRID_COLS;
-        d.grid_h=d.cell_h*(LONG)GRID_ROWS;
         d.number_w=(d.hide_x-d.left-14)/2;
         d.error_x=d.left+d.number_w+6;
         if(d.number_w<80)return 0;
@@ -278,10 +278,15 @@ static void draw_cell(unsigned idx,int active) {
     LONG x,y,width,height;
     if(!sheep_view.window || idx>=GRID_TOTAL)return;
     rp=sheep_view.window->RPort;
-    x=d->grid_x+(LONG)(idx%GRID_COLS)*d->cell_w;
-    y=d->grid_y+(LONG)(idx/GRID_COLS)*d->cell_h;
-    width=d->cell_w-2;
-    height=d->cell_h-2;
+    /* Divide the entire usable span, distributing leftover pixels
+     * across cells instead of leaving a strip blank at the right.
+     */
+    x=d->grid_x+(LONG)((idx%GRID_COLS)*(unsigned long)d->grid_w/GRID_COLS);
+    y=d->grid_y+(LONG)((idx/GRID_COLS)*(unsigned long)d->grid_h/GRID_ROWS);
+    width=(LONG)(((idx%GRID_COLS+1u)*(unsigned long)d->grid_w/GRID_COLS)-
+                 ((idx%GRID_COLS)*(unsigned long)d->grid_w/GRID_COLS))-2;
+    height=(LONG)(((idx/GRID_COLS+1u)*(unsigned long)d->grid_h/GRID_ROWS)-
+                  ((idx/GRID_COLS)*(unsigned long)d->grid_h/GRID_ROWS))-2;
     fill(rp,system_pen(SHADOWPEN),x,y,x+width,y+height);
     fill(rp,system_pen(idx<operation.completed_blocks?
                        FILLPEN:BACKGROUNDPEN),
