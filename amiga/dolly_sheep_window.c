@@ -1,4 +1,6 @@
 /* M1.7: resizable GadTools / Intuition Sheep Counter on a public screen.
+ * Hide or the close gadget dismisses ONLY this view. In the standalone
+ * synthetic demo that ends the simulation; real work will be core-owned.
  * Classic MC68000, AmigaOS 2.04+, synthetic progress; no device I/O.
  * Redraw all only on resize/refresh, not on each progress update.
  */
@@ -25,7 +27,7 @@ struct Library *GadToolsBase;
 #define COLS 20u
 #define ROWS 6u
 #define TOTAL (COLS * ROWS)
-#define GID_CANCEL 100u
+#define GID_HIDE 100u
 #define GID_BLOCKS 101u
 #define GID_ERRORS 102u
 #define MIN_WIDTH 420u
@@ -174,8 +176,8 @@ static int make_gadgets(Ui *u) {
     ng.ng_LeftEdge=(WORD)l->button_x;
     ng.ng_TopEdge=(WORD)l->button_y;
     ng.ng_Width=(WORD)l->button_w;
-    ng.ng_GadgetID=GID_CANCEL;
-    ng.ng_GadgetText=(STRPTR)"Cancel";
+    ng.ng_GadgetID=GID_HIDE;
+    ng.ng_GadgetText=(STRPTR)"Hide";
     prev=CreateGadget(BUTTON_KIND,prev,&ng,TAG_DONE);
     return prev!=NULL;
 }
@@ -202,7 +204,7 @@ static int replace_gadgets(Ui *u) {
 int main(void) {
     Ui u;
     ULONG before,opened,after,top,height;
-    unsigned tick=0,quit=0,relayout=0,redraw=0;
+    unsigned tick=0,hide_requested=0,relayout=0,redraw=0;
     int rc=10;
     memset(&u,0,sizeof(u));
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
@@ -252,15 +254,15 @@ int main(void) {
     draw_all(&u);
     opened=AvailMem(MEMF_CHIP);
     printf("WINDOW open chip=%lu\n",(unsigned long)opened);
-    while(!quit && u.done_blocks<TOTAL) {
+    while(!hide_requested && u.done_blocks<TOTAL) {
         struct IntuiMessage *msg;
         WaitTOF();
         while((msg=GT_GetIMsg(u.win->UserPort))!=NULL) {
             ULONG cls=msg->Class;
-            if(cls==IDCMP_CLOSEWINDOW)quit=1;
+            if(cls==IDCMP_CLOSEWINDOW)hide_requested=1;
             if(cls==IDCMP_GADGETUP) {
                 struct Gadget *g=(struct Gadget *)msg->IAddress;
-                if(g && g->GadgetID==GID_CANCEL)quit=1;
+                if(g && g->GadgetID==GID_HIDE)hide_requested=1;
             }
             if(cls==IDCMP_NEWSIZE)relayout=1;
             if(cls==IDCMP_REFRESHWINDOW) {
@@ -287,11 +289,13 @@ int main(void) {
             advance(&u,u.done_blocks+1u);
         }
     }
-    for(tick=0;tick<25u && !quit;++tick)WaitTOF();
+    for(tick=0;tick<25u && !hide_requested;++tick)WaitTOF();
     FreeScreenDrawInfo(u.win->WScreen,u.di);u.di=NULL;
     CloseWindow(u.win);u.win=NULL;
     after=AvailMem(MEMF_CHIP);
     printf("WINDOW closed chip=%lu\n",(unsigned long)after);
+    if(hide_requested)
+        puts("WINDOW HIDDEN: demonstration view closed (no disk operation exists)");
     puts(before==after ? "WINDOW PASS: Chip RAM restored" :
                        "WINDOW WARN: Chip RAM changed");
     rc=before==after?0:10;
