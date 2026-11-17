@@ -64,7 +64,8 @@ static int calculate(Ui *u) {
     struct Window *w=u->win;
     inner_w=(LONG)w->Width-w->BorderLeft-w->BorderRight;
     inner_h=(LONG)w->Height-w->BorderTop-w->BorderBottom;
-    if(inner_w<400 || inner_h<155)return 0;
+    /* Outer minimum is 420px; system borders consume some pixels. */
+    if(inner_w<360 || inner_h<155)return 0;
     l->left=w->BorderLeft+10;
     l->right=(LONG)w->Width-w->BorderRight-10;
     l->bottom=(LONG)w->Height-w->BorderBottom-6;
@@ -182,12 +183,13 @@ static int make_gadgets(Ui *u) {
     return prev!=NULL;
 }
 static int replace_gadgets(Ui *u) {
+    /* Validate geometry BEFORE destroying the working GadTools layout. */
+    if(!calculate(u))return 0;
     if(u->gadgets) {
         RemoveGList(u->win,u->gadgets,-1);
         FreeGadgets(u->gadgets);
         u->gadgets=NULL;u->blocks=NULL;u->errors=NULL;
     }
-    if(!calculate(u))return 0;
     /* Clear the old layout BEFORE attaching GadTools widgets; never paint
      * over gadget imagery after GT_RefreshWindow().
      */
@@ -275,8 +277,15 @@ int main(void) {
         if(relayout) {
             relayout=0;
             if(!replace_gadgets(&u)){
-                puts("WINDOW FAIL: resize reflow");
-                rc=10;goto cleanup;
+                printf("WINDOW WARN: cannot reflow at %u x %u\n",
+                       (unsigned)u.win->Width,(unsigned)u.win->Height);
+                /* Don't close the viewer just because a transient size
+                 * cannot fit. Keep the event loop and redraw on next size.
+                 * No progress advance is safe until gadgets exist.
+                 */
+                if(!u.gadgets) {rc=10;goto cleanup;}
+                redraw=0;
+                continue;
             }
             redraw=1;
         }
