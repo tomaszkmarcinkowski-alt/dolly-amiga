@@ -38,6 +38,7 @@ int main(void){
     p.low_cylinder=10;p.high_cylinder=100;p.dos_type=0x444f5301;
     p.start_bytes=5120;p.length_bytes=1048576;
     p.max_transfer_present=1;p.max_transfer_bytes=0x1fe00;
+    p.dos_type_present=1;
     assert(dolly_inventory_partition(&p,collect,&c)==0);
     assert(c.received==9&&c.max_seen==1&&c.name_seen==1&&c.derived_count==3);
     assert(c.max_unavailable==0&&c.overflow_seen==0);
