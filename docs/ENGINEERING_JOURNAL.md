@@ -416,12 +416,24 @@
 **Weryfikacja docelowa:** pełny build najnowszego `main`, CI, cross-kompilacja 68000, WinUAE i prawdziwy kontroler pozostają otwarte.
 
 
+### DJ-0041 · 2026-11-17 · DMA / komunikaty użytkownika · WDROŻONY INTERFEJS, TEST HOSTOWY PASS
+**Temat:** Sam kod `EINVAL` lub `EUNSUPPORTED` jest niewystarczający, gdy Dolly zatrzymuje operację z powodu DMA.
+
+**Wymaganie użytkownika:** zawsze przekazać czytelny komunikat o przyczynie DMA i bezpiecznej czynności diagnostycznej. Komunikat nie może bez dowodów sugerować, że dane na dysku są uszkodzone.
+
+**Działanie:** dodano `dolly_dma_user_message()` dla niepotwierdzonego profilu DMA, bufora poza maską, złego wyrównania, przepełnienia adresu i braku odpowiedniej pamięci. Eksperymentalny adapter AmigaOS otrzymał `report_dma_problem(reason, message, user)`; bez callbacku profil nie zostanie zaakceptowany. Na odmowie z powodu DMA powiadamia warstwę wywołującą i nie wykonuje odczytu. Dla rzeczywistego CLI/GadTools nadal trzeba zaimplementować wyświetlanie okna/komunikatu oraz lokalizację PL/EN.
+
+**Weryfikacja:** na lokalnie odtworzonym module adapter + fake Exec testowano wysłanie dokładnie trzech komunikatów przy celowo błędnym profilu, wyrównaniu i adresie spoza maski, bez dodatkowych komunikatów przy prawidłowym profilu. **GCC PASS, Clang PASS**. To nie jest jeszcze pełny build aktualnego `main`, test WinUAE ani prawdziwy kontroler.
+
+**Decyzja UX:** błędy DMA są ostrzeżeniami blokującymi, z kodem problemu i poradą, nie automatyczną naprawą ani próbą zgadywania parametrów. [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8), [DOL-061](BACKLOG.md).
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0041 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0042 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
