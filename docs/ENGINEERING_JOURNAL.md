@@ -145,12 +145,36 @@
 **Test:** lokalny CTest: 8/8 zestawów; Clang/ASan dla nowego ósmego zestawu wymagają dodatkowego przebiegu CI. Dane w całości fikcyjne; brak dostępu do urządzeń fizycznych.
 
 
+
+### DJ-0017 · 2026-11-17 · RDB / integralność danych · NOWA FUNKCJA; CZĘŚCIOWO PRZETESTOWANE
+**Temat:** Audyt `de_MaxTransfer` i konserwatywne odniesienie `0x0001FE00`.
+
+**Wykrycie/obserwacja:** na części starszych implementacji `scsi.device` / IDE zbyt duże wartości `MaxTransfer` mogą prowadzić do cichego uszkodzenia danych podczas dużych operacji. `0x1FE00` to 130 560 bajtów, czyli 255 sektorów po 512 bajtów. Nie jest to uniwersalna granica sprzętowa: starsze kontrolery mogą wymagać mniej (np. `0xFE00`), inne pozwalają na więcej.
+
+**Działanie:** [Issue #11](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/11), nowy `dolly_maxtransfer` klasyfikujący ustawienia, odczyt pola `de_MaxTransfer` z `PART` (`DosEnvec` index 13), prezentacja w hostowym `dolly-rdb`. Ostrzeżenie nie oznacza automatycznej zmiany RDB ani systemu plików.
+
+**Test:** nowy test klasyfikacji `tests/test_maxtransfer.c` zweryfikowany lokalnie przez GCC z ASan/UBSan (PASS); test ekstrakcji RDB dodany, pełnego przebiegu repozytorium po tej zmianie jeszcze nie potwierdzono.
+
+**Niepewności:** dane z RDB mogą różnić się od aktywnego mountlist/DosList; wybór bezpiecznego limitu zależy od sterownika i nośnika. **`de_MaxTransfer` filesystemu nie jest tym samym co niezależny limit naszego backendu `DoIO`.**
+
+**Źródła:** [Amiga ROM Kernel Reference Manual: DOS](https://www.aminet.net/docs/misc/rkrm-dos.pdf), [AmigaOS 3.9 FAQ](https://www.gregdonner.org/os39faq/diskfileoperation.html).
+
+### DJ-0018 · 2026-11-17 · C / regresja · POPRAWIONE W ŹRÓDLE; DO WALIDACJI CAŁEGO PROJEKTU
+**Temat:** Dosłowne sekwencje `\\n` w źródłach parsera RDB.
+
+**Wykrycie:** w poprzednim commicie narzędzia generującego poprawkę do `de_SizeBlock` część znaków końca linii została zapisana jako dosłowne `\\n` poza literałami C, co może prowadzić do błędu kompilacji.
+
+**Działanie:** przy okazji integracji MaxTransfer zapisano poprawne znaki końca linii w `src/dolly_rdb.c`; ponowny odczyt pliku z GitHub potwierdził brak niezamierzonych `\\n` w tym fragmencie.
+
+**Test:** wymagany pełny przebieg CI; przegląd tekstu nie stanowi dowodu, że wszystkie buildy przeszły.
+
+
 ---
 
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0017 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0019 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**
