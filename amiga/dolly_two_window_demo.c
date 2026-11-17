@@ -35,9 +35,14 @@ struct Library *GadToolsBase;
 #define SHEEP_COUNT_ID 205u
 #define SHEEP_ERRORS_ID 206u
 #define SHEEP_PERCENT_ID 207u
+#define MAIN_START_ID 208u
+#define MAIN_DEVICE_ID 209u
+#define MAIN_OPERATION_ID 210u
+#define MAIN_STATUS_ID 211u
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
+    LONG main_device_y, main_operation_y, main_status_y;
     LONG pad_x, pad_y;
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h;
@@ -47,7 +52,9 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *quit, *hide, *count, *errors, *percent;
+    struct Gadget *show, *quit, *start, *hide, *count, *errors, *percent;
+    struct Gadget *device, *op_selector, *status;
+    char status_label[48];
     char block_label[40];
     char percent_label[8];
     APTR visual;
@@ -60,6 +67,22 @@ static struct DrawInfo *screen_info;
 static struct TextFont *marker_font;
 static DollyOperationSession operation;
 static DollyDemoView main_view, sheep_view;
+/* No enumeration of real disks or access to scsi.device in this demo. */
+static STRPTR demo_devices[]={(STRPTR)"Synthetic unit 0",
+                              (STRPTR)"Synthetic unit 1",NULL};
+static STRPTR demo_operations[]={(STRPTR)"Surface scan demo",
+                                 (STRPTR)"Inventory preview",NULL};
+static UWORD selected_device=0;
+static UWORD selected_operation=0;
+static void update_main_status(void) {
+    const char *message=selected_operation==0 ?
+        "Read only / synthetic scan" : "Read only / inventory preview";
+    size_t len=strlen(message);
+    if(len>=sizeof(main_view.status_label))
+        len=sizeof(main_view.status_label)-1;
+    memcpy(main_view.status_label,message,len);
+    main_view.status_label[len]='\0';
+}
 
 /* Bounds-checked C99 decimal formatter. No format varargs or overflow. */
 static void append_u32(char **out,char *limit,unsigned long n) {
@@ -128,7 +151,10 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_h=d.bottom-d.top+1;
     if(main_window) {
         if(avail_w<190 || avail_h<70)return 0;
-        d.controls_y=d.top+19;
+        d.main_device_y=d.top+18;
+        d.main_operation_y=d.top+39;
+        d.main_status_y=d.top+60;
+        d.controls_y=d.top+84;
         d.number_w=avail_w/3;
         if(d.number_w>124)d.number_w=124;
     } else {
@@ -168,7 +194,15 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     ng.ng_Height=15;
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)title;
-    return CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
+    return CreateGadget(BUTTON_KIND,last,&ng,
+                        GA_Disabled,(ULONG)(
+                          (id==MAIN_SHOW_ID &&
+                           operation.state!=DOLLY_OP_RUNNING &&
+                           operation.state!=DOLLY_OP_PAUSED) ||
+                          (id==MAIN_START_ID &&
+                           (operation.state==DOLLY_OP_RUNNING ||
+                            operation.state==DOLLY_OP_PAUSED))),
+                        TAG_DONE);
 }
 static struct Gadget *make_number(struct Gadget *last,DollyDemoView *v,
                                   UWORD id,LONG x,LONG y,LONG width,
@@ -203,6 +237,27 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
                         GTTX_Text,(ULONG)value,
                         GTTX_Border,border,TAG_DONE);
 }
+static struct Gadget *make_cycle(struct Gadget *last,DollyDemoView *v,
+                                  UWORD id,LONG x,LONG y,LONG width,
+                                  STRPTR *choices,UWORD active) {
+    struct NewGadget ng;
+    memset(&ng,0,sizeof(ng));
+    ng.ng_VisualInfo=v->visual;
+    ng.ng_TextAttr=public_screen->Font;
+    ng.ng_LeftEdge=(WORD)x;
+    ng.ng_TopEdge=(WORD)y;
+    ng.ng_Width=(WORD)width;
+    ng.ng_Height=15;
+    ng.ng_GadgetID=id;
+    ng.ng_GadgetText=(STRPTR)"";
+    return CreateGadget(CYCLE_KIND,last,&ng,
+                        GTCY_Labels,(ULONG)choices,
+                        GTCY_Active,(ULONG)active,
+                        GA_Disabled,(ULONG)(
+                          operation.state==DOLLY_OP_RUNNING ||
+                          operation.state==DOLLY_OP_PAUSED),
+                        TAG_DONE);
+}
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     struct Gadget *last;
     DemoLayout *d=&v->l;
@@ -217,12 +272,28 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
             RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
-        v->show=NULL;v->quit=NULL;v->hide=NULL;
+        v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;
+        v->device=NULL;v->op_selector=NULL;v->status=NULL;
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
     if(main_window) {
+        LONG cycle_x=d->left+77;
+        LONG cycle_w=d->right-cycle_x+1;
+        update_main_status();
+        last=make_cycle(last,v,MAIN_DEVICE_ID,cycle_x,d->main_device_y,
+                        cycle_w,demo_devices,selected_device);
+        if(!last)return 0;
+        v->device=last;
+        last=make_cycle(last,v,MAIN_OPERATION_ID,cycle_x,d->main_operation_y,
+                        cycle_w,demo_operations,selected_operation);
+        if(!last)return 0;
+        v->op_selector=last;
+        last=make_text(last,v,MAIN_STATUS_ID,cycle_x,d->main_status_y,
+                       cycle_w,v->status_label,FALSE);
+        if(!last)return 0;
+        v->status=last;
         button_w=(d->right-d->left-6)/2;
         last=make_button(last,v,MAIN_SHOW_ID,d->left,d->controls_y,
                          button_w,"Sheep Counter");
@@ -232,6 +303,10 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->controls_y,button_w,"Quit demo");
         if(!last)return 0;
         v->quit=last;
+        last=make_button(last,v,MAIN_START_ID,d->left,
+                         d->controls_y+19,d->right-d->left+1,"Start demo");
+        if(!last)return 0;
+        v->start=last;
         last=make_text(last,v,MAIN_COUNT_ID,d->left,d->bottom-15,
                        d->number_w,v->block_label,TRUE);
         if(!last)return 0;
@@ -272,8 +347,9 @@ static void destroy_view(DollyDemoView *v) {
     }
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
-    v->show=NULL;v->quit=NULL;v->hide=NULL;
+    v->show=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
+    v->device=NULL;v->op_selector=NULL;v->status=NULL;
 }
 /* Measure the actual active font and window chrome, then tell Intuition
  * the smallest outer rectangle that fits the required GadTools controls.
@@ -295,8 +371,13 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.padding_y=2u;
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
-        m.heading_width=(ULONG)TextLength(rp,
-                (STRPTR)"Dolly main window (synthetic)",29);
+        {
+            ULONG heading=(ULONG)TextLength(rp,
+                (STRPTR)"Dolly / Device & operation (demo)",33);
+            ULONG choice=(ULONG)TextLength(rp,
+                (STRPTR)"Read only / inventory preview",29);
+            m.heading_width=heading>choice+96ul?heading:choice+96ul;
+        }
         m.show_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Sheep Counter",13);
         m.quit_button_text_width=(ULONG)TextLength(rp,
@@ -365,18 +446,14 @@ static void draw_main_static(void) {
     DemoLayout *d=&main_view.l;
     if(!main_view.window)return;
     /* Labels are not painted over system GadTools images. */
-    label(main_view.window,d->left,d->top+10,"Dolly main window (synthetic)");
+    label(main_view.window,d->left,d->top+10,"Dolly / Device & operation (demo)");
+    label(main_view.window,d->left,d->main_device_y+11,"Device:");
+    label(main_view.window,d->left,d->main_operation_y+11,"Operation:");
+    label(main_view.window,d->left,d->main_status_y+11,"Status:");
     /* This descriptive sentence is optional and may be suppressed at
      * narrow widths; required controls set the minimum geometry.
      */
-    {
-        static const char explanation[]="Sheep Counter is an auxiliary window.";
-        struct RastPort *rp=main_view.window->RPort;
-        LONG text_w=(LONG)TextLength(rp,(STRPTR)explanation,
-                                    (ULONG)strlen(explanation));
-        if(text_w<=d->right-d->left+1)
-            label(main_view.window,d->left,d->controls_y+31,explanation);
-    }
+    /* All explanation text lives in a GadTools TEXT_KIND status field. */
     label(main_view.window,d->left,d->bottom-20,"Blocks:");
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
@@ -473,6 +550,8 @@ static void draw_full(DollyDemoView *v,int main_window) {
 }
 static int show_sheep(void) {
     ULONG top=(ULONG)public_screen->BarHeight+1ul;
+    if(operation.state!=DOLLY_OP_RUNNING &&
+       operation.state!=DOLLY_OP_PAUSED)return 0;
     if(sheep_view.window)return 1;
     if(!open_view(&sheep_view,0,"Dolly - Sheep Counter",
                   0,top,(ULONG)public_screen->Width,
@@ -488,6 +567,23 @@ static int show_sheep(void) {
 static void hide_sheep(void) {
     destroy_view(&sheep_view);
     dolly_operation_hide_sheep_counter(&operation);
+}
+static void update_main_actions(void) {
+    int active=(operation.state==DOLLY_OP_RUNNING ||
+                operation.state==DOLLY_OP_PAUSED);
+    if(!main_view.window)return;
+    if(main_view.show)
+        GT_SetGadgetAttrs(main_view.show,main_view.window,NULL,
+                          GA_Disabled,(ULONG)!active,TAG_DONE);
+    if(main_view.start)
+        GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
+                          GA_Disabled,(ULONG)active,TAG_DONE);
+    if(main_view.device)
+        GT_SetGadgetAttrs(main_view.device,main_view.window,NULL,
+                          GA_Disabled,(ULONG)active,TAG_DONE);
+    if(main_view.op_selector)
+        GT_SetGadgetAttrs(main_view.op_selector,main_view.window,NULL,
+                          GA_Disabled,(ULONG)active,TAG_DONE);
 }
 static void progress_view_update(unsigned old) {
     DemoLayout *d=&sheep_view.l;
@@ -514,6 +610,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
     while((msg=GT_GetIMsg(v->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
         UWORD id=0;
+        UWORD code=msg->Code;
         if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
         if(cls==IDCMP_SIZEVERIFY && !v->gadgets_detached &&
@@ -533,7 +630,28 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         }
         if(main_window) {
             if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID)*quit=1;
-            else if(id==MAIN_SHOW_ID && !show_sheep())
+            else if(id==MAIN_DEVICE_ID) {
+                selected_device=(UWORD)(code<2 ? code : 0);
+            } else if(id==MAIN_OPERATION_ID) {
+                selected_operation=(UWORD)(code<2 ? code : 0);
+                update_main_status();
+                if(main_view.status)
+                    GT_SetGadgetAttrs(main_view.status,main_view.window,NULL,
+                                      GTTX_Text,(ULONG)main_view.status_label,
+                                      TAG_DONE);
+            } else if(id==MAIN_START_ID) {
+                if(dolly_operation_start(&operation,GRID_TOTAL)==DOLLY_OP_OK) {
+                    update_numbers(&main_view);
+                    if(sheep_view.window) {
+                        draw_full(&sheep_view,0);
+                        update_numbers(&sheep_view);
+                    }
+                    update_main_actions();
+                }
+            } else if(id==MAIN_SHOW_ID &&
+                      (operation.state==DOLLY_OP_RUNNING ||
+                       operation.state==DOLLY_OP_PAUSED) &&
+                      !show_sheep())
                 puts("MAIN WARN: unable to show Sheep Counter");
         } else if(cls==IDCMP_CLOSEWINDOW || id==SHEEP_HIDE_ID)hide=1;
         GT_ReplyIMsg(msg);
@@ -570,7 +688,7 @@ int main(void) {
         (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
     };
     dolly_operation_init(&operation);
-    if(dolly_operation_start(&operation,GRID_TOTAL)!=DOLLY_OP_OK)return 10;
+    /* Open the main UI idle. Starting a synthetic operation is explicit. */
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
     if(!IntuitionBase)return 10;
     GfxBase=(struct GfxBase *)OpenLibrary("graphics.library",36);
@@ -588,7 +706,8 @@ int main(void) {
                   14,(ULONG)public_screen->BarHeight+14ul,390,190))
         goto cleanup;
     draw_full(&main_view,1);
-    if(!show_sheep())puts("MAIN WARN: unable to show Sheep Counter");
+    update_main_actions();
+    /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
         WaitTOF();
         process_view(&main_view,1,&quit);
@@ -604,6 +723,7 @@ int main(void) {
                     progress_view_update(old);
             } else {
                 (void)dolly_operation_finish(&operation,1);
+                update_main_actions();
             }
         }
     }
