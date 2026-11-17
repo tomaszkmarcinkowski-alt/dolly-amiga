@@ -16,7 +16,9 @@ if(DOLLY_NATIVE_ONLY)
     amiga/dolly_native_smoke.c
     src/dolly_block_source.c src/dolly_rdb.c src/dolly_rdb_audit.c
     src/dolly_inventory.c src/dolly_io_plan.c src/dolly_maxtransfer.c
-    src/dolly_dma_policy.c src/dolly_dma_advice.c src/dolly_paths.c)
+    src/dolly_dma_policy.c src/dolly_dma_advice.c src/dolly_paths.c
+    src/dolly_selfcheck_embedded.c src/dolly_selfcheck.c
+    src/dolly_checksum.c src/dolly_version.c)
   target_include_directories(dolly-native-smoke PRIVATE
     ${PROJECT_SOURCE_DIR}/include)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -90,9 +92,11 @@ if(DOLLY_NATIVE_ONLY)
   add_executable(test-profile-config tests/test_profile_config.c)
   target_link_libraries(test-profile-config PRIVATE dollyprofileconfig)
   add_test(NAME device_local_config_proposals COMMAND test-profile-config)
-  add_library(dollyselfcheck STATIC src/dolly_selfcheck.c src/dolly_checksum.c)
+  add_library(dollyselfcheck STATIC
+    src/dolly_selfcheck.c src/dolly_selfcheck_embedded.c
+    src/dolly_checksum.c src/dolly_version.c)
   target_include_directories(dollyselfcheck PUBLIC ${PROJECT_SOURCE_DIR}/include)
-  add_executable(test-selfcheck tests/test_selfcheck.c)
+  add_executable(test-selfcheck tests/test_selfcheck_embedded.c)
   target_link_libraries(test-selfcheck PRIVATE dollyselfcheck)
   add_test(NAME self_executable_crc32_check COMMAND test-selfcheck)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -404,13 +408,14 @@ if(Python3_Interpreter_FOUND)
 endif()
 
 # In-process executable self-check runs inside Dolly, not a separate launcher.
-add_library(dollyselfcheck STATIC src/dolly_selfcheck.c)
+add_library(dollyselfcheck STATIC
+  src/dolly_selfcheck.c src/dolly_selfcheck_embedded.c src/dolly_version.c)
 target_include_directories(dollyselfcheck PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(dollyselfcheck PUBLIC dollychecksum)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyselfcheck PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
-add_executable(test-selfcheck tests/test_selfcheck.c)
+add_executable(test-selfcheck tests/test_selfcheck_embedded.c)
 target_link_libraries(test-selfcheck PRIVATE dollyselfcheck)
 add_test(NAME self_executable_crc32_check COMMAND test-selfcheck)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
