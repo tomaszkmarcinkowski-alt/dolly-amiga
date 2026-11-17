@@ -829,3 +829,26 @@ horizontal and vertical sizes; resize while switching modes,
 with device/unit/partition selected; check File ASL selection
 and output format Cycle after resizing. The main window and
 Sheep Counter are unchanged; no physical media operation is added.
+
+### M1.19 — selected endpoint preview in each LISTVIEW mode
+
+Added user-requested full-width, **recessed GadTools TEXT_KIND**
+selection preview **under the LISTVIEW(s), above Use selection and
+Cancel** in Physical, Logical and Partition modes. The preview shows
+the provisional selection immediately: selected device, selected
+unit or logical name, and selected partition when applicable. It
+never commits to the main window until Use selection is clicked.
+Cancel retains the previous committed endpoint.
+
+The chooser's `picker_geometry()` reserves a fixed-height preview
+row above the bottom action buttons, then gives the remaining
+vertical space to the list views. The preview stretches to the
+current client width, uses the same system-font text measurement
+as File path previews, and is rebuilt/restored when the native window
+resizes or the type Cycle changes. File mode keeps its **existing**
+path preview, metadata and image-format controls without a redundant
+second preview.
+
+GUI-13 through GUI-17 in `docs/TEST_MATRIX.md` cover this addition.
+The new module has **not yet been cross-compiled or validated in
+WinUAE**. RTG and memory tests remain deferred.
