@@ -97,7 +97,7 @@ See [engineering journal](ENGINEERING_JOURNAL.md), [AmigaOS I/O](AMIGA_IO.md) an
 
 ## GUI architectural groundwork (future M3/M5; 2026-11-17)
 
-- [x] Define builtin GadTools / optional ReAction / future MUI interface without imposing optional dependencies.
+- [x] Freeze MVP scope at **GadTools only**; ReAction/MUI backends move to independent post-MVP milestones; keep optional backend contract decoupled.
 - [x] Define 640×256/Topaz8 geometry preflight and font preference order custom → actual Screen Font → Topaz/8.
 - [x] Add host-side unit tests of seven view types, 640×256/200 and 5000 generated geometry/font cases (not yet confirmed in full CI).
 - [x] Add portable screen event reducer and tests of preferences, font, close/reopen and coalescing.
@@ -106,3 +106,13 @@ See [engineering journal](ENGINEERING_JOURNAL.md), [AmigaOS I/O](AMIGA_IO.md) an
 - [ ] Confirm all dialogs and long warnings fit 640×256 with real text widths and window borders.
 
 This GUI work does not make M0 media operations safe or replace the pending native 68000 validation.
+
+## DOLLY: resource root (M0) / installer (future packaging)
+
+- [x] Adopt `DOLLY:` as the logical installation root for all application-owned resources.
+- [x] Add bounded portable `dolly_path_resource()`; reject absolute/device paths, relative traversal, malformed components and excessive lengths.
+- [x] Integrate the resource-path self-test in host CMake and the native-only memory smoke.
+- [x] Reproduce and fix a NUL-terminator parsing bug before merge; local GCC/Clang/ASan/UBSan regression test **PASS** on the matching module.
+- [ ] Build and validate the **classic Amiga Installer** script, session/persistent Assign and safe reinstallation (Issue #16). This does not gate M0.
+- [ ] Build entire current `main` and validate the changed m68k smoke source with an actual AmigaOS SDK.
+
