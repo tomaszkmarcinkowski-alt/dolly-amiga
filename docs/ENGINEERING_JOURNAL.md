@@ -1,6 +1,8 @@
 # Dolly — Engineering Field Notes 🐑
 ## Dziennik błędów, niespójności, odkryć i ciekawostek
 
+The dated entries are historical. The [roadmap](ROADMAP.md) and [test matrix](TEST_MATRIX.md) summarize the current branch.
+
 **Cel:** zachować ślad rozwoju Dolly dla przyszłych programistów, użytkowników i historyków retroinformatyki. Ten dziennik **nie zastępuje Issues, testów ani changeloga**: zapisuje *dlaczego* podjęliśmy decyzje, co wykryliśmy, jak sprawdziliśmy hipotezy oraz co pozostało niepewne.
 
 **Zasady:**

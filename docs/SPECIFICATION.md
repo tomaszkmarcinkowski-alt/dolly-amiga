@@ -1,5 +1,7 @@
 # Dolly — baseline product specification (approved concept)
 
+**Implementation status:** M0 foundations, native GadTools, Sheep Inventory, Surface Scan and read-only source imaging are described in the [roadmap](ROADMAP.md). Below is the approved target scope.
+
 ## Platform and architecture
 Target Motorola 68000, AmigaOS 2.04+, with older CLI compatibility considered. GadTools baseline, ReAction when available. Portable parsing core reused by AmigaOS adapter and host tests. CLI, Wizard and Advanced GUI share operation state.
 
@@ -19,4 +21,4 @@ Localized messages through locale.library with fallback for older OS. Safe defau
 No destructive operations, native Amiga UI or filesystem repair in M0. PFS/SFS/FAT smart cloning, full GPT write and plugin loading are later milestones.
 
 ## Open technical decisions
-Exact format chunk schemas, crash-consistent segment manifest, UI rendering constraints, native toolchain portability and final code license require implementation-phase decisions and tests.
+Single-file [DLY v1/v2](IFF_FORMAT.md) and the [MIT license](../LICENSE) are established. The crash-consistent segment manifest, restore path and physical-controller compatibility require further decisions and tests.

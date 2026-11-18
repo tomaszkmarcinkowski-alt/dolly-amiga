@@ -10,6 +10,56 @@ option(DOLLY_NATIVE_M68000 "Pass -m68000 for classic Motorola 68000" OFF)
 # Optional NDK compile target for the AmigaDOS preferences notification adapter.
 # This does not yet create a working GadTools event loop or plugin loader.
 option(DOLLY_NATIVE_GUI_WATCH "Compile AmigaDOS screen/font notify adapter (NDK required)" OFF)
+# Portable operation state is independent of every GUI and disk adapter.
+# Both host and Amiga cross-builds compile the same C99 implementation.
+enable_testing()
+add_library(dollyoperation STATIC src/dolly_operation_session.c)
+target_include_directories(dollyoperation PUBLIC ${PROJECT_SOURCE_DIR}/include)
+add_executable(test-operation-session tests/test_operation_session.c)
+target_link_libraries(test-operation-session PRIVATE dollyoperation)
+add_test(NAME operation_session_hide_does_not_cancel COMMAND test-operation-session)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyoperation PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(test-operation-session PRIVATE -UNDEBUG)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyoperation PRIVATE -m68000)
+    target_compile_options(test-operation-session PRIVATE -m68000)
+    target_link_options(test-operation-session PRIVATE -m68000)
+  endif()
+endif()
+
+# Shared content-based minimum size preflight (pure C99; host + m68k).
+add_library(dollyguimin STATIC src/dolly_gui_minimum.c)
+target_include_directories(dollyguimin PUBLIC ${PROJECT_SOURCE_DIR}/include)
+add_executable(test-gui-minimum tests/test_gui_minimum.c)
+target_link_libraries(test-gui-minimum PRIVATE dollyguimin)
+add_test(NAME gui_content_minimum COMMAND test-gui-minimum)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyguimin PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(test-gui-minimum PRIVATE -UNDEBUG)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyguimin PRIVATE -m68000)
+    target_compile_options(test-gui-minimum PRIVATE -m68000)
+    target_link_options(test-gui-minimum PRIVATE -m68000)
+  endif()
+endif()
+
+# Endpoint roles, whole-unit/partition/file selections and safe target gating.
+add_library(dollyendpoint STATIC src/dolly_endpoint.c)
+target_include_directories(dollyendpoint PUBLIC ${PROJECT_SOURCE_DIR}/include)
+add_executable(test-endpoint tests/test_endpoint.c)
+target_link_libraries(test-endpoint PRIVATE dollyendpoint)
+add_test(NAME endpoint_selection_safety COMMAND test-endpoint)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyendpoint PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(test-endpoint PRIVATE -UNDEBUG)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyendpoint PRIVATE -m68000)
+    target_compile_options(test-endpoint PRIVATE -m68000)
+    target_link_options(test-endpoint PRIVATE -m68000)
+  endif()
+endif()
+
 if(DOLLY_NATIVE_ONLY)
   enable_testing()
   add_executable(dolly-native-smoke
@@ -27,7 +77,51 @@ if(DOLLY_NATIVE_ONLY)
     if(DOLLY_NATIVE_M68000)
       target_compile_options(dolly-native-smoke PRIVATE -m68000)
       target_link_options(dolly-native-smoke PRIVATE -m68000)
+      target_compile_definitions(dolly-native-smoke PRIVATE DOLLY_AMIGAOS_MEMORY_PROFILING)
     endif()
+  endif()
+  # Real Intuition screen smoke, AmigaOS 2.x+ only. No device I/O.
+  if(DOLLY_NATIVE_M68000)
+    add_executable(dolly-screen-smoke amiga/dolly_screen_smoke.c)
+    target_compile_options(dolly-screen-smoke PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-screen-smoke PRIVATE -m68000)
+    target_link_libraries(dolly-screen-smoke PRIVATE amiga)
+    add_executable(dolly-sheep-demo amiga/dolly_sheep_demo.c)
+    target_compile_options(dolly-sheep-demo PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-sheep-demo PRIVATE -m68000)
+    target_link_libraries(dolly-sheep-demo PRIVATE amiga)
+    # Default Sheep Counter UI: an Intuition window on the public screen.
+    add_executable(dolly-sheep-window amiga/dolly_sheep_window.c)
+    target_compile_options(dolly-sheep-window PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-sheep-window PRIVATE -m68000)
+    target_link_libraries(dolly-sheep-window PRIVATE amiga)
+    # Two concurrent views share a single C99 OperationSession.
+    add_executable(dolly-two-window-demo amiga/dolly_two_window_demo.c
+      amiga/dolly_amiga_endpoint_picker.c
+      amiga/dolly_amiga_dos_devices.c
+      amiga/dolly_amiga_physical_catalog.c
+      amiga/dolly_amiga_device_query.c
+      amiga/dolly_amiga_partition_scan.c
+      amiga/dolly_amiga_inventory_view.c
+      amiga/dolly_amiga_surface_scan.c amiga/dolly_amiga_source.c
+      amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
+      amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
+      src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
+      src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
+    target_compile_options(dolly-two-window-demo PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-two-window-demo PRIVATE -m68000)
+    target_link_libraries(dolly-two-window-demo PRIVATE dollyoperation dollyguimin dollyendpoint amiga)
+    # M1.23 independent diagnostic: enumerate without device I/O by
+    # default; optional "--probe" sends only read-only queries.
+    add_executable(dolly-physical-probe amiga/dolly_amiga_physical_probe.c)
+    target_compile_options(dolly-physical-probe PRIVATE
+      -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_options(dolly-physical-probe PRIVATE -m68000)
+    target_link_libraries(dolly-physical-probe PRIVATE amiga)
   endif()
   # Portable diagnostic helper: can also be cross-built for AmigaOS.
   add_executable(dolly-dma-advice
@@ -183,6 +277,11 @@ target_include_directories(test-amiga-mock PRIVATE
 target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan dollydma)
 add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
 
+add_executable(test-surface-log tests/test_surface_log.c amiga/dolly_surface_log.c)
+target_include_directories(test-surface-log PRIVATE ${PROJECT_SOURCE_DIR}/amiga)
+target_link_libraries(test-surface-log PRIVATE dollyblock)
+add_test(NAME surface_log COMMAND test-surface-log)
+
 # Strict streaming IFF FORM DOLY envelope inspection.
 add_library(dollyiff STATIC src/dolly_iff.c)
 target_include_directories(dollyiff PUBLIC ${PROJECT_SOURCE_DIR}/include)
@@ -190,8 +289,8 @@ target_link_libraries(dollyiff PUBLIC dollyblock)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyiff PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
-add_executable(test-iff tests/test_iff.c)
-target_link_libraries(test-iff PRIVATE dollyiff)
+add_executable(test-iff tests/test_iff.c src/dolly_dly_writer.c src/dolly_dly_codec.c)
+target_link_libraries(test-iff PRIVATE dollyiff dollychecksum)
 add_test(NAME iff_form_doly COMMAND test-iff)
 add_executable(dolly-iff src/dolly_iff_inspect.c)
 target_link_libraries(dolly-iff PRIVATE dollyiff)

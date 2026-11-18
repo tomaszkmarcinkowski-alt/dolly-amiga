@@ -4,7 +4,7 @@ Dolly pozostaje darmowym projektem **MIT + dobrowolne Retroware**. Każda faza w
 
 | Etap | Priorytet funkcjonalny | Warunek przejścia |
 |---|---|---|
-| **M0** | Repo, CI, parsowanie bez zapisu, BlockSource, prototyp AmigaOS I/O | Hostowe testy, zidentyfikowane ryzyka, prawdziwy native build nadal blocker |
+| **M0** | Repo, CI, parsowanie bez zapisu, BlockSource, prototyp AmigaOS I/O | Testy hosta, analiza ryzyk i kompilacja natywna |
 | **M1** | Rzeczywiste device/unit, NSD/TD64, topologia, RDB/MBR/PiStorm | Bezpieczne odczyty i jasne granice jednostek |
 | **M2** | RAW, ADF/HDF, kopiowanie, retry i read-back verify | Fixture, brak nadpisania źródła, odporność na I/O |
 | **M3** | Binarny `FORM DOLY`, segmenty, kompresja, checksumy, resume | Roundtrip i testy przerwanych zapisów |
@@ -14,13 +14,14 @@ Dolly pozostaje darmowym projektem **MIT + dobrowolne Retroware**. Każda faza w
 | **M7** | GadTools, ReAction, Wizard, Sheep Counter, locale, scratch | Testy 68000 / Chip RAM, ergonomia i stabilność |
 | **M8** | Macierz sprzętowa, publikacja stabilna i dokumentacja | Potwierdzone testy na autentycznych Amigach |
 
-## Aktualny M0 (17 listopada 2026)
+## Stan od M0 do bieżących prototypów
 
-- Dostępny kod read-only: `dolly-inspect`, `dolly-rdb`, `dolly-layout`, `dolly-iff`.
-- Strukturalny parser IFF `FORM DOLY` nie jest jeszcze pełnym czytnikiem DLY.
-- `OpenDevice/DoIO` działa wyłącznie jako **prototyp poddany testowi na symulowanym Exec**; brak kompilacji 68000 i testów na rzeczywistym kontrolerze.
-- Lokalnie: **8/8 testów CTest z GCC**, **7/7 z Clang i ASan/UBSan przed dodaniem testu integracyjnego CLI**. Wynik nowego GitHub Actions niepotwierdzony.
-- Otwarte zagrożenia: duże stosy RDB, DMA/MaxTransfer, brak TD64, pełna kontrola struktur rezerwowych RDB.
+- **M0** dostarczył BlockSource, narzędzia hostowe, odczyt RDB/MBR, analizę kolizji i pojemności oraz strukturalny inspektor IFF. Przebieg odnotowano w [historii M0](SPRINT_M0.md).
+- **M1** przyniósł kompilację MC68000, główne okno GadTools, selektory urządzeń, Sheep Inventory oraz [Surface Scan](SURFACE_SCAN.md). W FS-UAE zweryfikowano również odczyt wybranego zakresu przez granicę 4 GiB.
+- **Zakres M2** ma działający prototyp [Create Image](CREATE_IMAGE.md) dla RAW i HDF. Źródło jest tylko do odczytu. Otwarta pozostaje walidacja innych urządzeń docelowych, ADF i weryfikacja po zapisie w aplikacji.
+- **Zakres M3** ma jednoplikowy zapis [IFF DOLY](IFF_FORMAT.md): v1 bez kompresji i v2 z PackBits/LZSS. Weryfikacja na hoście porównała dane z obrazów emulowanych ze źródłem. Segmentacja, wznowienie i odtwarzanie pozostają otwarte.
+
+Status wydań i sprzętu opisują [README](../README.md) i [macierz testów](TEST_MATRIX.md).
 
 ## Po MVP — Dolly Flock Manager
 

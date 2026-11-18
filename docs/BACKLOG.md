@@ -4,6 +4,14 @@
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
+
+## Bieżący stan prototypów
+
+[Surface Scan](SURFACE_SCAN.md) jest przyjętym prototypem odczytowym.
+[Create Image](CREATE_IMAGE.md) zapisuje RAW, HDF i jednoplikowe DLY na
+oddzielny cel. Otwarte pozostają między innymi walidacja rzeczywistych
+kontrolerów, ADF, weryfikacja obrazu po zapisie i operacje przywracania.
+
 ## Epic: Architecture
 
 ### DOL-001 — Kontrakt BlockDevice
@@ -180,6 +188,8 @@
 
 **Kryterium akceptacji:** Publiczna specyfikacja definiuje dokładne offsety i endian pól.
 
+**Stan:** opisano i wdrożono jednoplikowy [IFF DOLY v1/v2](IFF_FORMAT.md). Segmentacja, wznawianie i mapy błędów pozostają osobnymi pozycjami.
+
 ### DOL-022 — Jednoplikowy DLY
 
 **Priorytet:** P0 · **Etap:** M3 · **Story Points:** 8
@@ -187,6 +197,8 @@
 **User story:** Jako użytkownik chcę mieć funkcję „Jednoplikowy DLY”, aby bezpiecznie i przewidywalnie wykonywać zadanie zgodnie z jej przeznaczeniem.
 
 **Kryterium akceptacji:** Roundtrip danych i checksum po kompresji/dekompresji jest zgodny.
+
+**Stan prototypu:** DLY v1 oraz v2 Fast i Compact zapisują sektory z CRC32. Niezależna dekompresja obrazów z FS-UAE potwierdziła zgodność. Zintegrowany odczyt i przywracanie obrazu pozostają otwarte.
 
 ### DOL-023 — Segmentowanie dużych obrazów
 
@@ -678,7 +690,14 @@
 
 **Bezpieczeństwo:** Restore wymaga weryfikacji nośnika docelowego, kopii aktualnego RDB, podglądu planowanych zmian blok po bloku, jawnego potwierdzenia, zapisu z późniejszym odczytem weryfikującym, procedury odzyskiwania po przerwanym zapisie. Nie obiecywać atomowości. W przypadku niezgodnej pojemności nie wykonywać Restore bez osobnej, bezpiecznej analizy.
 
-**Status:** backlog, **brak implementacji**.
+**Status:** Sheep Inventory zapisuje surową kopię zarezerwowanego obszaru RDB na obsługiwanym dysku oraz sektor LBA 0 dla klasycznego MBR z partycjami podstawowymi. Przyciski Restore RDB i Restore MBR pozostają nieaktywne do czasu wdrożenia przywracania.
+
+#### Restore RDB i Restore MBR — wymagania przed wdrożeniem
+
+- Zweryfikować format i integralność kopii, tożsamość urządzenia i jednostki docelowej, rozmiar sektora, pojemność oraz zgodność zakresów partycji. Ustalić procedurę dla zamontowanych woluminów i przerwania operacji.
+- Przed zapisem pokazać urządzenie docelowe i zakres nadpisywanych sektorów. Wyjaśnić, że błędna lub niezgodna kopia może uniemożliwić rozruch albo dostęp do danych. Wyjaśnić, że kopia tablicy partycji nie obejmuje zawartości partycji.
+- Zaplanować kopię bieżącej tablicy, świadome potwierdzenie po podglądzie zmian, odczyt weryfikujący po zapisie i procedurę odzyskiwania po błędzie. Uwzględnić, że Restore MBR nadpisuje również kod rozruchowy w LBA 0.
+- **GPT — opcjonalne.** Rozważyć oddzielnie obsługę nagłówków i tablic GPT, w tym kopii zapasowej na końcu dysku i ich sum kontrolnych.
 
 ### DOL-074 — Wykrywanie RDB niezgodnego z rzeczywistą pojemnością nośnika
 
@@ -769,3 +788,38 @@
 **Zakres:** rozpoznanie API i licencji, niezależne sterowniki (lub adaptery), montowanie i odmontowanie ADF/RAW, konwersja XAD/DOLY tylko tam, gdzie możliwa, osobne wsparcie HDF/RDB jeśli sterownik rzeczywiście je obsługuje. Przy braku mechanizmu wyświetlać jasny komunikat o niedostępnej funkcji i kontynuować normalne działanie Dolly.
 
 **Status:** backlog post-MVP; brak implementacji.
+
+
+## M1.35 — operacje kontekstowe i dalszy rozwój kopiowania (listopad 2026)
+
+### DOL-081 — File → File: kopiowanie obrazów i konwersja między formatami
+
+**Priorytet:** P1 · **Etap:** po stabilizacji selektorów i backendu zapisu · **Status:** backlog, bez konwersji w M1.35.
+
+**Cel:** umożliwić użycie pliku jako Source i jako Destination w operacji Copy. Dwie osobne ścieżki działania: wierne kopiowanie pliku oraz konwersja formatów obrazów, gdy parser wejściowy i writer wyjściowy obsługują dany format. Kandydaci: RAW, HDF z/bez RDB (rozróżniać znaczenie struktury), ADF oraz IFF DOLY. Sama zmiana rozszerzenia nigdy nie jest konwersją.
+
+**Warunki:** wykrycie formatu z zawartości, możliwość ustawienia wyjściowego formatu, walidacja pojemności/geometrii, obsługa błędów i przerwania bez uszkodzenia źródła, wykrywanie tej samej ścieżki, bezpieczny plik tymczasowy i zatwierdzenie dopiero po ukończeniu. Unsupported/incompatible format => jawne odrzucenie. W pierwszym kroku GUI pokazuje File → File w Copy, natomiast silnik pozostaje demonstracyjny.
+
+### DOL-082 — Jawny wybór metody kopiowania
+
+**Priorytet:** P1 · **Etap:** przed wdrożeniem faktycznego kopiowania · **Status:** backlog.
+
+**Cel:** po wyborze Source i Destination użytkownik wybiera metodę: domyślnie sektor-po-sektor (Raw/Exact), opcjonalnie pomijanie pustych bloków / sparse (tylko gdy semantyka formatu na to pozwala), w przyszłości kopiowanie użytych bloków (wymaga zweryfikowanego filesystemu). Dla File → File rozdzielić Exact copy i Convert image; wybór metody nie może sugerować możliwości, których odpowiedni backend nie posiada.
+
+**Warunki:** metoda dobierana i weryfikowana przez niezależną macierz możliwości backendów, niezależne od typu operacji Retry/Verify, weryfikacja zgodności rozmiaru i struktury, blokada nakładających się zakresów, wyraźne ostrzeżenia dla destrukcyjnych operacji Berserk. Opcje niewspierane pozostają nieaktywne; UI nie uruchamia niezaimplementowanej metody.
+
+### DOL-083 — Disk Vet: source-only punkt wejścia do DiskDoctor
+
+**Priorytet:** P1 · **Etap:** po implementacji analizy i planowania napraw · **Status:** w M1.35 tylko pozycja Operation i Source Cycle.
+
+**Cel:** nowa żartobliwa nazwa interfejsowa **Disk Vet** z opisem "filesystem first aid", powiązana z istniejącym epikiem DOCTOR (m.in. DOL-037 oraz DOL-038). Dopuszczalne wskazanie Source jako Physical, Partition, Logical lub plik obrazu. Destination nie jest wymagane w obecnym szkielecie. Docelowo możliwy bezpieczny recovery na inny nośnik, ale wyłącznie jako osobny, zatwierdzony workflow.
+
+**Warunki:** w M1.35 Start dla Disk Vet bezwarunkowo wyłączony; żadnych zapisów, napraw ani fałszywych raportów. W przyszłości wymagane odczytowe rozpoznanie FS, podgląd planu napraw, kopia bezpieczeństwa, świadoma zgoda przed zapisem.
+
+### DOL-084 — Centralna polityka Operation → Source/Destination i Berserk
+
+**Priorytet:** P0 dla GUI · **Etap:** M1.35 oraz późniejsze rozszerzenia · **Status:** M1.35 implementuje filtrowanie dla Normal.
+
+**Cel:** zachować GadTools Cycle Operation na górze głównego okna, a Source/Destination Cycle budować z maski dozwolonych DollyEndpointMode; dokładne mapowanie indeksu Cycle na identyfikator trybu. W Normal: Copy Unit→Unit, Partition→Partition, Logical→Logical, File→File; Restore File→Unit/Partition; Create image Unit/Partition/Logical→File; Scan i Inventory source-only; Disk Vet source-only. Destination pozostaje niedostępne, dopóki Source nie wybierze zgodnego typu.
+
+**Warunki:** istniejące niezgodne wybory zachować do poprawienia, ale blokować Start; nie usuwać ich po zmianie Operation. Berserk jest na razie wyłącznie parametrem polityki (bez przełącznika w GUI i bez zezwolenia na zapis). W przyszłości jawne potwierdzenia operacji wyjątkowych oraz sprawdzanie geometrii, wspólnych zakresów i aliasów urządzeń.

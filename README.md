@@ -1,6 +1,6 @@
 # 🐑 Dolly — Disk Imaging, Cloning & Recovery for Amiga
 
-**Public development repository • Milestone M0 • no usable Amiga release yet**
+**Public development repository • M1.46 development branch • experimental native prototypes**
 
 **No sector left behind. No sheep uncounted.**
 
@@ -16,18 +16,20 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 - Disk-based scratch, optional AddBuffers with consent and rollback, safe/experimental Berserk modes.
 - Dedicated **Sheep Counter** 320×256 progress screen with error counters, sheep mascot and optional 8-bit audio.
 
-## Current implementation (M0)
+## Current implementation
 
-This is **experimental development code, not a usable Amiga release**.
+| Area | Availability |
+| --- | --- |
+| M0 foundations | Read-only BlockSource, host image inspection, bounded RDB/MBR parsing, hybrid and capacity diagnostics, structural IFF inspection, device-profile safety checks. |
+| Native GadTools | Approved main window, Source/Destination pickers, Sheep Inventory and resizable Sheep Counter. |
+| Surface Scan | Read-only scans on qualified UAE-IDE sources, progress, retries, error map and text logs with LBA and CHS when reported geometry permits. |
+| Create Image | Whole unit, partition or logical volume to RAW, HDF or IFF DOLY. The source is read-only and the image is staged before publication. |
+| IFF DOLY | Single-file v1 raw and v2 Fast (PackBits) or Compact (LZSS/PackBits) with per-chunk CRC32. |
 
-- Portable, read-only `DollyBlockSource`, POSIX file adapter and separate experimental AmigaOS device adapter (OpenDevice/DoIO).
-- Conservative device read planner with 4 GiB boundary checks and verified NSD capability requirement; **TD64 not implemented**.
-- Host image probing: ADF size candidates, RAW/HDF candidates and IFF FORM DOLY recognition.
-- Read-only RDB/PART inspector, primary MBR and nested 0x76 RDB discovery; preliminary range validation.
-- Streaming `FORM DOLY` envelope/chunk parser (**not a full backup/restore format**).
-- CLI tools: `dolly-inspect`, `dolly-rdb`, `dolly-layout`, `dolly-iff`.
-- Synthetic regression tests plus a mocked Exec device. Host test status: **8/8 CTest suites locally** (GCC; native 68000 has **not** been tested).
-- Public engineering journal for bugs, contradictions and unexpected hardware lessons.
+MC68000 builds and FS-UAE A600 / AmigaOS 2.05 checks have passed for the
+prototypes. See the [test matrix](docs/TEST_MATRIX.md) for exact coverage.
+Physical-controller qualification, image restore, Smart Clone and repair
+remain open.
 
 ```sh
 cmake -S . -B build
@@ -40,12 +42,11 @@ ctest --test-dir build --output-on-failure
 ./build/dolly-iff backup.dly
 ```
 
-**No native Amiga executable, disk writer, Smart Clone, filesystem repair or full DOLY payload format exists yet.** A synthetic/mock host test is *not* hardware validation.
-
-See [AmigaOS I/O limitations](docs/AMIGA_IO.md) and [IFF format state](docs/IFF_FORMAT.md).
+See [Surface Scan](docs/SURFACE_SCAN.md), [Create Image](docs/CREATE_IMAGE.md),
+[IFF DOLY](docs/IFF_FORMAT.md), and [AmigaOS I/O limits](docs/AMIGA_IO.md).
 
 ## Plans and community
-See [project scope](docs/SPECIFICATION.md), the [60-story backlog](docs/BACKLOG.md), [M0 sprint](docs/SPRINT_M0.md), [roadmap](docs/ROADMAP.md), [Polish introduction article](docs/ARTICLE_PL.md), [Retroware](RETROWARE.md), [contributing](CONTRIBUTING.md) and the [Post-MVP Flock Manager epic](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
+See [project scope](docs/SPECIFICATION.md), the [product backlog](docs/BACKLOG.md), [M0 sprint](docs/SPRINT_M0.md), [roadmap](docs/ROADMAP.md), [Polish introduction article](docs/ARTICLE_PL.md), [Retroware](RETROWARE.md), [contributing](CONTRIBUTING.md) and the [Post-MVP Flock Manager epic](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
 ## Engineering journal
 
@@ -63,13 +64,13 @@ Dolly's DMA diagnostic catalog now includes a cause and up to three **safe, acti
 
 The read-only AmigaOS adapter now **refuses unknown DMA profiles**, and the host mock exercises address-mask/24-bit-memory constraints, NSD capability absence, short reads and I/O errors. See [DMA safety design](docs/DMA_SAFETY.md). This is *not* real controller certification.
 
-## Motorola 68000 smoke milestone (source only)
+## Motorola 68000 smoke milestone
 
-An experimental, POSIX-free `dolly-native-smoke` target now exercises synthetic RDB parsing and read planning **in memory**; it cannot access disks. Native 68000 compilation and WinUAE execution are still pending. See [Native smoke test and cross-build instructions](docs/NATIVE_SMOKE.md).
+An experimental, POSIX-free `dolly-native-smoke` target now exercises synthetic RDB parsing and read planning **in memory**; it cannot access disks. The early cross-build and WinUAE smoke run were reported by the maintainer. Later emulated tests are recorded separately. See [Native smoke test and cross-build instructions](docs/NATIVE_SMOKE.md).
 
-## Sheep Inventory (early host prototype)
+## Sheep Inventory
 
-The preliminary `dolly-inventory IMAGE [BLOCK_BYTES]` command displays MBR/RDB partition details using a **streaming, allocation-free field API** with units, provenance, evidence levels (declared/observed/derived/estimated) and explicit unavailable values. The early field providers cover RDSK, PART (including signed Boot Priority) and MBR; device and filesystem support are planned. Shared non-destructive warning streams cover MaxTransfer and preliminary RDB overlap checks, **including contextual, safe suggested checks**. A GadTools window and richer device/volume providers are future work. See [Sheep Inventory design](docs/SHEEP_INVENTORY.md) and [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
+The preliminary `dolly-inventory IMAGE [BLOCK_BYTES]` command displays MBR/RDB partition details using a **streaming, allocation-free field API** with units, provenance, evidence levels (declared/observed/derived/estimated) and explicit unavailable values. The early field providers cover RDSK, PART (including signed Boot Priority) and MBR; device and filesystem support are planned. Shared non-destructive warning streams cover MaxTransfer and preliminary RDB overlap checks, **including contextual, safe suggested checks**. The native GadTools prototype shows device and partition details, supports clipboard copying and exports supported RDB/MBR metadata backups. See [Sheep Inventory design](docs/SHEEP_INVENTORY.md) and [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13).
 
 ## MaxTransfer audit
 
@@ -88,7 +89,7 @@ Dolly source code is licensed under the **[MIT License](LICENSE)**. Software wil
 
 Dolly's native baseline is **640×256 with topaz.font/8**, including window borders, title and buttons. Default UI text follows the current **system Screen Font**; an explicitly selected custom Dolly font takes precedence *only if it fits*. Otherwise views reflow using Screen Font, then Topaz/8 and compact pagination. If even the compact layout cannot fit, no inaccessible window should open.
 
-The portable screen watcher coalesces screen mode/font change events. On AmigaOS 2.x+ the experimental `StartNotify` adapter watches `ENV:sys/screenmode.prefs` and `screenfont.prefs`. A future optional `screennotify.library` adapter will handle additional public-screen lifecycle notifications. **These are source-level prototypes, not a tested native GadTools UI.** See [GUI architecture](docs/GUI_ARCHITECTURE.md), [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14) and [Issue #15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15).
+The portable screen watcher coalesces screen mode/font change events. On AmigaOS 2.x+ the experimental `StartNotify` adapter watches `ENV:sys/screenmode.prefs` and `screenfont.prefs`. A future optional `screennotify.library` adapter will handle additional public-screen lifecycle notifications. Live screen-mode notification remains prototype work beside the tested GadTools windows. See [GUI architecture](docs/GUI_ARCHITECTURE.md), [Issue #14](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/14) and [Issue #15](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/15).
 
 ## Optional-resource compatibility and controller knowledge
 

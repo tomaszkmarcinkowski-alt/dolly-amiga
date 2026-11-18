@@ -22,9 +22,11 @@ typedef struct DollyAmigaDeviceOptions {
     uint8_t require_24bit_dma;   /* request MEMF_24BITDMA when required */
     DollyAmigaDmaReportFn report_dma_problem; /* required to open raw device */
     void *report_user;
+    uint64_t required_read_end; /* exclusive byte offset; zero skips preflight */
+    uint8_t verified_uae_ide;    /* allow READ(10) on the qualified UAE-IDE path */
 } DollyAmigaDeviceOptions;
-/* No writes, no guessing size, no TD64 unless NSD capability is verified.
- * NDK compilation and actual-device operation remain UNVERIFIED. */
+/* Read-only. Uses advertised NSD READ64 or the qualified UAE-IDE fallback
+ * for large offsets. Other controllers need independent DMA verification. */
 DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opts,
                                         DollyBlockSource **out);
 #endif

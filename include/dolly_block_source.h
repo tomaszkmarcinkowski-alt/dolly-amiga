@@ -12,7 +12,8 @@ typedef enum DollyBlockStatus {
     DOLLY_BLOCK_ESHORT,
     DOLLY_BLOCK_EIO,
     DOLLY_BLOCK_ENOMEM,
-    DOLLY_BLOCK_EUNSUPPORTED
+    DOLLY_BLOCK_EUNSUPPORTED,
+    DOLLY_BLOCK_EDEVICE
 } DollyBlockStatus;
 
 typedef struct DollyBlockReadResult {

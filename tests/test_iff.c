@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "dolly_iff.h"
+#include "dolly_dly_writer.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,129 @@ static DollyIffStatus probe(const unsigned char *p,size_t n,unsigned *chunks){
  assert(dolly_block_open_file(name,&src)==DOLLY_BLOCK_OK);
  status=dolly_iff_scan(src,NULL,NULL,&sum);*chunks=sum.chunk_count;
  dolly_block_close(src);assert(unlink(name)==0);return status;
+}
+typedef struct Buffer {
+    unsigned char bytes[2048];
+    size_t used,limit,position;
+} Buffer;
+
+static int append(void *context,const void *data,size_t size) {
+    Buffer *buffer=context;
+    if(size>buffer->limit-buffer->position)return 0;
+    memcpy(buffer->bytes+buffer->position,data,size);
+    buffer->position+=size;
+    if(buffer->position>buffer->used)buffer->used=buffer->position;
+    return 1;
+}
+static uint32_t rd32(const unsigned char *p) {
+    return (uint32_t)p[0]<<24 | (uint32_t)p[1]<<16 | (uint32_t)p[2]<<8 | p[3];
+}
+static void verify_writer(void) {
+    DollyDlyWriter writer;
+    Buffer buffer={.limit=2048};
+    unsigned char payload[1536];
+    unsigned chunks,i;
+    for(i=0;i<sizeof(payload);++i)payload[i]=(unsigned char)i;
+    /* Also exercise preservation of absolute LBAs larger than 32 bits. */
+    assert(dolly_dly_init(&writer,UINT64_C(0x100000003),3,512,1024));
+    assert(dolly_dly_begin(&writer,append,&buffer));
+    assert(!dolly_dly_complete(&writer));
+    assert(!dolly_dly_append(&writer,payload,512));
+    assert(dolly_dly_append(&writer,payload,1024));
+    assert(dolly_dly_append(&writer,payload+1024,512));
+    assert(dolly_dly_complete(&writer));
+    assert(!dolly_dly_append(&writer,payload,512));
+    assert(buffer.used==1644 && probe(buffer.bytes,buffer.used,&chunks)==DOLLY_IFF_OK);
+    assert(chunks==4);
+    assert(!memcmp(buffer.bytes+12,"HEAD",4) && rd32(buffer.bytes+20)==1);
+    assert(!memcmp(buffer.bytes+28,"GEOM",4));
+    assert(rd32(buffer.bytes+36)==1 && rd32(buffer.bytes+40)==3);
+    assert(rd32(buffer.bytes+48)==3 && rd32(buffer.bytes+52)==512);
+    assert(!memcmp(buffer.bytes+60,"CHNK",4) && rd32(buffer.bytes+64)==1040);
+    assert(rd32(buffer.bytes+76)==1024 && rd32(buffer.bytes+80)==0xb70b4c26u);
+    assert(!memcmp(buffer.bytes+84,payload,1024));
+    assert(!memcmp(buffer.bytes+1108,"CHNK",4) && rd32(buffer.bytes+1112)==528);
+    assert(rd32(buffer.bytes+1120)==2 && rd32(buffer.bytes+1124)==512);
+    assert(rd32(buffer.bytes+1128)==0x1c613576u);
+    assert(!memcmp(buffer.bytes+1132,payload+1024,512));
+
+    buffer.used=buffer.position=0;
+    buffer.limit=84; /* fails the payload write after the chunk header */
+    assert(dolly_dly_init(&writer,0,1,512,1024));
+    assert(dolly_dly_begin(&writer,append,&buffer));
+    assert(!dolly_dly_append(&writer,payload,512));
+    assert(!dolly_dly_complete(&writer));
+    buffer.limit=2048;
+    assert(!dolly_dly_append(&writer,payload,512));
+    assert(!dolly_dly_init(&writer,0,INT32_MAX/512,512,16384));
+    assert(!dolly_dly_init(&writer,UINT64_MAX,2,512,1024));
+    assert(!dolly_dly_init(&writer,0,2,512,1000));
+}
+static int seek(void *context,uint32_t offset) {
+    Buffer *buffer=context;
+    if(offset>buffer->used || buffer->limit==0)return 0;
+    buffer->position=offset;
+    return 1;
+}
+static void verify_compression(void) {
+    DollyDlyWriter writer;
+    unsigned char data[1024],decoded[512],packed[512];
+    uint16_t hash[DOLLY_DLY_HASH_SLOTS];
+    unsigned mode,i,chunks;
+    uint32_t random=123456789u;
+    memset(data,0,512);
+    data[0]=1;
+    data[1]=2; /* gives the first PackBits payload an odd length */
+    for(i=512;i<sizeof(data);++i) {
+        random^=random<<13;
+        random^=random>>17;
+        random^=random<<5;
+        data[i]=(unsigned char)random;
+    }
+    for(mode=DOLLY_DLY_PACKBITS;mode<=DOLLY_DLY_LZSS;++mode) {
+        Buffer buffer={.limit=2048};
+        size_t pos=60;
+        assert(dolly_dly_init(&writer,99,2,512,512));
+        assert(dolly_dly_compress(&writer,(DollyDlyCodec)mode,packed,hash,seek));
+        assert(dolly_dly_begin(&writer,append,&buffer));
+        assert(!dolly_dly_finish(&writer));
+        assert(dolly_dly_append(&writer,data,512));
+        assert(dolly_dly_append(&writer,data+512,512));
+        assert(!dolly_dly_complete(&writer));
+        assert(dolly_dly_finish(&writer) && dolly_dly_complete(&writer));
+        assert(dolly_dly_finish(&writer));
+        assert(rd32(buffer.bytes+4)==buffer.used-8);
+        assert(rd32(buffer.bytes+20)==2);
+        assert(probe(buffer.bytes,buffer.used,&chunks)==DOLLY_IFF_OK && chunks==4);
+        for(i=0;i<2;++i) {
+            size_t length=rd32(buffer.bytes+pos+4);
+            DollyDlyCodec codec=(DollyDlyCodec)rd32(buffer.bytes+pos+24);
+            assert(codec==(i==0?DOLLY_DLY_PACKBITS:DOLLY_DLY_RAW));
+            if(i==0)assert((length&1u) && buffer.bytes[pos+8+length]==0);
+            assert(dolly_dly_decode(codec,buffer.bytes+pos+28,length-20,
+                                   decoded,sizeof(decoded)));
+            assert(memcmp(decoded,data+i*512,512)==0);
+            pos+=8+length+(length&1u);
+        }
+        assert(pos==buffer.used);
+    }
+    for(i=0;i<512;++i)data[i]=(unsigned char)(i%31u);
+    {
+        Buffer buffer={.limit=2048};
+        size_t length;
+        assert(dolly_dly_init(&writer,0,1,512,512));
+        assert(dolly_dly_compress(&writer,DOLLY_DLY_LZSS,packed,hash,seek));
+        assert(dolly_dly_begin(&writer,append,&buffer));
+        assert(dolly_dly_append(&writer,data,512));
+        assert(rd32(buffer.bytes+84)==DOLLY_DLY_LZSS);
+        length=rd32(buffer.bytes+64)-20u;
+        assert(dolly_dly_decode(DOLLY_DLY_LZSS,buffer.bytes+88,length,decoded,512));
+        assert(memcmp(data,decoded,512)==0);
+        assert(!dolly_dly_decode(DOLLY_DLY_LZSS,buffer.bytes+88,length-1,decoded,512));
+        assert(!dolly_dly_decode(DOLLY_DLY_LZSS,(const unsigned char *)"\1\0\0",3,decoded,3));
+        buffer.limit=0; /* failed FORM size fix-up cannot publish an image */
+        assert(!dolly_dly_finish(&writer) && !dolly_dly_complete(&writer));
+    }
 }
 int main(void){
  unsigned char p[128]={0};unsigned chunks;unsigned i;
@@ -35,5 +159,7 @@ int main(void){
   p[4]=(unsigned char)i;p[5]=(unsigned char)(i*3);
   {DollyIffStatus s=probe(p,24,&chunks);assert(s!=DOLLY_IFF_IO_ERROR);}
  }
- puts("IFF structural tests passed");return 0;
+ verify_writer();
+ verify_compression();
+ puts("IFF structural and DLY writer tests passed");return 0;
 }
