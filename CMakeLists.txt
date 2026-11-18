@@ -109,6 +109,7 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_surface_scan.c amiga/dolly_amiga_source.c
       amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
       amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
+      amiga/dolly_amiga_io_settings.c amiga/dolly_amiga_prefs.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
       src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
     target_compile_options(dolly-two-window-demo PRIVATE

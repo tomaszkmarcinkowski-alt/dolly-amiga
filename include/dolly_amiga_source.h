@@ -24,7 +24,12 @@ typedef struct DollyAmigaDeviceOptions {
     void *report_user;
     uint64_t required_read_end; /* exclusive byte offset; zero skips preflight */
     uint8_t verified_uae_ide;    /* allow READ(10) on the qualified UAE-IDE path */
+    uint32_t buffer_memory;    /* validated AllocMem memory-type flags */
+    uint8_t require_rom_scsi;   /* verify the actual Kickstart driver and use Chip RAM */
+    uint8_t bypass_legacy_scsi_limit; /* still require an advertised large-offset command */
 } DollyAmigaDeviceOptions;
+/* Identify the opened scsi.device before using a stock Kickstart profile. */
+int dolly_amiga_probe_rom_scsi(uint32_t unit);
 /* Read-only. Uses advertised NSD READ64 or the qualified UAE-IDE fallback
  * for large offsets. Other controllers need independent DMA verification. */
 DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opts,

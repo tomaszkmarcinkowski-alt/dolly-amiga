@@ -70,7 +70,7 @@ void dolly_image_cancel(DollyAmigaImage *image) {
     release(image,0);
 }
 int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
-                     const DollyEndpoint *target) {
+                     const DollyEndpoint *target,struct Window *parent) {
     DollyPhysicalEntry destination={0};
     BPTR previous,staging;
     const char *name;
@@ -87,7 +87,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
         target->image_format!=DOLLY_IMAGE_IFF_DOLY &&
         target->image_format!=DOLLY_IMAGE_IFF_FAST &&
         target->image_format!=DOLLY_IMAGE_IFF_COMPACT))return 0;
-    if(!dolly_surface_open(&image->reader,source)) {
+    if(!dolly_surface_open(&image->reader,source,parent)) {
         image->failure=image->reader.failure;
         return 0;
     }
@@ -96,9 +96,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     if(target->image_format==DOLLY_IMAGE_IFF_DOLY ||
        target->image_format==DOLLY_IMAGE_IFF_FAST ||
        target->image_format==DOLLY_IMAGE_IFF_COMPACT) {
-        batch_bytes=DOLLY_MEDIA_TRANSFER_BYTES;
-        if(batch_bytes<image->reader.sector_bytes)
-            batch_bytes=image->reader.sector_bytes;
+        batch_bytes=image->reader.transfer_bytes;
         image->failure="IFF DOLY image exceeds the single-file limit.";
         if(!dolly_dly_init(&image->dly,image->reader.first_lba,image->reader.total,
                           image->reader.sector_bytes,batch_bytes))goto fail;
@@ -153,7 +151,7 @@ void dolly_image_step(DollyAmigaImage *image) {
     if(!image->file)return;
     remaining=reader->total-reader->processed;
     lba=reader->first_lba+reader->processed;
-    sectors=DOLLY_MEDIA_TRANSFER_BYTES/reader->sector_bytes;
+    sectors=reader->transfer_bytes/reader->sector_bytes;
     if(!sectors)sectors=1;
     if(sectors>remaining)sectors=(uint32_t)remaining;
     bytes=(size_t)sectors*reader->sector_bytes;

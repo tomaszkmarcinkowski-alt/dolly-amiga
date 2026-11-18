@@ -17,10 +17,9 @@ filesystem consistency or predict device health.
    Reject missing or incompatible geometry rather than scanning the
    whole unit as a fallback.
 3. Validate sector alignment, nonzero length and the full range against
-   the reported capacity. A verified device profile is required before
-   raw reads. The current GUI enables the profile only for scsi.device
-   reporting the UAE-IDE INQUIRY vendor. Other controllers require
-   their own verified transfer and DMA constraints.
+   the reported capacity. Use the validated RDB parameters and any
+   manual overrides to configure the raw read. See the
+   [automatic settings and manual override](AMIGA_IO.md#automatic-settings-and-manual-override).
 
 ## Large-offset reads
 
@@ -31,13 +30,16 @@ SCSI READ(10), which takes a sector address instead of a 32-bit byte
 offset. The fallback is bounded to the ATA LBA28 address range
 (128 GiB with 512-byte sectors). A range that needs large offsets and
 has neither available path is rejected before the scan starts.
-Neither path truncates the offset to issue a legacy read.
+Active `scsi.device` versions below 43 (including AmigaOS 3.1 and earlier)
+are limited to requests within 4 GiB. A newer driver needs a valid
+NSD READ64 advertisement for larger offsets. The SCSI READ(10)
+fallback remains specific to UAE-IDE.
 
 ## Read and classify sectors
 
 Advance from the first LBA to the end of the validated range one
-request at a time. The first UAE-IDE path uses up to 16 KiB per request
-(or one sector if larger), with a DMA-checked buffer. After an I/O
+request at a time. The resolved MaxTransfer and a 16 KiB batch ceiling
+(or one sector if larger) govern the size of reads into the DMA-checked buffer. After an I/O
 error or a short transfer on a multi-sector request, read its whole
 range sector by sector. Retry a failed individual sector once. If it
 still fails, mark it unreadable, write its absolute LBA and failure

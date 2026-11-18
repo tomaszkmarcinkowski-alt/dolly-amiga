@@ -18,7 +18,7 @@ int main(void){
  DollyBlockSource *s=NULL;DollyBlockReadResult r;
  DollyAmigaDeviceOptions opt={
      "mock.device",0,UINT64_C(0x200000000),512,1024,
-     0x00fffffeu,2u,1u,1u,report_dma,&dma_report_count,0,0
+     0x00fffffeu,2u,1u,1u,report_dma,&dma_report_count,0,0,0,0,0
  };
  unsigned char buf[2048];unsigned i;
  /* Fail closed before opening anything if DMA limits are unknown. */
@@ -104,6 +104,46 @@ int main(void){
  opt.capacity_bytes=opt.required_read_end=UINT64_C(0x2000000200);
  dolly_mock_set_nsd(0);
  assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EUNSUPPORTED && s==NULL);
+ /* ROM profile validates the opened device, uses Chip RAM, and
+  * requires both a modern version and an advertised READ64 command. */
+ opt.device_name="scsi.device";
+ opt.verified_uae_ide=0;
+ opt.require_rom_scsi=1;
+ opt.capacity_bytes=UINT64_C(0x200000000);
+ opt.required_read_end=UINT64_C(0x100000000);
+ dolly_mock_set_rom_scsi_version(0);
+ assert(!dolly_amiga_probe_rom_scsi(0));
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EDEVICE && s==NULL);
+ dolly_mock_set_rom_scsi_version(40);
+ dolly_mock_set_nsd(1);
+ assert(dolly_amiga_probe_rom_scsi(0));
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ assert(dolly_mock_last_alloc_flags() & (1u<<1));
+ r=dolly_block_read(s,UINT64_C(0xfffffe00),buf,512);
+ assert(r.status==DOLLY_BLOCK_OK && !dolly_mock_last_read64());
+ r=dolly_block_read(s,UINT64_C(0xfffffe00),buf,1024);
+ assert(r.status==DOLLY_BLOCK_EUNSUPPORTED && r.bytes_read==0);
+ dolly_block_close(s);
+ opt.required_read_end+=512;
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EUNSUPPORTED && s==NULL);
+ opt.bypass_legacy_scsi_limit=1;
+ dolly_mock_set_nsd(0);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EUNSUPPORTED && s==NULL);
+ dolly_mock_set_nsd(1);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,UINT64_C(0x100000000),buf,512);
+ assert(r.status==DOLLY_BLOCK_OK && dolly_mock_last_read64());
+ dolly_block_close(s);
+ opt.bypass_legacy_scsi_limit=0;
+ dolly_mock_set_rom_scsi_version(43);
+ dolly_mock_set_nsd(2);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EUNSUPPORTED && s==NULL);
+ dolly_mock_set_nsd(1);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,UINT64_C(0x100000000),buf,512);
+ assert(r.status==DOLLY_BLOCK_OK && dolly_mock_last_read64());
+ assert(!dolly_mock_last_scsi_lba());
+ dolly_block_close(s);
  assert(dma_report_count==3); /* No DMA warnings during valid-profile reads. */
  puts("Mock Exec backend checks passed");return 0;
 }

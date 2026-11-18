@@ -188,6 +188,18 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
             p->max_transfer=be32(r->buffer+180);
         if(p->dma_mask_present)
             p->dma_mask=be32(r->buffer+184);
+        if(envwords>=12u) {
+            p->io_hints.present|=DOLLY_IO_BUF_MEM;
+            p->io_hints.buffer_memory=be32(r->buffer+176);
+        }
+        if(p->max_transfer_present) {
+            p->io_hints.present|=DOLLY_IO_MAX_TRANSFER;
+            p->io_hints.max_transfer=p->max_transfer;
+        }
+        if(p->dma_mask_present) {
+            p->io_hints.present|=DOLLY_IO_MASK;
+            p->io_hints.mask=p->dma_mask;
+        }
         dos_name(type,dos);
         strcpy(label_copy,p->label);
         /* DosType is RDB filesystem metadata, not a filesystem

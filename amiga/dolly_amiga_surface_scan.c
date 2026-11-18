@@ -1,4 +1,7 @@
 #include "dolly_amiga_surface_scan.h"
+#include "dolly_amiga_io_settings.h"
+#include <intuition/intuition.h>
+#include <proto/intuition.h>
 #include "dolly_amiga_device_query.h"
 #include "dolly_amiga_partition_scan.h"
 #include "dolly_amiga_physical_catalog.h"
@@ -21,22 +24,25 @@ void dolly_surface_close(DollySurfaceScan *scan) {
     scan->buffer=NULL;
 }
 
-int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint) {
+int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
+                       struct Window *parent) {
     DollyPhysicalEntry device;
     DollyMediaGeometry geometry;
     DollyAmigaDeviceOptions opts;
+    DollyIoHints hints={0},manual;
     DollyBlockStatus status;
     const char *tail=NULL;
     char name[112],size[40];
     ULONG logical_sector=0;
     uint64_t capacity,start=0,length=0;
-    uint32_t transfer;
+    uint32_t transfer,batch_limit;
+    int uae_ide,complete_rdb=0;
     dolly_surface_close(scan);
     dolly_surface_log_clear(&scan->log);
     memset(scan,0,sizeof(*scan));
     scan->failure="Source has no validated device range.";
     if(endpoint->kind==DOLLY_ENDPOINT_LOGICAL) {
-        if(!dolly_logical_extent(endpoint->path,&device,&start,&length,&logical_sector))
+        if(!dolly_logical_extent(endpoint->path,&device,&start,&length,&logical_sector,NULL))
             return 0;
     } else {
         if(endpoint->kind!=DOLLY_ENDPOINT_UNIT && endpoint->kind!=DOLLY_ENDPOINT_PARTITION)
@@ -44,33 +50,52 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint) {
         tail=dolly_amiga_parse_unit(endpoint->path,device.driver,sizeof(device.driver),&device.unit);
         if(!tail)return 0;
     }
-    scan->failure="Scan requires a verified controller profile.";
-    /* UAE-IDE reports a distinct INQUIRY vendor. The driver name alone
-     * also identifies real controllers and must not authorize a scan. */
-    if(strcmp(device.driver,"scsi.device")!=0)return 0;
+    manual=dolly_amiga_io_override(&device);
     if(!dolly_amiga_device_query(device.driver,device.unit,name,sizeof(name),
                                 size,sizeof(size),&geometry,1) ||
        !geometry.capacity_valid) {
         scan->failure="Cannot verify source geometry.";
         return 0;
     }
-    if(strncmp(name,"UAE-IDE ",8)!=0 && strcmp(name,"UAE-IDE")!=0)return 0;
+    uae_ide=strcmp(device.driver,"scsi.device")==0 &&
+            (strncmp(name,"UAE-IDE ",8)==0 || strcmp(name,"UAE-IDE")==0);
     if(geometry.block_bytes<512u || geometry.block_bytes>32768u) {
         scan->failure="Unsupported scan sector size.";
         return 0;
     }
     capacity=geometry.block_count*geometry.block_bytes;
     if(endpoint->kind==DOLLY_ENDPOINT_UNIT)length=capacity;
-    if(endpoint->kind==DOLLY_ENDPOINT_PARTITION) {
+    if(geometry.block_bytes==512u) {
         DollyNativePartitionMap *map=malloc(sizeof(*map));
-        int ok=0;
+        int ok,found;
+        unsigned i;
         if(!map) {
             scan->failure="Not enough memory for partition scan.";
             return 0;
         }
-        if(*tail && dolly_amiga_partition_scan(device.driver,device.unit,&geometry,map) &&
-           endpoint->partition<map->count) {
+        found=dolly_amiga_partition_scan(device.driver,device.unit,&geometry,map);
+        ok=endpoint->kind!=DOLLY_ENDPOINT_PARTITION;
+        if(found && endpoint->kind==DOLLY_ENDPOINT_UNIT) {
+            complete_rdb=map->format==DOLLY_NATIVE_PARTITION_RDB && map->count!=0;
+            for(i=0;i<map->count;++i) {
+                if(map->parts[i].io_hints.present!=DOLLY_IO_ALL)complete_rdb=0;
+                dolly_io_hints_merge(&hints,map->parts[i].io_hints);
+            }
+        } else if(found && endpoint->kind==DOLLY_ENDPOINT_LOGICAL &&
+                  map->format==DOLLY_NATIVE_PARTITION_RDB) {
+            DollyIoHints disk_hints={0};
+            for(i=0;i<map->count;++i) {
+                const DollyNativePartition *part=&map->parts[i];
+                if(part->start_bytes==start && part->length_bytes==length)
+                    dolly_io_hints_merge(&disk_hints,part->io_hints);
+            }
+            hints=disk_hints;
+            complete_rdb=hints.present==DOLLY_IO_ALL;
+        } else if(found && endpoint->kind==DOLLY_ENDPOINT_PARTITION &&
+                  *tail && endpoint->partition<map->count) {
             const DollyNativePartition *part=&map->parts[endpoint->partition];
+            hints=part->io_hints;
+            complete_rdb=part->is_rdb && hints.present==DOLLY_IO_ALL;
             start=part->start_bytes;
             length=part->length_bytes;
             ok=strcmp(tail+3,part->label)==0 &&
@@ -90,7 +115,39 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint) {
     scan->sector_bytes=geometry.block_bytes;
     scan->first_lba=start/scan->sector_bytes;
     scan->total=length/scan->sector_bytes;
-    transfer=scan->sector_bytes>DOLLY_MEDIA_TRANSFER_BYTES?scan->sector_bytes:DOLLY_MEDIA_TRANSFER_BYTES;
+    if(!complete_rdb) {
+        struct EasyStruct request={
+            sizeof(struct EasyStruct),0,(STRPTR)"Dolly - I/O settings",
+            (STRPTR)"This source has no complete RDB I/O settings.\n"
+            "Dolly will use conservative scsi.device defaults\n"
+            "for missing fields and apply your manual overrides.\n"
+            "Check Settings if your controller needs different values.",
+            (STRPTR)"Continue|Settings|Cancel"
+        };
+        DollyIoHints fallback={0x00fffffeu,DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_24BIT,
+                               geometry.block_bytes>DOLLY_MEDIA_TRANSFER_BYTES?
+                               geometry.block_bytes:DOLLY_MEDIA_TRANSFER_BYTES,DOLLY_IO_ALL};
+        LONG choice=EasyRequestArgs(parent,&request,NULL,NULL);
+        if(choice!=1) {
+            scan->failure=choice==2?"Review settings, then press Start.":"Operation cancelled.";
+            if(choice==2 && parent)dolly_amiga_io_settings(parent->WScreen,endpoint);
+            return 0;
+        }
+        dolly_io_hints_override(&fallback,hints);
+        hints=fallback;
+    }
+    dolly_io_hints_override(&hints,manual);
+    if(hints.buffer_memory&DOLLY_IO_MEM_24BIT) {
+        hints.mask&=0x00ffffffu;
+    }
+    scan->failure="Invalid I/O parameters. Review the I/O override.";
+    if(!dolly_io_hints_valid(hints))return 0;
+    batch_limit=scan->sector_bytes>DOLLY_MEDIA_TRANSFER_BYTES?
+                scan->sector_bytes:DOLLY_MEDIA_TRANSFER_BYTES;
+    transfer=hints.max_transfer<batch_limit?hints.max_transfer:batch_limit;
+    transfer-=transfer%scan->sector_bytes;
+    if(!transfer)return 0;
+    scan->transfer_bytes=transfer;
     scan->buffer=malloc(transfer);
     if(!scan->buffer) {
         scan->failure="Not enough memory for scan buffer.";
@@ -102,14 +159,16 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint) {
     opts.capacity_bytes=capacity;
     opts.physical_block_bytes=scan->sector_bytes;
     opts.max_transfer_bytes=transfer;
-    opts.dma_address_mask=0x00fffffeu;
-    opts.dma_alignment=2;
+    opts.dma_address_mask=hints.mask;
+    opts.dma_alignment=dolly_io_alignment(hints.mask);
+    opts.buffer_memory=hints.buffer_memory;
     opts.dma_profile_verified=1;
-    opts.require_24bit_dma=1;
+    opts.require_24bit_dma=(uint8_t)((hints.buffer_memory&DOLLY_IO_MEM_24BIT)!=0);
     opts.report_dma_problem=report_dma;
     opts.report_user=scan;
     opts.required_read_end=start+length;
-    opts.verified_uae_ide=1;
+    opts.verified_uae_ide=(uint8_t)uae_ide;
+    opts.bypass_legacy_scsi_limit=(uint8_t)dolly_amiga_legacy_override();
     scan->failure=NULL;
     status=dolly_amiga_open_device(&opts,&scan->source);
     if(status!=DOLLY_BLOCK_OK) {
@@ -120,6 +179,9 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint) {
         dolly_surface_close(scan);
         return 0;
     }
+    printf("I/O: Mask=%08lx BufMemType=%08lx MaxTransfer=%lu Batch=%lu\n",
+           (unsigned long)hints.mask,(unsigned long)hints.buffer_memory,
+           (unsigned long)hints.max_transfer,(unsigned long)transfer);
     strcpy(scan->source_path,endpoint->path);
     strcpy(scan->device_name,name);
     scan->geometry=geometry;
@@ -135,7 +197,7 @@ void dolly_surface_step(DollySurfaceScan *scan) {
     uint32_t batch,count;
     uint64_t lba;
     if(!scan->source || scan->failure || scan->processed>=scan->total)return;
-    batch=DOLLY_MEDIA_TRANSFER_BYTES/scan->sector_bytes;
+    batch=scan->transfer_bytes/scan->sector_bytes;
     lba=scan->first_lba+scan->processed;
     if(!batch)batch=1;
     count=scan->fallback?1u:batch;

@@ -32,6 +32,8 @@ void CloseDevice(struct IORequest *req);
 LONG DoIO(struct IORequest *req);
 APTR AllocMem(ULONG bytes,ULONG flags);
 void FreeMem(APTR p,ULONG bytes);
+unsigned dolly_mock_rom_scsi_version(void);
+void dolly_mock_set_rom_scsi_version(unsigned version);
 void dolly_mock_set_nsd(int enabled);
 int dolly_mock_last_read64(void);
 uint32_t dolly_mock_last_scsi_lba(void);

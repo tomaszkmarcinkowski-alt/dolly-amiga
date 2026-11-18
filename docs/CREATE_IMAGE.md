@@ -16,8 +16,7 @@ searches for repeated sequences with LZSS. Use the `.dly` extension. Its single-
 size limit includes container overhead. See [IFF FORMAT](IFF_FORMAT.md).
 ADF remains a planned option.
 
-The source uses the validated UAE-IDE read-only backend from Surface
-Scan. Save to RAM: or a DOS filesystem whose handler can be identified
+The source uses the same [read-only RDB and override policy](AMIGA_IO.md#automatic-settings-and-manual-override) as [Surface Scan](SURFACE_SCAN.md). Save to RAM: or a DOS filesystem whose handler can be identified
 as a different unit on the source driver. Output begins in an exclusive
 `.part` drawer in the destination directory and is published under the
 requested filename after all sectors are copied and the file closes.
@@ -26,7 +25,8 @@ short/failed write discards the staged output, with a status message if
 cleanup fails.
 
 The event loop transfers one sector-aligned batch per pass. The default
-is 16 KiB, raised to one sector if necessary. The source backend owns
+ceiling is 16 KiB, raised to one sector if necessary and bounded by
+the resolved MaxTransfer. The source backend owns
 its aligned DMA bounce buffer and the image writer reuses the ordinary
 transfer buffer. An image setting does not override the driver transfer
 limit or DMA mask. User-facing buffer tuning and asynchronous double

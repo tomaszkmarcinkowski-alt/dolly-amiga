@@ -42,6 +42,25 @@ int main(void){
             assert((got==DOLLY_DMA_OK)==valid);
         }
     }
-    puts("DMA profile range/alignment tests passed");
+    {
+        DollyIoHints hints={0xfffffffeu,1u,0x1fe00u,DOLLY_IO_ALL};
+        DollyIoHints other={0x00fffffcu,DOLLY_IO_MEM_24BIT,8192u,DOLLY_IO_ALL};
+        DollyIoHints manual={0,0,4096u,DOLLY_IO_BUF_MEM|DOLLY_IO_MAX_TRANSFER};
+        dolly_io_hints_merge(&hints,other);
+        assert(hints.mask==0x00fffffcu);
+        assert(hints.buffer_memory==(1u|DOLLY_IO_MEM_24BIT));
+        assert(hints.max_transfer==8192u);
+        dolly_io_hints_override(&hints,manual);
+        assert(hints.mask==0x00fffffcu && hints.buffer_memory==0);
+        assert(hints.max_transfer==4096u && dolly_io_hints_valid(hints));
+        hints.buffer_memory=DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_FAST;
+        assert(!dolly_io_hints_valid(hints));
+        hints.buffer_memory=0;
+        hints.max_transfer=0;
+        assert(!dolly_io_hints_valid(hints));
+        assert(dolly_io_alignment(0x00fffffcu)==4u);
+        assert(dolly_io_alignment(1u)==0);
+    }
+    puts("DMA policy and range tests passed");
     return 0;
 }

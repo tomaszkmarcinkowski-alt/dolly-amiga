@@ -21,7 +21,7 @@ struct MsgPort *CreateMsgPort(void){return calloc(1,sizeof(struct MsgPort));}
 void DeleteMsgPort(struct MsgPort *p){free(p);}
 struct IORequest *CreateIORequest(struct MsgPort *p,ULONG sz){(void)p;(void)sz;return calloc(1,sizeof(struct IOStdReq)+128);}
 void DeleteIORequest(struct IORequest *p){free(p);}
-LONG OpenDevice(CONST_STRPTR n,ULONG unit,struct IORequest *r,ULONG flags){(void)r;(void)flags;(void)unit;return strcmp(n,"mock.device")==0?0:-1;}
+LONG OpenDevice(CONST_STRPTR n,ULONG unit,struct IORequest *r,ULONG flags){(void)r;(void)flags;(void)unit;return strcmp(n,"mock.device")==0 || strcmp(n,"scsi.device")==0?0:-1;}
 void CloseDevice(struct IORequest *r){(void)r;}
 APTR AllocMem(ULONG bytes,ULONG flags){g_last_alloc_flags=flags;return malloc(bytes);}
 void FreeMem(APTR p,ULONG bytes){(void)bytes;free(p);}
@@ -68,3 +68,7 @@ LONG DoIO(struct IORequest *r){
  for(i=0;i<r->io_Length;i++)((UBYTE *)r->io_Data)[i]=(UBYTE)((start+i)&255u);
  r->io_Actual=r->io_Length;r->io_Error=0;return 0;
 }
+
+static unsigned mock_rom_version;
+unsigned dolly_mock_rom_scsi_version(void) {return mock_rom_version;}
+void dolly_mock_set_rom_scsi_version(unsigned version) {mock_rom_version=version;}

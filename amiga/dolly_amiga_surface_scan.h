@@ -10,7 +10,7 @@ typedef struct DollySurfaceScan {
     DollyBlockSource *source;
     void *buffer;
     uint64_t first_lba,total,processed;
-    uint32_t sector_bytes,fallback,errors,retries;
+    uint32_t sector_bytes,transfer_bytes,fallback,errors,retries;
     unsigned retry_pending;
     const char *failure;
     DollySurfaceLog log;
@@ -22,7 +22,9 @@ typedef struct DollySurfaceScan {
 
 /* Initialize scan to zero before its first open. Each step issues at most
  * one bounded request. Caller drives steps from its event loop. */
-int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint);
+struct Window;
+int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
+                       struct Window *parent);
 void dolly_surface_step(DollySurfaceScan *scan);
 /* Close releases device resources and retains the completed log.
  * Clear scan->log when discarding the scan or shutting down. */

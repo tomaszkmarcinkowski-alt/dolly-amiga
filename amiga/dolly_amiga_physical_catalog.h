@@ -4,6 +4,7 @@
  * records. Never opens drivers, sends I/O or follows DOS pointers
  * after UnLockDosList. A registration is not proof of present media.
  */
+#include "dolly_dma_policy.h"
 #include <exec/types.h>
 #include <dos/dos.h>
 #include <stdint.h>
@@ -21,5 +22,6 @@ typedef struct DollyPhysicalCatalog {
 int dolly_physical_from_lock(BPTR lock,DollyPhysicalEntry *device);
 void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out);
 int dolly_logical_extent(const char *name,DollyPhysicalEntry *device,
-                         uint64_t *start,uint64_t *length,ULONG *sector_bytes);
+                         uint64_t *start,uint64_t *length,ULONG *sector_bytes,
+                         DollyIoHints *hints);
 #endif

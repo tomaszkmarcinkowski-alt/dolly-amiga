@@ -14,7 +14,7 @@ typedef struct DollyAmigaImage {
 
 /* Initialize to zero. Each step copies one sector-aligned chunk. */
 int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
-                     const DollyEndpoint *target);
+                     const DollyEndpoint *target,struct Window *parent);
 void dolly_image_step(DollyAmigaImage *image);
 void dolly_image_cancel(DollyAmigaImage *image);
 #endif

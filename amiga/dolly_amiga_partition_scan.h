@@ -1,6 +1,7 @@
 #ifndef DOLLY_AMIGA_PARTITION_SCAN_H
 #define DOLLY_AMIGA_PARTITION_SCAN_H
 #include "dolly_amiga_device_query.h"
+#include "dolly_dma_policy.h"
 #include <dos/dos.h>
 #define DOLLY_PART_MAX 16u
 typedef struct DollyNativePartition {
@@ -9,6 +10,7 @@ typedef struct DollyNativePartition {
     uint64_t start_bytes,length_bytes;
     ULONG low_cyl,high_cyl,fs_block_bytes,sectors_per_block,dos_type;
     ULONG max_transfer,dma_mask;
+    DollyIoHints io_hints;
     int32_t boot_priority;
     unsigned char dos_type_present,boot_priority_present;
     unsigned char max_transfer_present,dma_mask_present;

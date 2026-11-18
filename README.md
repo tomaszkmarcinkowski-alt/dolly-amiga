@@ -1,4 +1,5 @@
 # 🐑 Dolly — Disk Imaging, Cloning & Recovery for Amiga
+[Alpha 2 is the final read-only build.](docs/RELEASE_ALPHA_2.md)
 
 **Public development repository • M1.46 development branch • experimental native prototypes**
 
@@ -22,7 +23,7 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 | --- | --- |
 | M0 foundations | Read-only BlockSource, host image inspection, bounded RDB/MBR parsing, hybrid and capacity diagnostics, structural IFF inspection, device-profile safety checks. |
 | Native GadTools | Approved main window, Source/Destination pickers, Sheep Inventory and resizable Sheep Counter. |
-| Surface Scan | Read-only scans on qualified UAE-IDE sources, progress, retries, error map and text logs with LBA and CHS when reported geometry permits. |
+| Surface Scan | Read-only scans using validated RDB settings and per-unit I/O overrides, progress, retries, error map and text logs with LBA and CHS when reported geometry permits. |
 | Create Image | Whole unit, partition or logical volume to RAW, HDF or IFF DOLY. The source is read-only and the image is staged before publication. |
 | IFF DOLY | Single-file v1 raw and v2 Fast (PackBits) or Compact (LZSS/PackBits) with per-chunk CRC32. |
 
@@ -62,7 +63,7 @@ Dolly's DMA diagnostic catalog now includes a cause and up to three **safe, acti
 
 ## DMA safety policy (experimental)
 
-The read-only AmigaOS adapter now **refuses unknown DMA profiles**, and the host mock exercises address-mask/24-bit-memory constraints, NSD capability absence, short reads and I/O errors. See [DMA safety design](docs/DMA_SAFETY.md). This is *not* real controller certification.
+The native read path uses validated RDB I/O settings by default and supports a per-unit manual override. The host mock exercises DMA address constraints, NSD capability handling, short reads and I/O errors. Physical controller validation is pending. See [Amiga I/O policy](docs/AMIGA_IO.md#automatic-settings-and-manual-override).
 
 ## Motorola 68000 smoke milestone
 

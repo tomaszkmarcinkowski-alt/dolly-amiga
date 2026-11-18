@@ -11,6 +11,7 @@
 #include "dolly_amiga_surface_scan.h"
 #include "dolly_amiga_log_view.h"
 #include "dolly_amiga_image.h"
+#include "dolly_amiga_io_settings.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
@@ -61,10 +62,10 @@ static const char hide_label[]="Hide";
 #define MAIN_DESC_ID 214u
 #define MAIN_SOURCE_TEXT_ID 215u
 #define MAIN_TARGET_TEXT_ID 216u
-#define MAIN_INVENTORY_ID 217u
+#define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly M1.46"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 2"
 #define MAIN_CONTROLS_OFFSET 87
 #define MAIN_PROGRESS_OFFSET 125
 #define MAIN_STATUS_OFFSET 147
@@ -85,7 +86,7 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *inventory, *placeholder, *stop, *quit;
+    struct Gadget *show, *settings, *placeholder, *stop, *quit;
     struct Gadget *start, *hide, *log, *count, *errors, *percent;
     struct Gadget *device,*target_button,*source_text,*target_text;
     struct Gadget *description,*op_selector,*status;
@@ -102,6 +103,14 @@ typedef struct DollyDemoView {
 } DollyDemoView;
 
 static struct Screen *public_screen;
+static struct Menu *settings_menu;
+#define IO_SETTINGS_ITEM FULLMENUNUM(0,0,NOSUB)
+
+static struct NewMenu settings_items[]={
+    {NM_TITLE,(STRPTR)"Settings",NULL,0,0,NULL},
+    {NM_ITEM,(STRPTR)"I/O override...",NULL,0,0,NULL},
+    {NM_END,NULL,NULL,0,0,NULL}
+};
 static struct DrawInfo *screen_info;
 static struct TextFont *marker_font;
 static DollyOperationSession operation;
@@ -526,8 +535,7 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     ng.ng_GadgetText=(STRPTR)title;
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)(
-                          (id==MAIN_INVENTORY_ID ||
-                           id==MAIN_PLACEHOLDER_ID) ||
+                          id==MAIN_PLACEHOLDER_ID ||
                           (id==SHEEP_LOG_ID && !log_available()) ||
                           (id==MAIN_STOP_ID &&
                            (operation.state!=DOLLY_OP_RUNNING ||
@@ -611,7 +619,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
             RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
-        v->show=NULL;v->inventory=NULL;v->placeholder=NULL;
+        v->show=NULL;v->settings=NULL;v->placeholder=NULL;
         v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;v->log=NULL;
         v->device=NULL;v->target_button=NULL;
@@ -656,11 +664,11 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          three_width,"Sheep Counter");
         if(!last)return 0;
         v->show=last;
-        last=make_button(last,v,MAIN_INVENTORY_ID,
+        last=make_button(last,v,MAIN_SETTINGS_ID,
                          d->left+three_width+three_gap,d->controls_y,
-                         three_width,"");
+                         three_width,"Settings");
         if(!last)return 0;
-        v->inventory=last;
+        v->settings=last;
         last=make_button(last,v,MAIN_PLACEHOLDER_ID,
                          d->left+2*(three_width+three_gap),d->controls_y,
                          three_width,"");
@@ -727,7 +735,7 @@ static void destroy_view(DollyDemoView *v) {
     }
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
-    v->show=NULL;v->inventory=NULL;v->placeholder=NULL;
+    v->show=NULL;v->settings=NULL;v->placeholder=NULL;
     v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
     v->device=NULL;v->target_button=NULL;
@@ -848,7 +856,8 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
         WA_CloseGadget,TRUE,WA_SizeGadget,TRUE,
         WA_Activate,TRUE,WA_SmartRefresh,TRUE,
         WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
-                 IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
+                 IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY|
+                 (main_window?IDCMP_MENUPICK:0),
         TAG_DONE);
     if(!v->window)return 0;
     if(!set_content_minimum(v,main_window)) {
@@ -1050,6 +1059,11 @@ static void hide_sheep(void) {
     destroy_view(&sheep_view);
     dolly_operation_hide_sheep_counter(&operation);
 }
+static int io_settings_available(void) {
+    return operation.state!=DOLLY_OP_RUNNING &&
+           operation.state!=DOLLY_OP_PAUSED &&
+           !source_picker.window && !target_picker.window;
+}
 static void update_main_actions(void) {
     int active=(operation.state==DOLLY_OP_RUNNING ||
                 operation.state==DOLLY_OP_PAUSED);
@@ -1057,9 +1071,13 @@ static void update_main_actions(void) {
         GT_SetGadgetAttrs(sheep_view.log,sheep_view.window,NULL,
                           GA_Disabled,(ULONG)!log_available(),TAG_DONE);
     if(!main_view.window)return;
-    if(main_view.inventory)
-        GT_SetGadgetAttrs(main_view.inventory,main_view.window,NULL,
-                          GA_Disabled,TRUE,TAG_DONE);
+    if(settings_menu) {
+        if(io_settings_available())OnMenu(main_view.window,IO_SETTINGS_ITEM);
+        else OffMenu(main_view.window,IO_SETTINGS_ITEM);
+    }
+    if(main_view.settings)
+        GT_SetGadgetAttrs(main_view.settings,main_view.window,NULL,
+                          GA_Disabled,(ULONG)!io_settings_available(),TAG_DONE);
     if(main_view.placeholder)
         GT_SetGadgetAttrs(main_view.placeholder,main_view.window,NULL,
                           GA_Disabled,TRUE,TAG_DONE);
@@ -1149,6 +1167,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             GT_EndRefresh(v->window,TRUE);
             redraw=1;
         }
+        GT_ReplyIMsg(msg);
         if(main_window) {
             if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID)*quit=1;
             else if(id==MAIN_SOURCE_ID) {
@@ -1192,11 +1211,11 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     if(scan_result) {
                         dolly_amiga_log_view_close();
                         dolly_operation_init(&operation);
-                        total=dolly_surface_open(&surface,&selected_source)?surface.total:0;
+                        total=dolly_surface_open(&surface,&selected_source,main_view.window)?surface.total:0;
                     } else if(image_result) {
                         dolly_amiga_log_view_close();
                         dolly_operation_init(&operation);
-                        total=dolly_image_open(&image,&selected_source,&selected_target)?
+                        total=dolly_image_open(&image,&selected_source,&selected_target,main_view.window)?
                               image.reader.total:0;
                     }
                     if(total)(void)dolly_operation_start(&operation,total);
@@ -1217,7 +1236,10 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                       !show_sheep())
                 puts("MAIN WARN: unable to show Sheep Counter");
         } else if(cls==IDCMP_CLOSEWINDOW || id==SHEEP_HIDE_ID)hide=1;
-        GT_ReplyIMsg(msg);
+        if(main_window && (id==MAIN_SETTINGS_ID ||
+           (cls==IDCMP_MENUPICK && code==IO_SETTINGS_ITEM)) &&
+           io_settings_available())
+            dolly_amiga_io_settings(public_screen,&selected_source);
         if(!main_window && id==SHEEP_LOG_ID && log_available() &&
            !dolly_amiga_log_view_open(public_screen,&surface,log_outcome()))
             puts("SURFACE SCAN: could not open log window");
@@ -1247,7 +1269,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
     }
     if(redraw && !v->gadgets_detached)draw_full(v,main_window);
 }
-int main(void) {
+int main(int argc,char **argv) {
     unsigned frames=0;
     int quit=0,rc=10;
     static struct TextAttr marker_attr={
@@ -1275,8 +1297,26 @@ int main(void) {
     if(!open_view(&main_view,1,"Dolly",
                   12,(ULONG)public_screen->BarHeight+1ul,600,190))
         goto cleanup;
+    settings_menu=CreateMenus(settings_items,TAG_DONE);
+    if(settings_menu &&
+       (!LayoutMenus(settings_menu,main_view.visual,TAG_DONE) ||
+        !SetMenuStrip(main_view.window,settings_menu))) {
+        FreeMenus(settings_menu);
+        settings_menu=NULL;
+    }
     draw_full(&main_view,1);
     refresh_main_selection();
+    {
+        const char *error=dolly_amiga_prefs_load(argc,argv);
+        if(error) {
+            struct EasyStruct request={
+                sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Preferences",
+                (STRPTR)"%s",(STRPTR)"OK"
+            };
+            ULONG args[]={(ULONG)error};
+            EasyRequestArgs(main_view.window,&request,NULL,args);
+        }
+    }
     puts("Dolly: main window ready");
     /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
@@ -1366,6 +1406,11 @@ cleanup:
     dolly_picker_close(&source_picker);
     dolly_picker_close(&target_picker);
     hide_sheep();
+    if(settings_menu) {
+        ClearMenuStrip(main_view.window);
+        FreeMenus(settings_menu);
+    }
+    dolly_amiga_io_settings_clear();
     destroy_view(&main_view);
     if(screen_info && public_screen)
         FreeScreenDrawInfo(public_screen,screen_info);

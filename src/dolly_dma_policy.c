@@ -59,3 +59,40 @@ const char *dolly_dma_user_message(DollyDmaStatus status){
         return "Unknown DMA diagnostic. Device access should remain disabled.";
     }
 }
+
+void dolly_io_hints_merge(DollyIoHints *into,DollyIoHints from) {
+    if(from.present&DOLLY_IO_MASK)
+        into->mask=(into->present&DOLLY_IO_MASK)?into->mask&from.mask:from.mask;
+    if(from.present&DOLLY_IO_BUF_MEM)
+        into->buffer_memory=(into->present&DOLLY_IO_BUF_MEM)?
+                            into->buffer_memory|from.buffer_memory:from.buffer_memory;
+    if((from.present&DOLLY_IO_MAX_TRANSFER) &&
+       (!(into->present&DOLLY_IO_MAX_TRANSFER) || from.max_transfer<into->max_transfer))
+        into->max_transfer=from.max_transfer;
+    into->present|=from.present;
+}
+void dolly_io_hints_override(DollyIoHints *into,DollyIoHints manual) {
+    if(manual.present&DOLLY_IO_MASK)into->mask=manual.mask;
+    if(manual.present&DOLLY_IO_BUF_MEM)into->buffer_memory=manual.buffer_memory;
+    if(manual.present&DOLLY_IO_MAX_TRANSFER)into->max_transfer=manual.max_transfer;
+    into->present|=manual.present;
+}
+int dolly_io_hints_valid(DollyIoHints hints) {
+    const uint32_t supported=1u|DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_FAST|
+                             (1u<<8)|DOLLY_IO_MEM_24BIT;
+    return (!(hints.present&DOLLY_IO_MASK) || dolly_io_alignment(hints.mask)) &&
+           (!(hints.present&DOLLY_IO_BUF_MEM) ||
+            (!(hints.buffer_memory&~supported) &&
+             (hints.buffer_memory&(DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_FAST))!=
+             (DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_FAST))) &&
+           (!(hints.present&DOLLY_IO_MAX_TRANSFER) || hints.max_transfer!=0);
+}
+uint32_t dolly_io_alignment(uint32_t mask) {
+    uint32_t alignment=2;
+    if(!(mask&~1u))return 0;
+    while(!(mask&(alignment-1u)) && !(mask&alignment)) {
+        if(alignment==4096)return 0;
+        alignment<<=1;
+    }
+    return alignment;
+}

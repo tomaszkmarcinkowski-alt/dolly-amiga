@@ -15,9 +15,14 @@
 #include <exec/io.h>
 #include <exec/ports.h>
 #include <exec/memory.h>
+#include <exec/devices.h>
+#include <exec/resident.h>
 #include <devices/trackdisk.h>
 #include <devices/scsidisk.h>
 #include <proto/exec.h>
+#endif
+#ifndef MEMF_CHIP
+#define MEMF_CHIP (1UL<<1)
 #endif
 #ifndef MEMF_PUBLIC
 #define MEMF_PUBLIC (1UL<<0)
@@ -190,11 +195,61 @@ static DollyBlockReadResult read_device(void *opaque,uint64_t off,
     }
     return r;
 }
+#ifndef DOLLY_AMIGA_MOCK
+static int in_kickstart(uintptr_t address) {
+    /* The stock 256/512 KiB Kickstart images occupy this 24-bit window. */
+    return address>=0x00f80000ul && address<0x01000000ul;
+}
+static unsigned rom_scsi_version(const struct IORequest *request) {
+    const struct Resident *resident=FindResident((STRPTR)"scsi.device");
+    const struct Library *library;
+    const UBYTE *begin;
+    ULONG address;
+    if(!request->io_Device)return 0;
+    library=&request->io_Device->dd_Library;
+    if(!in_kickstart((uintptr_t)resident) || resident->rt_Type!=NT_DEVICE ||
+       resident->rt_MatchWord!=RTC_MATCHWORD || resident->rt_MatchTag!=resident ||
+       !in_kickstart((uintptr_t)resident->rt_IdString) ||
+       library->lib_IdString!=(APTR)resident->rt_IdString ||
+       library->lib_Version!=resident->rt_Version || library->lib_NegSize<30u)
+        return 0;
+    /* Exec's BeginIO vector is six bytes: JMP absolute long. Require
+     * it to lead back into Kickstart so RAM replacements stay excluded. */
+    begin=(const UBYTE *)library-30;
+    if(begin[0]!=0x4e || begin[1]!=0xf9)return 0;
+    address=((ULONG)begin[2]<<24)|((ULONG)begin[3]<<16)|
+            ((ULONG)begin[4]<<8)|begin[5];
+    return in_kickstart(address)?library->lib_Version:0;
+}
+#else
+static unsigned rom_scsi_version(const struct IORequest *request) {
+    (void)request;
+    return dolly_mock_rom_scsi_version();
+}
+#endif
+int dolly_amiga_probe_rom_scsi(uint32_t unit) {
+    struct MsgPort *port=CreateMsgPort();
+    struct IORequest *request;
+    int verified=0;
+    if(!port)return 0;
+    request=CreateIORequest(port,sizeof(struct IOStdReq)+128);
+    if(request) {
+        if(OpenDevice((CONST_STRPTR)"scsi.device",(ULONG)unit,request,0)==0) {
+            verified=rom_scsi_version(request)!=0;
+            CloseDevice(request);
+        }
+        DeleteIORequest(request);
+    }
+    DeleteMsgPort(port);
+    return verified;
+}
+
 DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
                                         DollyBlockSource **out){
     DollyBlockStatus status;
     DollyAmigaContext *ctx;
     uint32_t sector,transfer;
+    unsigned version=0;
     if(!out||!opt||!opt->device_name||!*opt->device_name)return DOLLY_BLOCK_EINVAL;
     *out=NULL;
     sector=opt->physical_block_bytes;
@@ -210,7 +265,12 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
        opt->dma_address_mask==0 ||
        opt->dma_alignment<2 || opt->dma_alignment>4096 ||
        (opt->dma_alignment&(opt->dma_alignment-1))!=0 ||
-       opt->require_24bit_dma>1 || !opt->report_dma_problem){
+       opt->require_24bit_dma>1 || opt->require_rom_scsi>1 ||
+       !dolly_io_hints_valid((DollyIoHints){0,opt->buffer_memory,0,DOLLY_IO_BUF_MEM}) ||
+       (opt->require_rom_scsi && (opt->verified_uae_ide ||
+        strcmp(opt->device_name,"scsi.device")!=0 ||
+        opt->require_24bit_dma!=1 || (opt->dma_address_mask&0xff000000u) ||
+        transfer>16384u)) || !opt->report_dma_problem){
         notify_dma(opt,DOLLY_DMA_BAD_PROFILE);
         return DOLLY_BLOCK_EINVAL;
     }
@@ -229,7 +289,21 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
         close_ctx(ctx);return DOLLY_BLOCK_EIO;
     }
     ctx->opened=1;
-    ctx->supports_nsd64=verify_nsd64(ctx);
+    if(opt->require_rom_scsi) {
+        version=rom_scsi_version((struct IORequest *)ctx->request);
+        if(!version) {
+            close_ctx(ctx);
+            return DOLLY_BLOCK_EDEVICE;
+        }
+    }
+#ifndef DOLLY_AMIGA_MOCK
+    if(!version && strcmp(opt->device_name,"scsi.device")==0 &&
+       ctx->request->io_Device)
+        version=ctx->request->io_Device->dd_Library.lib_Version;
+#endif
+    ctx->supports_nsd64=(!version || version>=43u || opt->verified_uae_ide ||
+                         opt->bypass_legacy_scsi_limit) &&
+                        verify_nsd64(ctx);
     if(opt->required_read_end>LEGACY_READ_END && !ctx->supports_nsd64) {
         if(opt->verified_uae_ide!=1 ||
            opt->required_read_end/sector>UAE_IDE_SECTOR_LIMIT) {
@@ -240,7 +314,8 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
     }
     ctx->buffer_bytes=transfer+(ctx->scsi10?SCSI_CMD_BYTES+SCSI_SENSE_BYTES:0u);
     ctx->bounce=(UBYTE *)AllocMem(ctx->buffer_bytes,
-                  MEMF_PUBLIC | (opt->require_24bit_dma?MEMF_24BITDMA:0));
+                  MEMF_PUBLIC | (opt->require_24bit_dma?MEMF_24BITDMA:0) |
+                  (opt->require_rom_scsi?MEMF_CHIP:0) | opt->buffer_memory);
     if(!ctx->bounce){
         notify_dma(opt,DOLLY_DMA_NO_COMPATIBLE_MEMORY);
         close_ctx(ctx);return DOLLY_BLOCK_ENOMEM;

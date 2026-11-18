@@ -78,7 +78,8 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
     UnLockDosList(flags);
 }
 int dolly_logical_extent(const char *name,DollyPhysicalEntry *device,
-                         uint64_t *start,uint64_t *length,ULONG *sector_bytes) {
+                         uint64_t *start,uint64_t *length,ULONG *sector_bytes,
+                         DollyIoHints *hints) {
     const ULONG flags=LDF_DEVICES|LDF_READ;
     struct DosList *list,*entry;
     char dos_name[40];
@@ -110,6 +111,21 @@ int dolly_logical_extent(const char *name,DollyPhysicalEntry *device,
                         *sector_bytes=block;
                         *start=(uint64_t)e->de_LowCyl*cylinder;
                         *length=((uint64_t)e->de_HighCyl-e->de_LowCyl+1u)*cylinder;
+                        if(hints && e->de_TableSize>=12u &&
+                           bptr_valid(f->fssm_Environ,13u*sizeof(ULONG))) {
+                            hints->present|=DOLLY_IO_BUF_MEM;
+                            hints->buffer_memory=e->de_BufMemType;
+                        }
+                        if(hints && e->de_TableSize>=13u &&
+                           bptr_valid(f->fssm_Environ,14u*sizeof(ULONG))) {
+                            hints->present|=DOLLY_IO_MAX_TRANSFER;
+                            hints->max_transfer=e->de_MaxTransfer;
+                        }
+                        if(hints && e->de_TableSize>=14u &&
+                           bptr_valid(f->fssm_Environ,15u*sizeof(ULONG))) {
+                            hints->present|=DOLLY_IO_MASK;
+                            hints->mask=e->de_Mask;
+                        }
                         ok=1;
                     }
                 }

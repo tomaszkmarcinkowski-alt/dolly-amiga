@@ -6,7 +6,7 @@
 
 Allocating a buffer with `MEMF_PUBLIC` is not proof that every old SCSI/IDE/Zorro controller can address it. Some controllers require memory accessible in the first 24-bit address space and sometimes specific alignment, maximum transfer sizes or cache maintenance. Bad assumptions can cause silent data corruption even when reads appear successful.
 
-The AmigaOS `MEMF_24BITDMA` memory attribute requests an address usable by some 24-bit/Zorro II DMA controllers. It is **not a universal property of all Amiga devices**, so Dolly only requests it when an **explicitly verified device profile** requires it.
+The AmigaOS `MEMF_24BITDMA` memory attribute requests an address usable by some 24-bit/Zorro II DMA controllers. It is **not a universal property of all Amiga devices**, and Dolly requests it when the resolved memory attributes require it.
 
 ## Fail-closed API
 
@@ -17,12 +17,13 @@ The AmigaOS `MEMF_24BITDMA` memory attribute requests an address usable by some 
 | `capacity_bytes` | Independently established physical device size |
 | `physical_block_bytes` | Independently established block size |
 | `max_transfer_bytes` | Conservative raw-device I/O limit (currently at most 65536) |
-| `dma_address_mask` | Allowed starting address bits for the device DMA profile |
+| `dma_address_mask` | Allowed starting address bits for the resolved DMA configuration |
 | `dma_alignment` | Required DMA buffer alignment, power of 2 (2–4096) |
 | `dma_profile_verified` | Explicit `1` required, otherwise device open is rejected |
-| `require_24bit_dma` | Request `MEMF_24BITDMA` only when needed by the device |
+| `buffer_memory` | Resolved Exec memory attributes, combined with `MEMF_PUBLIC` |
+| `require_24bit_dma` | Request `MEMF_24BITDMA` and require a compatible address mask |
 
-The program **does not set** `dma_profile_verified` from the on-disk `de_Mask` alone. RDB values are declarations, not proof of the driver's real DMA constraints. The feature is not exposed as a user-selectable device operation yet.
+The native GUI resolves and validates all three parameters for raw reads. Auto uses RDB declarations, and the operator can override fields per unit. The declarations describe the intended configuration. Physical testing is required to establish the actual DMA constraints. See [Amiga I/O policy](AMIGA_IO.md#automatic-settings-and-manual-override).
 
 After allocation, the adapter checks that the buffer's first address satisfies the mask and alignment, and that **every address within the transfer** is permitted by the profile's address aperture. The second check is done using a constant-space range bit-OR calculation, not a per-byte runtime loop. A rejected address fails the open operation and cleans up allocated resources.
 
@@ -35,7 +36,7 @@ These checks are **necessary, not sufficient**. DMA bus routing, controller firm
 ## MaxTransfer is separate
 
 - The filesystem's `de_MaxTransfer` is read from RDB as part of Sheep Inventory; `0x1FE00` is a conservative reference for some older IDE implementations, **not a universal value**.
-- The backend's `max_transfer_bytes` is an explicitly selected raw `DoIO` chunk limit; it is independent of `de_MaxTransfer`.
+- The backend's `max_transfer_bytes` is an explicitly selected raw `DoIO` chunk limit; it is capped by the resolved MaxTransfer for native GUI operations.
 - DMA address mask, memory location, alignment and transfer-size limits must be considered together.
 
 ## Regression checks
