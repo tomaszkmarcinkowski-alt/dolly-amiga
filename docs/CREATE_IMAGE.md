@@ -16,13 +16,22 @@ searches for repeated sequences with LZSS. Use the `.dly` extension. Its single-
 size limit includes container overhead. See [IFF FORMAT](IFF_FORMAT.md).
 ADF remains a planned option.
 
-The source uses the same [read-only RDB and override policy](AMIGA_IO.md#automatic-settings-and-manual-override) as [Surface Scan](SURFACE_SCAN.md). Save to RAM: or a DOS filesystem whose handler can be identified
-as a different unit on the source driver. Output begins in an exclusive
+The source uses the same [read-only RDB and override policy](AMIGA_IO.md#automatic-settings-and-manual-override) as [Surface Scan](SURFACE_SCAN.md). Save to RAM: or a DOS filesystem. A resolved destination on a different driver or
+unit is accepted without a requester. If the destination device cannot
+be identified, Dolly asks whether to continue at the risk of overwriting
+source data. A destination volume on the same unit is allowed
+only when its physical extent can be identified and is disjoint from the
+raw source. If the ranges overlap or cannot be compared, Dolly blocks
+the transfer and shows the reason in an OK-only requester. Dolly shows an OK-only speed warning in that case. **Hide
+same-device speed warning** in Settings suppresses the message; range
+checks still run. Output begins in an exclusive
 `.part` drawer in the destination directory and is published under the
 requested filename after all sectors are copied and the file closes.
-Existing destinations are refused. A stopped copy, read failure, or
-short/failed write discards the staged output, with a status message if
-cleanup fails.
+Existing destinations are refused. Stop pauses the operation and offers
+Abort or Resume. Abort discards the staged output. If a read, write or
+container-finalization failure interrupts an active image, Dolly offers
+an Operation Restore File and retains the committed prefix when the
+checkpoint saves successfully. See [DLRP](DLRP_FORMAT.md).
 
 The event loop transfers one sector-aligned batch per pass. The default
 ceiling is 16 KiB, raised to one sector if necessary and bounded by

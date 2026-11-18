@@ -92,6 +92,19 @@ int main(void) {
     f.corrupt=1;
     assert(dolly_block_write_verified(&target,0,data,512,scratch,sizeof(scratch))
            ==DOLLY_WRITE_MISMATCH && f.calls==3);
+    f.calls=0;
+    assert(dolly_block_write(&target,0,data,512,0,NULL,0)
+           ==DOLLY_WRITE_COMPLETE && f.calls==2);
+    f.calls=0;
+    target.readback=NULL;
+    assert(dolly_block_write(&target,0,data,512,1,scratch,sizeof(scratch))
+           ==DOLLY_WRITE_REJECTED && f.calls==0);
+    assert(dolly_block_write(&target,0,data,512,0,NULL,0)
+           ==DOLLY_WRITE_COMPLETE && f.calls==2);
+    f.calls=0;
+    f.flush_error=1;
+    assert(dolly_block_write(&target,0,data,512,0,NULL,0)
+           ==DOLLY_WRITE_FLUSH_FAILED && f.calls==2);
     assert(fclose(f.file)==0);
     return 0;
 }

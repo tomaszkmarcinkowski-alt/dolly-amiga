@@ -21,6 +21,11 @@ Dolly pozostaje darmowym projektem **MIT + dobrowolne Retroware**. Każda faza w
 - **Zakres M2** ma działający prototyp [Create Image](CREATE_IMAGE.md) dla RAW i HDF. Źródło jest tylko do odczytu. Otwarta pozostaje walidacja innych urządzeń docelowych, ADF i weryfikacja po zapisie w aplikacji.
 - **Zakres M3** ma jednoplikowy zapis [IFF DOLY](IFF_FORMAT.md): v1 bez kompresji i v2 z PackBits/LZSS. Weryfikacja na hoście porównała dane z obrazów emulowanych ze źródłem. Segmentacja, wznowienie i odtwarzanie pozostają otwarte.
 
+- **Alpha 3** dodaje zakres LBA/CHS i ponowienia do Surface Scan, pauzę,
+  podgląd Restore oraz checkpoint Create Image po awarii. Następne
+  etapy obejmują parser i GUI DLRP, kwalifikację celu oraz kontrolowany
+  zapis Restore i Copy/Clone. Zmiana rozmiaru pozostaje w planie.
+
 Status wydań i sprzętu opisują [README](../README.md) i [macierz testów](TEST_MATRIX.md).
 
 ## Po MVP — Dolly Flock Manager
@@ -31,7 +36,7 @@ Osobna **[epika #7](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issue
 
 ## Dokumenty projektowe
 
-- [Backlog 58 stories](BACKLOG.md)
+- [Backlog](BACKLOG.md)
 - [Aktualny M0](SPRINT_M0.md)
 - [Dziennik techniczny](ENGINEERING_JOURNAL.md)
 - [Format IFF](IFF_FORMAT.md)

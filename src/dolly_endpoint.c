@@ -158,3 +158,12 @@ int dolly_demo_can_start(DollyDemoOperation op,
      */
     return 1;
 }
+
+DollyUnitRelation dolly_unit_relation(uint64_t first,uint64_t first_length,
+                                    uint64_t second,uint64_t second_length) {
+    if(!first_length || !second_length ||
+       first_length>UINT64_MAX-first || second_length>UINT64_MAX-second)
+        return DOLLY_UNIT_RANGE_UNKNOWN;
+    return first<second+second_length && second<first+first_length?
+           DOLLY_UNIT_RANGE_OVERLAP:DOLLY_UNIT_RANGE_DISJOINT;
+}

@@ -11,6 +11,9 @@ struct IOStdReq {
 };
 struct IORequest {UWORD io_Command;UBYTE io_Flags;UBYTE io_Error;
  ULONG io_Actual,io_Offset,io_Length;APTR io_Data;};
+#define CMD_READ 2u
+#define CMD_WRITE 3u
+#define CMD_UPDATE 4u
 #define HD_SCSICMD 28u
 #define SCSIF_READ 1u
 #define SCSIF_AUTOSENSE 2u

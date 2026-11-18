@@ -59,4 +59,11 @@ int dolly_demo_needs_target(DollyDemoOperation op);
 int dolly_demo_can_start(DollyDemoOperation op,
                          const DollyEndpoint *source,
                          const DollyEndpoint *target);
+typedef enum DollyUnitRelation {
+    DOLLY_UNIT_RANGE_UNKNOWN,
+    DOLLY_UNIT_RANGE_OVERLAP,
+    DOLLY_UNIT_RANGE_DISJOINT
+} DollyUnitRelation;
+DollyUnitRelation dolly_unit_relation(uint64_t first,uint64_t first_length,
+                                    uint64_t second,uint64_t second_length);
 #endif

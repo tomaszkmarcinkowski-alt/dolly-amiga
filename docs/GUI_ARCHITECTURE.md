@@ -1508,7 +1508,7 @@ target so that similar names remain distinguishable.
 Place **Proceed** on the left and **Cancel** on the right. Directly
 above **Proceed**, show `Proceed available in 10 s` and update the
 number once per second. Initially disable **Proceed**. After ten full
-seconds, enable it and remove the countdown. **Cancel** is available
+seconds, display zero and enable it. **Cancel** is available
 throughout. Closing the window or pressing Esc cancels. A fresh click
 on the enabled **Proceed** confirms. Enter and expiration of the timer
 never confirm, and clicks made during the countdown are discarded.
@@ -1523,8 +1523,10 @@ reap outstanding timer I/O on exit.
 The requester takes a description of the operation, destination and
 scope, and returns the user's decision. The caller owns the write
 plan, rechecks its destination and scope before writing, and requires
-a new confirmation if either changes. This design is for subsequent
-destructive workflows such as Restore RDB and Restore MBR.
+a new confirmation if either changes. The same native requester handles
+Restore compatibility overrides and the risk of proceeding with an
+unidentified image volume. Future raw Restore, Restore RDB and Restore
+MBR calls must use it before submitting writes.
 
 ### Read-only data views
 

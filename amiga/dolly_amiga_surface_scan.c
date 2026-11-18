@@ -25,7 +25,7 @@ void dolly_surface_close(DollySurfaceScan *scan) {
 }
 
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
-                       struct Window *parent) {
+                       struct Window *parent,int configure) {
     DollyPhysicalEntry device;
     DollyMediaGeometry geometry;
     DollyAmigaDeviceOptions opts;
@@ -115,6 +115,13 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     scan->sector_bytes=geometry.block_bytes;
     scan->first_lba=start/scan->sector_bytes;
     scan->total=length/scan->sector_bytes;
+    scan->max_retries=1;
+    if(configure && !dolly_amiga_scan_options(scan,parent,&geometry)) {
+        scan->failure="Scan setup cancelled.";
+        return 0;
+    }
+    start=scan->first_lba*scan->sector_bytes;
+    length=scan->total*scan->sector_bytes;
     if(!complete_rdb) {
         struct EasyStruct request={
             sizeof(struct EasyStruct),0,(STRPTR)"Dolly - I/O settings",
@@ -185,6 +192,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     strcpy(scan->source_path,endpoint->path);
     strcpy(scan->device_name,name);
     scan->geometry=geometry;
+    scan->effective_io=hints;
     scan->device=device;
     printf("SURFACE SCAN: %s unit=%lu first LBA=%lu sectors=%lu\n",
            device.driver,(unsigned long)device.unit,(unsigned long)scan->first_lba,
@@ -217,9 +225,9 @@ void dolly_surface_step(DollySurfaceScan *scan) {
             scan->fallback=count;
             return;
         }
-        if(!scan->retry_pending) {
+        if(scan->retry_pending<scan->max_retries) {
             dolly_surface_log_add(&scan->log,DOLLY_SURFACE_RETRY,lba,1,read.status);
-            scan->retry_pending=1;
+            ++scan->retry_pending;
             ++scan->retries;
             return;
         }

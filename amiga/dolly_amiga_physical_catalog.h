@@ -19,7 +19,9 @@ typedef struct DollyPhysicalCatalog {
     DollyPhysicalEntry entries[DOLLY_PHYS_MAX];
 } DollyPhysicalCatalog;
 /* Returns 1 for a unique disk, 2 for the registered RAM handler, 0 otherwise. */
-int dolly_physical_from_lock(BPTR lock,DollyPhysicalEntry *device);
+/* A disk handler can have an unknown extent, reported as length zero. */
+int dolly_physical_from_lock(BPTR lock,DollyPhysicalEntry *device,
+                            uint64_t *start,uint64_t *length);
 void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out);
 int dolly_logical_extent(const char *name,DollyPhysicalEntry *device,
                          uint64_t *start,uint64_t *length,ULONG *sector_bytes,

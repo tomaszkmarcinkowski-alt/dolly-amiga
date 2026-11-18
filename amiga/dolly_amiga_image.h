@@ -7,7 +7,7 @@ typedef struct DollyAmigaImage {
     DollySurfaceScan reader;
     DollyDlyWriter dly;
     BPTR drawer,file;
-    int staging;
+    int staging,keep_staging;
     char name[256],partial[261],staged_file[267];
     const char *failure;
 } DollyAmigaImage;

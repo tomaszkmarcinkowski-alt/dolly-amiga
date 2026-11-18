@@ -31,7 +31,15 @@ DollyIoHints dolly_amiga_io_override(const DollyPhysicalEntry *device) {
     DollyIoHints empty={0};
     return entry?entry->hints:empty;
 }
-static int legacy_override;
+static int legacy_override,verify_writes,suppress_same_unit_warning,allow_restore_mismatch;
+int dolly_amiga_allow_restore_mismatch(void) { return allow_restore_mismatch; }
+void dolly_amiga_set_allow_restore_mismatch(int enabled) { allow_restore_mismatch=enabled; }
+int dolly_amiga_suppress_same_unit_warning(void) { return suppress_same_unit_warning; }
+void dolly_amiga_set_suppress_same_unit_warning(int enabled) {
+    suppress_same_unit_warning=enabled;
+}
+int dolly_amiga_verify_writes(void) { return verify_writes; }
+void dolly_amiga_set_verify_writes(int enabled) { verify_writes=enabled; }
 int dolly_amiga_legacy_override(void) { return legacy_override; }
 void dolly_amiga_set_legacy_override(int enabled) { legacy_override=enabled; }
 
@@ -82,6 +90,9 @@ void dolly_amiga_io_settings_clear(void) {
         overrides=next;
     }
     legacy_override=0;
+    verify_writes=0;
+    suppress_same_unit_warning=0;
+    allow_restore_mismatch=0;
 }
 static int number(const char *text,uint32_t *out) {
     uint32_t value=0,base=10,digit;
@@ -116,6 +127,8 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     char title[94],initial[3][11];
     uint32_t values[3];
     int done=0,has_device=0,legacy=legacy_override;
+    int allow_mismatch=allow_restore_mismatch;
+    int verify=verify_writes,suppress_warning=suppress_same_unit_warning;
     if(endpoint->kind==DOLLY_ENDPOINT_LOGICAL)
         has_device=dolly_logical_extent(endpoint->path,&device,&start,&length,&sector,NULL);
     else if(endpoint->kind==DOLLY_ENDPOINT_UNIT || endpoint->kind==DOLLY_ENDPOINT_PARTITION)
@@ -130,7 +143,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     visual=GetVisualInfo(screen,TAG_DONE);
     if(!visual)return;
     window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,WA_Title,(ULONG)title,
-        WA_Width,490UL,WA_Height,165UL,WA_Activate,TRUE,WA_CloseGadget,TRUE,
+        WA_Width,490UL,WA_Height,225UL,WA_Activate,TRUE,WA_CloseGadget,TRUE,
         WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_SmartRefresh,TRUE,
         WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW,TAG_DONE);
     if(!window)goto cleanup;
@@ -158,7 +171,22 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     ng.ng_Flags=PLACETEXT_RIGHT;
     last=CreateGadget(CHECKBOX_KIND,last,&ng,GTCB_Checked,(ULONG)legacy,TAG_DONE);
     if(!last)goto cleanup;
-    ng.ng_TopEdge=window->BorderTop+88;
+    ng.ng_TopEdge=window->BorderTop+87;
+    ng.ng_GadgetID=21;
+    ng.ng_GadgetText=(STRPTR)"Verify writes by reading sectors back";
+    last=CreateGadget(CHECKBOX_KIND,last,&ng,GTCB_Checked,(ULONG)verify,TAG_DONE);
+    if(!last)goto cleanup;
+    ng.ng_TopEdge=window->BorderTop+107;
+    ng.ng_GadgetID=22;
+    ng.ng_GadgetText=(STRPTR)"Hide same-device speed warning";
+    last=CreateGadget(CHECKBOX_KIND,last,&ng,GTCB_Checked,(ULONG)suppress_warning,TAG_DONE);
+    if(!last)goto cleanup;
+    ng.ng_TopEdge=window->BorderTop+127;
+    ng.ng_GadgetID=23;
+    ng.ng_GadgetText=(STRPTR)"Allow Restore compatibility override";
+    last=CreateGadget(CHECKBOX_KIND,last,&ng,GTCB_Checked,(ULONG)allow_mismatch,TAG_DONE);
+    if(!last)goto cleanup;
+    ng.ng_TopEdge=window->BorderTop+148;
     ng.ng_Width=465;ng.ng_GadgetText=NULL;
     ng.ng_Flags=0;ng.ng_GadgetID=0;
     last=CreateGadget(TEXT_KIND,last,&ng,
@@ -166,12 +194,12 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
         GTTX_Border,TRUE,TAG_DONE);
     if(!last)goto cleanup;
     status=last;
-    ng.ng_TopEdge=window->BorderTop+111;ng.ng_Width=100;
-    for(i=0;i<4;++i) {
-        static const char *const buttons[]={"Save","Use","Reset Auto","Cancel"};
+    ng.ng_TopEdge=window->BorderTop+171;ng.ng_Width=100;
+    for(i=0;i<3;++i) {
+        static const char *const buttons[]={"Save","Reset Auto","Cancel"};
         ng.ng_GadgetID=(UWORD)(10+i);
         ng.ng_GadgetText=(STRPTR)buttons[i];
-        last=CreateGadget(BUTTON_KIND,last,&ng,GA_Disabled,(ULONG)(i==2 && !has_device),TAG_DONE);
+        last=CreateGadget(BUTTON_KIND,last,&ng,GA_Disabled,(ULONG)(i==1 && !has_device),TAG_DONE);
         if(!last)goto cleanup;
         ng.ng_LeftEdge+=106;
     }
@@ -191,14 +219,18 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                 GT_EndRefresh(window,TRUE);
             }
             GT_ReplyIMsg(msg);
-            if(cls==IDCMP_CLOSEWINDOW || id==13)done=1;
+            if(cls==IDCMP_CLOSEWINDOW || id==12)done=1;
             else if(id==20)legacy=code!=0;
-            else if(id==12) {
+            else if(id==21)verify=code!=0;
+            else if(id==22)suppress_warning=code!=0;
+            else if(id==23)allow_mismatch=code!=0;
+            else if(id==11) {
                 for(i=0;i<3;++i)
                     GT_SetGadgetAttrs(fields[i],window,NULL,GTST_String,(ULONG)"",TAG_DONE);
-            } else if(id==10 || id==11) {
+            } else if(id==10) {
                 DollyIoHints next={0};
                 uint32_t *const fields_out[]={&next.mask,&next.buffer_memory,&next.max_transfer};
+                Override *existing=has_device?find(&device):NULL;
                 int valid=1;
                 if(has_device)for(i=0;i<3;++i) {
                     const char *text=(const char *)((struct StringInfo *)fields[i]->SpecialInfo)->Buffer;
@@ -207,13 +239,26 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                     if(!number(text,fields_out[i]))valid=0;
                 }
                 if(valid && dolly_io_hints_valid(next) &&
-                   (!has_device || dolly_amiga_io_store(&device,next))) {
-                    int previous=legacy_override;
+                   (!has_device || existing || dolly_amiga_io_store(&device,next))) {
+                    int previous=legacy_override,previous_verify=verify_writes;
+                    int previous_warning=suppress_same_unit_warning;
+                    int previous_mismatch=allow_restore_mismatch;
+                    if(existing)existing->hints=next;
                     legacy_override=legacy;
-                    if(id==11 || dolly_amiga_prefs_save())done=1;
+                    verify_writes=verify;
+                    suppress_same_unit_warning=suppress_warning;
+                    allow_restore_mismatch=allow_mismatch;
+                    if(dolly_amiga_prefs_save()) {
+                        if(existing && !next.present)dolly_amiga_io_store(&device,next);
+                        done=1;
+                    }
                     else {
                         legacy_override=previous;
-                        if(has_device)dolly_amiga_io_store(&device,current);
+                        verify_writes=previous_verify;
+                        suppress_same_unit_warning=previous_warning;
+                        allow_restore_mismatch=previous_mismatch;
+                        if(existing)existing->hints=current;
+                        else if(has_device)dolly_amiga_io_store(&device,current);
                         GT_SetGadgetAttrs(status,window,NULL,
                             GTTX_Text,(ULONG)"Could not save preferences.",TAG_DONE);
                     }

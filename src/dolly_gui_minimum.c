@@ -41,7 +41,7 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
         /* The native caller also checks tile size against the pixel aspect. */
         client_w=max_u32(m.heading_width,24u*10u+8u);
         client_w=max_u32(client_w,80u+6u+80u+6u+
-                         max_u32(76u,m.log_button_text_width+12u)+6u+
+                         2u*max_u32(76u,m.log_button_text_width+12u)+12u+
                          max_u32(76u,m.hide_button_text_width+12u));
         client_w=max_u32(client_w,120u+7u+46u);
         /* Fits current geometry: header, grid, bevel/bar and control row.

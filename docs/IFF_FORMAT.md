@@ -79,3 +79,6 @@ future format work. New codecs or layouts require an explicit schema.
 ## References
 
 - [AmigaOS IFFParse Library](https://wiki.amigaos.net/wiki/IFFParse_Library)
+
+Operation checkpoints are described separately in [Dolly Restore Pointer
+(DLRP)](DLRP_FORMAT.md).

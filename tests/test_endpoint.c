@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 int main(void) {
+    assert(dolly_unit_relation(0,1024,512,512)==DOLLY_UNIT_RANGE_OVERLAP);
+    assert(dolly_unit_relation(512,512,0,1024)==DOLLY_UNIT_RANGE_OVERLAP);
+    assert(dolly_unit_relation(0,512,512,512)==DOLLY_UNIT_RANGE_DISJOINT);
+    assert(dolly_unit_relation(0,0,512,512)==DOLLY_UNIT_RANGE_UNKNOWN);
+    assert(dolly_unit_relation(UINT64_MAX,512,0,512)==DOLLY_UNIT_RANGE_UNKNOWN);
+
     DollyEndpoint src={0},dst={0};
     assert(!dolly_demo_can_start(DOLLY_DEMO_SCAN,&src,&dst));
     assert(dolly_endpoint_set_unit(&src,0,0));

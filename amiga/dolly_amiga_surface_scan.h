@@ -11,10 +11,11 @@ typedef struct DollySurfaceScan {
     void *buffer;
     uint64_t first_lba,total,processed;
     uint32_t sector_bytes,transfer_bytes,fallback,errors,retries;
-    unsigned retry_pending;
+    unsigned retry_pending,max_retries;
     const char *failure;
     DollySurfaceLog log;
     DollyMediaGeometry geometry;
+    DollyIoHints effective_io;
     DollyPhysicalEntry device;
     char device_name[112];
     char source_path[sizeof(((DollyEndpoint *)0)->path)];
@@ -24,7 +25,9 @@ typedef struct DollySurfaceScan {
  * one bounded request. Caller drives steps from its event loop. */
 struct Window;
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
-                       struct Window *parent);
+                       struct Window *parent,int configure);
+int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
+                            const DollyMediaGeometry *geometry);
 void dolly_surface_step(DollySurfaceScan *scan);
 /* Close releases device resources and retains the completed log.
  * Clear scan->log when discarding the scan or shutting down. */

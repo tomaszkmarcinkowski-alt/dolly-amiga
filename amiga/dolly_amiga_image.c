@@ -1,4 +1,5 @@
 #include "dolly_amiga_image.h"
+#include "dolly_amiga_transfer_guard.h"
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <proto/dos.h>
@@ -37,7 +38,7 @@ static int prepare_compression(DollyAmigaImage *image,DollyDlyCodec codec) {
     return 0;
 }
 static void release(DollyAmigaImage *image,int commit) {
-    if(image->staging) {
+    if(image->staging && !image->keep_staging) {
         BPTR previous=CurrentDir(image->drawer);
         if(image->file && !Close(image->file) && commit) {
             image->failure="Could not close the temporary image.";
@@ -71,13 +72,11 @@ void dolly_image_cancel(DollyAmigaImage *image) {
 }
 int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
                      const DollyEndpoint *target,struct Window *parent) {
-    DollyPhysicalEntry destination={0};
     BPTR previous,staging;
     const char *name;
     size_t prefix;
     char drawer[256];
     uint32_t batch_bytes;
-    int destination_kind;
     dolly_image_cancel(image);
     memset(image,0,sizeof(*image));
     image->failure="Choose RAW, HDF or IFF DOLY output.";
@@ -87,7 +86,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
         target->image_format!=DOLLY_IMAGE_IFF_DOLY &&
         target->image_format!=DOLLY_IMAGE_IFF_FAST &&
         target->image_format!=DOLLY_IMAGE_IFF_COMPACT))return 0;
-    if(!dolly_surface_open(&image->reader,source,parent)) {
+    if(!dolly_surface_open(&image->reader,source,parent,0)) {
         image->failure=image->reader.failure;
         return 0;
     }
@@ -112,11 +111,11 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     drawer[prefix]='\0';
     image->drawer=Lock((STRPTR)drawer,ACCESS_READ);
     if(!image->drawer)goto fail;
-    image->failure="Choose RAM: or a verified different device.";
-    destination_kind=dolly_physical_from_lock(image->drawer,&destination);
-    if(destination_kind!=2 && (destination_kind!=1 ||
-       strcmp(destination.driver,image->reader.device.driver)!=0 ||
-       destination.unit==image->reader.device.unit))goto fail;
+    image->failure=dolly_amiga_guard_file_transfer(parent,image->drawer,
+                   &image->reader.device,
+                   image->reader.first_lba*image->reader.sector_bytes,
+                   image->reader.total*image->reader.sector_bytes);
+    if(image->failure)goto fail;
 
     strcpy(image->name,name);
     strcpy(image->partial,name);
@@ -148,7 +147,7 @@ void dolly_image_step(DollyAmigaImage *image) {
     size_t bytes;
     uint32_t sectors;
     DollyBlockReadResult result;
-    if(!image->file)return;
+    if(!image->file || image->failure)return;
     remaining=reader->total-reader->processed;
     lba=reader->first_lba+reader->processed;
     sectors=reader->transfer_bytes/reader->sector_bytes;
@@ -163,20 +162,18 @@ void dolly_image_step(DollyAmigaImage *image) {
         printf("CREATE IMAGE: read failed at LBA %s (%s)\n",position,
                dolly_block_status_name(result.status));
         image->failure="Read failed. Image was not completed.";
-        release(image,0);
         return;
     }
     if(!(image->dly.file_bytes?
          dolly_dly_append(&image->dly,reader->buffer,bytes):
          write_image(image,reader->buffer,bytes))) {
         image->failure="Write failed. Check free space on destination.";
-        release(image,0);
         return;
     }
     reader->processed+=sectors;
     if(reader->processed==reader->total) {
         if(image->dly.file_bytes && !dolly_dly_finish(&image->dly))
             image->failure="IFF DOLY image is incomplete.";
-        release(image,image->failure==NULL);
+        if(!image->failure)release(image,1);
     }
 }

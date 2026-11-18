@@ -823,3 +823,15 @@ kontrolerów, ADF, weryfikacja obrazu po zapisie i operacje przywracania.
 **Cel:** zachować GadTools Cycle Operation na górze głównego okna, a Source/Destination Cycle budować z maski dozwolonych DollyEndpointMode; dokładne mapowanie indeksu Cycle na identyfikator trybu. W Normal: Copy Unit→Unit, Partition→Partition, Logical→Logical, File→File; Restore File→Unit/Partition; Create image Unit/Partition/Logical→File; Scan i Inventory source-only; Disk Vet source-only. Destination pozostaje niedostępne, dopóki Source nie wybierze zgodnego typu.
 
 **Warunki:** istniejące niezgodne wybory zachować do poprawienia, ale blokować Start; nie usuwać ich po zmianie Operation. Berserk jest na razie wyłącznie parametrem polityki (bez przełącznika w GUI i bez zezwolenia na zapis). W przyszłości jawne potwierdzenia operacji wyjątkowych oraz sprawdzanie geometrii, wspólnych zakresów i aliasów urządzeń.
+
+### DLRP — otwieranie checkpointów i wznawianie operacji
+
+[Issue #73](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/73)
+
+- Dodać parser `FORM DLRP`, walidację CRC i ponowne sprawdzanie źródła,
+  celu oraz kompletności danych częściowych według [specyfikacji](DLRP_FORMAT.md).
+- Dodać GUI wyboru checkpointu i podglądu operacji, stanu postępu oraz
+  ścieżek przed wznowieniem. Zacząć od Create Image, a następnie dodać Restore i Copy/Clone.
+- Wrócić do tego zadania przed udostępnieniem wznawiania Restore z zapisem.
+  Dla przerwanego zapisu zapisać i ponownie sprawdzać zakres potencjalnie
+  zmodyfikowanej partii oraz tożsamość celu.

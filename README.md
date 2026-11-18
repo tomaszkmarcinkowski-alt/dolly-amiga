@@ -1,7 +1,7 @@
 # 🐑 Dolly — Disk Imaging, Cloning & Recovery for Amiga
-[Alpha 2 is the final read-only build.](docs/RELEASE_ALPHA_2.md)
+[Dolly Alpha 3](docs/RELEASE_ALPHA_3.md) · [GitHub Releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
 
-**Public development repository • M1.46 development branch • experimental native prototypes**
+**Public development repository • Alpha 3 development preview • experimental native prototypes**
 
 **No sector left behind. No sheep uncounted.**
 
@@ -23,13 +23,14 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 | --- | --- |
 | M0 foundations | Read-only BlockSource, host image inspection, bounded RDB/MBR parsing, hybrid and capacity diagnostics, structural IFF inspection, device-profile safety checks. |
 | Native GadTools | Approved main window, Source/Destination pickers, Sheep Inventory and resizable Sheep Counter. |
-| Surface Scan | Read-only scans using validated RDB settings and per-unit I/O overrides, progress, retries, error map and text logs with LBA and CHS when reported geometry permits. |
-| Create Image | Whole unit, partition or logical volume to RAW, HDF or IFF DOLY. The source is read-only and the image is staged before publication. |
+| Surface Scan | Read-only scans using validated RDB settings and per-unit I/O overrides, selectable LBA/CHS ranges and retries, progress, error map and text logs with LBA and CHS when reported geometry permits. |
+| Create Image | Whole unit, partition or logical volume to RAW, HDF or IFF DOLY. Staged output and DLRP checkpoints after supported unexpected failures. |
+| Restore and Copy/Clone | Restore runs read-only RAW/HDF preflight. Raw device writes in the GUI, Copy/Clone and resizing remain in development. |
 | IFF DOLY | Single-file v1 raw and v2 Fast (PackBits) or Compact (LZSS/PackBits) with per-chunk CRC32. |
 
 MC68000 builds and FS-UAE A600 / AmigaOS 2.05 checks have passed for the
 prototypes. See the [test matrix](docs/TEST_MATRIX.md) for exact coverage.
-Physical-controller qualification, image restore, Smart Clone and repair
+Physical-controller qualification, Restore execution, Smart Clone and repair
 remain open.
 
 ```sh
@@ -44,7 +45,8 @@ ctest --test-dir build --output-on-failure
 ```
 
 See [Surface Scan](docs/SURFACE_SCAN.md), [Create Image](docs/CREATE_IMAGE.md),
-[IFF DOLY](docs/IFF_FORMAT.md), and [AmigaOS I/O limits](docs/AMIGA_IO.md).
+[IFF DOLY](docs/IFF_FORMAT.md), [DLRP checkpoints](docs/DLRP_FORMAT.md),
+[Restore development](docs/DEVICE_WRITE.md) and [AmigaOS I/O limits](docs/AMIGA_IO.md).
 
 ## Plans and community
 See [project scope](docs/SPECIFICATION.md), the [product backlog](docs/BACKLOG.md), [M0 sprint](docs/SPRINT_M0.md), [roadmap](docs/ROADMAP.md), [Polish introduction article](docs/ARTICLE_PL.md), [Retroware](RETROWARE.md), [contributing](CONTRIBUTING.md) and the [Post-MVP Flock Manager epic](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).

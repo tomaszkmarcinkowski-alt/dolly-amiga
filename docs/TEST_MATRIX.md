@@ -1,6 +1,13 @@
 # Dolly — staged testing matrix
 
-## Current branch verification
+## Alpha 3 verification
+
+| Scope | Observed result | Remaining coverage |
+| --- | --- | --- |
+| Host CTest | 36 tests, including native Exec mocks, image/target assessment, Restore batch transfer, DLRP serialization and LBA/CHS parsing. | Real-driver behavior. |
+| Native build | MC68000 GUI, write adapter and Restore source targets cross-compiled. | Runtime checks of the new scan dialog, Pause/Resume, the Restore timer and checkpoint save. |
+
+## Historical emulator verification through Alpha 2
 
 | Scope | Observed result | Remaining coverage |
 | --- | --- | --- |
@@ -11,7 +18,7 @@
 | Create Image | FS-UAE wrote a 6,193,152-byte partition HDF to RAM: and matched the source byte for byte. DLY v1 for that extent passed independent CRC32 verification for 378 data chunks. | Interactive ASL selection, output to a separate physical unit and ADF creation. |
 | DLY v2 | Both modes decoded byte for byte with independent CRC verification on a 192-sector mixed fixture. Cycle-exact A600: Fast 66,276 bytes in 7.40 s, Compact 38,164 bytes in 9.56 s, raw DLY reference 98,508 bytes. | Larger media and additional profiles. |
 
-The sections below retain their historical test plans and results.
+The sections below retain historical plans and results.
 
 
 Created after acceptance of M1.19 on MC68000 / Kickstart 2.04 /

@@ -60,7 +60,12 @@ recovered by an individual retry. X marks a cell with at least one
 unreadable sector and takes precedence over R. The Shell summary
 reports retry and unreadable sector counts, and the earlier lines
 locate the unreadable LBAs.
-Stop is handled between requests. Hiding Sheep Counter affects only
+The parameters window defaults to the first and last sector of the
+selected object, with one retry per unreadable sector. Both limits are
+inclusive. Enter absolute decimal LBA or C/H/S (cylinder and head start
+at zero, sector starts at one). The + and - buttons adjust by one sector
+or retry. The retry budget accepts 0–255. Pause and Stop are handled
+between requests. Stop pauses the scan and offers Abort or Resume. Hiding Sheep Counter affects only
 the view. A completed scan with unreadable sectors is reported as
 such, and an incomplete scan keeps its actual percentage.
 

@@ -12,6 +12,8 @@
 #include "dolly_amiga_log_view.h"
 #include "dolly_amiga_image.h"
 #include "dolly_amiga_io_settings.h"
+#include "dolly_operation_pointer.h"
+#include "dolly_amiga_restore_confirm.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
@@ -53,6 +55,7 @@ static const char hide_label[]="Hide";
 #define SHEEP_ERRORS_ID 206u
 #define SHEEP_PERCENT_ID 207u
 #define SHEEP_LOG_ID 220u
+#define SHEEP_PAUSE_ID 221u
 #define MAIN_START_ID 208u
 #define MAIN_DEVICE_ID 209u
 #define MAIN_OPERATION_ID 210u
@@ -65,7 +68,7 @@ static const char hide_label[]="Hide";
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 2"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3"
 #define MAIN_CONTROLS_OFFSET 87
 #define MAIN_PROGRESS_OFFSET 125
 #define MAIN_STATUS_OFFSET 147
@@ -81,13 +84,14 @@ typedef struct DemoLayout {
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h, gap_x, gap_y;
     LONG grid_w, grid_h, grid_cols;
-    LONG number_w, error_x, log_x, log_w, hide_x, hide_w;
+    LONG number_w, error_x, log_x, log_w, hide_x, hide_w, pause_x;
 } DemoLayout;
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
     struct Gadget *show, *settings, *placeholder, *stop, *quit;
-    struct Gadget *start, *hide, *log, *count, *errors, *percent;
+    struct Gadget *start, *hide, *log, *pause, *count, *errors, *percent;
+    const char *action_label;
     struct Gadget *device,*target_button,*source_text,*target_text;
     struct Gadget *description,*op_selector,*status;
     char source_label[72],target_label[72],desc_label[96];
@@ -253,13 +257,27 @@ static int can_start_operation(void) {
            dolly_demo_can_start((DollyDemoOperation)selected_operation,
                                 &selected_source,&selected_target);
 }
+static int operation_active(void) {
+    return operation.state==DOLLY_OP_RUNNING || operation.state==DOLLY_OP_PAUSED;
+}
+static const char *action_label(int main_window) {
+    if(operation.state==DOLLY_OP_PAUSED)return "Resume";
+    if(operation.state==DOLLY_OP_RUNNING || !main_window)return "Pause";
+    return "Start";
+}
+static int quit_blocked;
 static void update_main_status(void) {
     int need=dolly_demo_needs_target((DollyDemoOperation)selected_operation);
     int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
                                 &selected_source,&selected_target);
     text_copy(main_view.desc_label,sizeof(main_view.desc_label),
               demo_descriptions[selected_operation]);
-    if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result && image.failure)
+    if(quit_blocked && operation_active())
+        text_copy(main_view.status_label,sizeof(main_view.status_label),
+                  "Operation in progress. Cannot quit.");
+    else if(operation.state==DOLLY_OP_PAUSED)
+        text_copy(main_view.status_label,sizeof(main_view.status_label),"Operation paused.");
+    else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result && image.failure)
         text_copy(main_view.status_label,sizeof(main_view.status_label),image.failure);
     else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result &&
             operation.state==DOLLY_OP_COMPLETED)
@@ -349,9 +367,6 @@ static void append_u32(char **out,char *limit,unsigned long n) {
 }
 static void append_char(char **out,char *limit,char c) {
     if(*out<limit) *(*out)++=c;
-}
-static int operation_supports_safe_stop(void) {
-    return surface.source!=NULL || image.file!=0;
 }
 static int log_available(void) {
     return !image_result && surface.source_path[0] && !surface.source;
@@ -504,6 +519,7 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         d.hide_x=d.right-d.hide_w+1;
         d.log_w=sheep_button_width(w->RPort,show_log_label);
         d.log_x=d.hide_x-d.log_w-6;
+        d.pause_x=d.log_x-d.log_w-6;
         d.controls_y=d.bottom-15;
         d.bar_y=d.controls_y-26;
         d.percent_w=46;
@@ -513,7 +529,7 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         if(!fit_grid(&d,avail_w-6,grid_bottom-(d.top+19)))return 0;
         d.grid_x=d.left+(avail_w-d.grid_w)/2;
         d.grid_y=d.top+19+(grid_bottom-(d.top+19)-d.grid_h)/2;
-        d.number_w=(d.log_x-d.left-12)/2;
+        d.number_w=(d.pause_x-d.left-12)/2;
         d.error_x=d.left+d.number_w+6;
         if(d.number_w<80)return 0;
     }
@@ -538,13 +554,10 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
                           id==MAIN_PLACEHOLDER_ID ||
                           (id==SHEEP_LOG_ID && !log_available()) ||
                           (id==MAIN_STOP_ID &&
-                           (operation.state!=DOLLY_OP_RUNNING ||
-                            !operation_supports_safe_stop())) ||
+                           !operation_active()) ||
                           (id==MAIN_SHOW_ID && !counter_available()) ||
-                          (id==MAIN_START_ID &&
-                           ((operation.state==DOLLY_OP_RUNNING ||
-                             operation.state==DOLLY_OP_PAUSED) ||
-                            !can_start_operation())) ||
+                          (id==MAIN_START_ID && !operation_active() && !can_start_operation()) ||
+                          (id==SHEEP_PAUSE_ID && !operation_active()) ||
                           (id==MAIN_TARGET_ID &&
                            (!dolly_demo_needs_target(
                              (DollyDemoOperation)selected_operation) ||
@@ -621,7 +634,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->gadgets=NULL;
         v->show=NULL;v->settings=NULL;v->placeholder=NULL;
         v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
-        v->count=NULL;v->errors=NULL;v->percent=NULL;v->log=NULL;
+        v->count=NULL;v->errors=NULL;v->percent=NULL;v->log=NULL;v->pause=NULL;
         v->device=NULL;v->target_button=NULL;
         v->source_text=NULL;v->target_text=NULL;
         v->description=NULL;v->op_selector=NULL;v->status=NULL;
@@ -675,7 +688,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         if(!last)return 0;
         v->placeholder=last;
         last=make_button(last,v,MAIN_START_ID,d->left,
-                         d->controls_y+19,d->right-d->left+1,"Start");
+                         d->controls_y+19,d->right-d->left+1,action_label(1));
         if(!last)return 0;
         v->start=last;
         last=make_text(last,v,MAIN_COUNT_ID,d->progress_x,d->main_count_y,
@@ -704,6 +717,10 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         if(!last)return 0;
         v->errors=last;
         v->displayed_errors=(ULONG)operation.errors;
+        last=make_button(last,v,SHEEP_PAUSE_ID,d->pause_x,d->controls_y,
+                         d->log_w,action_label(0));
+        if(!last)return 0;
+        v->pause=last;
         last=make_button(last,v,SHEEP_LOG_ID,d->log_x,d->controls_y,
                          d->log_w,show_log_label);
         if(!last)return 0;
@@ -722,6 +739,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     v->gadgets_detached=0;
     RefreshGList(v->gadgets,v->window,NULL,-1);
     GT_RefreshWindow(v->window,NULL);
+    v->action_label=action_label(main_window);
     return 1;
 }
 static void destroy_view(DollyDemoView *v) {
@@ -1065,8 +1083,10 @@ static int io_settings_available(void) {
            !source_picker.window && !target_picker.window;
 }
 static void update_main_actions(void) {
-    int active=(operation.state==DOLLY_OP_RUNNING ||
-                operation.state==DOLLY_OP_PAUSED);
+    int active=operation_active();
+    if(sheep_view.window && sheep_view.pause)
+        GT_SetGadgetAttrs(sheep_view.pause,sheep_view.window,NULL,
+                          GA_Disabled,(ULONG)!active,TAG_DONE);
     if(sheep_view.window && sheep_view.log)
         GT_SetGadgetAttrs(sheep_view.log,sheep_view.window,NULL,
                           GA_Disabled,(ULONG)!log_available(),TAG_DONE);
@@ -1083,16 +1103,14 @@ static void update_main_actions(void) {
                           GA_Disabled,TRUE,TAG_DONE);
     if(main_view.stop)
         GT_SetGadgetAttrs(main_view.stop,main_view.window,NULL,
-                          GA_Disabled,(ULONG)(operation.state!=DOLLY_OP_RUNNING ||
-                                  !operation_supports_safe_stop()),TAG_DONE);
+                          GA_Disabled,(ULONG)!active,TAG_DONE);
     if(main_view.show)
         GT_SetGadgetAttrs(main_view.show,main_view.window,NULL,
                           GA_Disabled,(ULONG)!counter_available(),TAG_DONE);
     if(main_view.start)
         GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
-                          GA_Disabled,(ULONG)(active ||
-                          source_picker.window || target_picker.window ||
-                          !can_start_operation()),TAG_DONE);
+                          GA_Disabled,(ULONG)(!active && (source_picker.window || target_picker.window ||
+                          !can_start_operation())),TAG_DONE);
     if(main_view.device)
         GT_SetGadgetAttrs(main_view.device,main_view.window,NULL,
                           GA_Disabled,(ULONG)active,TAG_DONE);
@@ -1105,6 +1123,24 @@ static void update_main_actions(void) {
                           GA_Disabled,(ULONG)(active ||
                               source_picker.window ||
                               target_picker.window),TAG_DONE);
+}
+/* Rebuild only after draining the window queues, whose IAddress fields
+ * can still reference the current gadgets. */
+static void sync_action_labels(void) {
+    int changed=0;
+    if(main_view.window && !main_view.gadgets_detached &&
+       main_view.action_label && strcmp(main_view.action_label,action_label(1)) &&
+       rebuild_gadgets(&main_view,1)) {
+        draw_full(&main_view,1);
+        changed=1;
+    }
+    if(sheep_view.window && !sheep_view.gadgets_detached &&
+       sheep_view.action_label && strcmp(sheep_view.action_label,action_label(0)) &&
+       rebuild_gadgets(&sheep_view,0)) {
+        draw_full(&sheep_view,0);
+        changed=1;
+    }
+    if(changed)update_main_actions();
 }
 static void refresh_main_selection(void) {
     if(!main_view.window)return;
@@ -1142,6 +1178,32 @@ static void progress_view_update(unsigned old,int cell_changed) {
         update_numbers(&sheep_view);
     }
 }
+static void toggle_pause(void) {
+    quit_blocked=0;
+    if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
+    else if(operation.state==DOLLY_OP_PAUSED)(void)dolly_operation_resume(&operation);
+    refresh_main_selection();
+}
+static void ask_stop(void) {
+    struct EasyStruct request={
+        sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Operation in progress",
+        (STRPTR)"%s\nSource: %s\nDestination: %s",
+        (STRPTR)"Abort|Resume"
+    };
+    ULONG args[]={(ULONG)(scan_result?"Surface Scan":image_result?"Create Image":"Copy"),
+                  (ULONG)main_view.source_label,
+                  (ULONG)(scan_result?"-":main_view.target_label)};
+    if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
+    quit_blocked=0;
+    refresh_main_selection();
+    if(EasyRequestArgs(main_view.window,&request,NULL,args)==1) {
+        if(image.file)dolly_image_cancel(&image);
+        else dolly_surface_close(&surface);
+        (void)dolly_operation_cancel(&operation);
+    } else (void)dolly_operation_resume(&operation);
+    refresh_main_selection();
+}
+
 static void process_view(DollyDemoView *v,int main_window,int *quit) {
     struct IntuiMessage *msg;
     int relayout=0,redraw=0,hide=0;
@@ -1169,7 +1231,12 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         }
         GT_ReplyIMsg(msg);
         if(main_window) {
-            if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID)*quit=1;
+            if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID) {
+                if(operation_active()) {
+                    quit_blocked=1;
+                    refresh_main_selection();
+                } else *quit=1;
+            }
             else if(id==MAIN_SOURCE_ID) {
                 dolly_picker_close(&target_picker);
                 if(!dolly_picker_open(&source_picker,public_screen,0,
@@ -1194,15 +1261,19 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                       !source_picker.window && !target_picker.window) {
                 selected_operation=code;
                 refresh_main_selection();
-            } else if(id==MAIN_START_ID &&
+            } else if(id==MAIN_START_ID && operation_active())toggle_pause();
+            else if(id==MAIN_START_ID &&
                       operation.state!=DOLLY_OP_RUNNING &&
                       operation.state!=DOLLY_OP_PAUSED &&
                       !source_picker.window && !target_picker.window &&
                       can_start_operation()) {
+                quit_blocked=0;
                 if(selected_operation==DOLLY_DEMO_INVENTORY) {
                     if(!dolly_inventory_view_open(&inventory_view,
                                                    public_screen,&selected_source))
                         puts("INVENTORY WARN: unable to open Inventory");
+                } else if(selected_operation==DOLLY_DEMO_RESTORE) {
+                    dolly_amiga_restore_preview(main_view.window,&selected_source,&selected_target);
                 } else {
                     uint64_t total=GRID_TOTAL;
                     scan_result=(unsigned char)(selected_operation==DOLLY_DEMO_SCAN);
@@ -1211,7 +1282,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     if(scan_result) {
                         dolly_amiga_log_view_close();
                         dolly_operation_init(&operation);
-                        total=dolly_surface_open(&surface,&selected_source,main_view.window)?surface.total:0;
+                        total=dolly_surface_open(&surface,&selected_source,main_view.window,1)?surface.total:0;
                     } else if(image_result) {
                         dolly_amiga_log_view_close();
                         dolly_operation_init(&operation);
@@ -1226,12 +1297,8 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     }
                     refresh_main_selection();
                 }
-            } else if(id==MAIN_STOP_ID && operation_supports_safe_stop()) {
-                if(image.file)dolly_image_cancel(&image);
-                else dolly_surface_close(&surface);
-                (void)dolly_operation_cancel(&operation);
-                progress_view_update(progress_units(GRID_TOTAL),0);
-                refresh_main_selection();
+            } else if(id==MAIN_STOP_ID && operation_active()) {
+                ask_stop();
             } else if(id==MAIN_SHOW_ID && counter_available() &&
                       !show_sheep())
                 puts("MAIN WARN: unable to show Sheep Counter");
@@ -1240,6 +1307,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
            (cls==IDCMP_MENUPICK && code==IO_SETTINGS_ITEM)) &&
            io_settings_available())
             dolly_amiga_io_settings(public_screen,&selected_source);
+        if(!main_window && id==SHEEP_PAUSE_ID && operation_active())toggle_pause();
         if(!main_window && id==SHEEP_LOG_ID && log_available() &&
            !dolly_amiga_log_view_open(public_screen,&surface,log_outcome()))
             puts("SURFACE SCAN: could not open log window");
@@ -1347,6 +1415,11 @@ int main(int argc,char **argv) {
             unsigned old=progress_units(GRID_TOTAL);
             dolly_image_step(&image);
             (void)dolly_operation_progress(&operation,image.reader.processed,0,0);
+            if(image.failure && image.file) {
+                dolly_operation_pointer_offer(main_view.window,&selected_source,&selected_target,
+                                              &image.reader,&image);
+                dolly_image_cancel(&image);
+            }
             if(!image.file) {
                 (void)dolly_operation_finish(&operation,image.failure==NULL);
                 refresh_main_selection();
@@ -1390,6 +1463,7 @@ int main(int argc,char **argv) {
                 refresh_main_selection();
             }
         }
+        if(!quit)sync_action_labels();
     }
     printf("Session blocks=%lu/%lu state=%u visible=%u\n",
            (unsigned long)operation.completed_blocks,

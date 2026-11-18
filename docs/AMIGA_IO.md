@@ -18,7 +18,7 @@ The portable `DollyBlockSource` owns a caller-provided backend and enforces rang
 6. Require block-aligned offsets and transfer lengths; cap each transfer by the resolved `max_transfer_bytes`. Use a bounce buffer allocated with the resolved memory attributes and `MEMF_PUBLIC`. The adapter requires explicit DMA constraints and checks start address, alignment and buffer extent; controller-specific bus reachability and cache requirements still require hardware validation.
 7. Close the device, free its request/message port and memory on all paths.
 
-The device adapter is **read-only**. It contains no `CMD_WRITE`, `TD_FORMAT` or other mutating device command.
+The source adapter is **read-only**. The separate [device write adapter](DEVICE_WRITE.md) is a development target.
 
 ## Automatic settings and manual override
 
@@ -40,9 +40,10 @@ the same raw read policy:
 3. The middle **Settings** button opens preferences. With a selected
    physical, partition or logical source, the three per-unit fields
    accept decimal or `0x` hexadecimal values. Blank means Auto.
-   **Reset Auto** clears the fields, **Use** applies settings for this
-   session and **Save** also persists them. Initial geometry and table
-   discovery use small read-only probes before RDB is available.
+   **Reset Auto** clears the editable per-unit fields. **Save** applies and
+   persists every accepted change. **Cancel** discards the edits. Initial
+   geometry and table discovery use small read-only probes before RDB is
+   available.
 
 `Mask` constrains the complete DMA allocation and its start alignment.
 `BufMemType` supplies Exec allocation attributes, and `MaxTransfer`
@@ -57,6 +58,11 @@ limited to 4 GiB by default. The explicit **Bypass legacy scsi.device
 drivers. Reads above the boundary still require verified NSD READ64
 or the existing INQUIRY-qualified UAE-IDE READ(10) path.
 
+**Verify writes by reading sectors back** defaults to off. When enabled,
+the block writer reads each written batch back after flushing and compares
+it byte for byte against the input. Connecting the native adapter and
+this setting to Restore is pending. See [Device writes](DEVICE_WRITE.md).
+
 ## Preferences file
 
 The default is `ENVARC:dolly.prefs`. From Workbench, set the icon
@@ -68,7 +74,10 @@ ignores the entire file.
 
 The file is an Amiga IFF `FORM PREF` with a six-byte `PRHD` chunk
 and Dolly's `DOIO` chunk. The first byte of PRHD is the schema version,
-currently 1. DOIO contains a 32-bit global legacy-limit flag, a 32-bit
+currently 4. DOIO contains a 32-bit global flags field (bit 0 enables
+the legacy-limit override, bit 1 enables write verification, bit 2 hides
+the same-device speed warning, bit 3 allows the Restore compatibility
+override), a 32-bit
 record count, and up to 64 fixed records. Each record contains a
 60-byte NUL-terminated driver name followed by five 32-bit fields:
 unit, presence flags, Mask, BufMemType and MaxTransfer. IFF integers

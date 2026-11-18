@@ -38,6 +38,15 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
+add_library(dollyrestoresource STATIC src/dolly_restore_source.c src/dolly_restore_transfer.c)
+target_include_directories(dollyrestoresource PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyrestoresource PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+if(DOLLY_NATIVE_M68000)
+  target_compile_options(dollyrestoresource PRIVATE -m68000)
+endif()
+
 # Shared content-based minimum size preflight (pure C99; host + m68k).
 add_library(dollyguimin STATIC src/dolly_gui_minimum.c)
 target_include_directories(dollyguimin PUBLIC ${PROJECT_SOURCE_DIR}/include)
@@ -92,6 +101,15 @@ if(DOLLY_NATIVE_ONLY)
   endif()
   # Real Intuition screen smoke, AmigaOS 2.x+ only. No device I/O.
   if(DOLLY_NATIVE_M68000)
+    add_library(dollyamigawrite STATIC amiga/dolly_amiga_write.c src/dolly_dma_policy.c)
+    target_include_directories(dollyamigawrite PUBLIC ${PROJECT_SOURCE_DIR}/amiga)
+    target_compile_options(dollyamigawrite PRIVATE -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(dollyamigawrite PUBLIC dollyblocktarget)
+    add_library(dollyamigarestore STATIC amiga/dolly_amiga_restore_source.c
+      src/dolly_block_source.c)
+    target_include_directories(dollyamigarestore PUBLIC ${PROJECT_SOURCE_DIR}/amiga)
+    target_compile_options(dollyamigarestore PRIVATE -m68000 -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(dollyamigarestore PUBLIC dollyrestoresource)
     add_executable(dolly-screen-smoke amiga/dolly_screen_smoke.c)
     target_compile_options(dolly-screen-smoke PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
@@ -117,9 +135,14 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_partition_scan.c
       amiga/dolly_amiga_inventory_view.c
       amiga/dolly_amiga_surface_scan.c amiga/dolly_amiga_source.c
+      amiga/dolly_amiga_scan_options.c src/dolly_scan_range.c
       amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
       amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
       amiga/dolly_amiga_io_settings.c amiga/dolly_amiga_prefs.c
+      amiga/dolly_amiga_transfer_guard.c amiga/dolly_amiga_restore_confirm.c
+      amiga/dolly_amiga_destructive.c amiga/dolly_operation_pointer.c src/dolly_dlrp.c
+      amiga/dolly_amiga_restore_source.c
+      src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
       src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
     target_compile_options(dolly-two-window-demo PRIVATE
@@ -282,6 +305,14 @@ add_executable(test-block-target tests/test_block_target.c)
 target_link_libraries(test-block-target PRIVATE dollyblocktarget)
 add_test(NAME verified_bounded_write COMMAND test-block-target)
 
+add_executable(test-restore-source tests/test_restore_source.c src/dolly_restore_check.c)
+target_link_libraries(test-restore-source PRIVATE dollyrestoresource dollyrdb)
+add_test(NAME restore_source_geometry COMMAND test-restore-source)
+
+add_executable(test-dlrp tests/test_dlrp.c src/dolly_dlrp.c)
+target_include_directories(test-dlrp PRIVATE ${PROJECT_SOURCE_DIR}/include)
+add_test(NAME dlrp_iff_serialization COMMAND test-dlrp)
+
 # Fake Exec API catches adapter mistakes on host. This is NOT a 68000 build.
 add_executable(test-amiga-mock tests/test_amiga_device_mock.c
   tests/amiga_mock/amiga_mock_exec.c amiga/dolly_amiga_source.c)
@@ -290,8 +321,15 @@ target_include_directories(test-amiga-mock PRIVATE
   ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan dollydma)
 add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
+add_executable(test-amiga-write tests/test_amiga_write_mock.c amiga/dolly_amiga_write.c)
+target_compile_definitions(test-amiga-write PRIVATE DOLLY_AMIGA_MOCK)
+target_include_directories(test-amiga-write PRIVATE
+  ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/amiga)
+target_link_libraries(test-amiga-write PRIVATE dollyblocktarget dollydma)
+add_test(NAME amiga_write_exec_mock COMMAND test-amiga-write)
 
-add_executable(test-surface-log tests/test_surface_log.c amiga/dolly_surface_log.c)
+
+add_executable(test-surface-log tests/test_surface_log.c amiga/dolly_surface_log.c src/dolly_scan_range.c)
 target_include_directories(test-surface-log PRIVATE ${PROJECT_SOURCE_DIR}/amiga)
 target_link_libraries(test-surface-log PRIVATE dollyblock)
 add_test(NAME surface_log COMMAND test-surface-log)
@@ -356,7 +394,7 @@ add_test(NAME rdb_mutation_stability COMMAND test-rdb-mutations)
 # Several M0 test cases use assert() both for setup and validation.
 # Force assertions on in all GNU/Clang test executables, even Release builds.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  foreach(dolly_test IN ITEMS test-probe test-block-source test-rdb test-partition-map test-io-plan test-block-target test-amiga-mock test-iff test-maxtransfer test-rdb-audit test-rdb-mutations)
+  foreach(dolly_test IN ITEMS test-probe test-block-source test-rdb test-partition-map test-io-plan test-block-target test-restore-source test-dlrp test-amiga-mock test-amiga-write test-iff test-maxtransfer test-rdb-audit test-rdb-mutations)
     target_compile_options(${dolly_test} PRIVATE -UNDEBUG)
   endforeach()
 endif()

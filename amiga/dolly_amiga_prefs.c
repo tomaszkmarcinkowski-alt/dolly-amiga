@@ -8,7 +8,11 @@
 
 struct Library *IconBase;
 
-#define PREFS_VERSION 1u
+#define PREFS_VERSION 4u
+#define PREFS_ALLOW_RESTORE_MISMATCH 8u
+#define PREFS_LEGACY_LIMIT 1u
+#define PREFS_VERIFY_WRITES 2u
+#define PREFS_SUPPRESS_SAME_UNIT_WARNING 4u
 #define PREFS_DEFAULT "ENVARC:dolly.prefs"
 #define PREFS_RECORD (DOLLY_PHYS_DRIVER_LEN+20u)
 static char prefs_path[256]=PREFS_DEFAULT;
@@ -95,7 +99,7 @@ const char *dolly_amiga_prefs_load(int argc,char **argv) {
        (bytes-8)%PREFS_RECORD || get32(header+4)!=26u+bytes ||
        get32(header+38)!=(bytes-8)/PREFS_RECORD)goto finish;
     flags=get32(header+34);
-    if(flags>1u)goto finish;
+    if(flags&~(PREFS_LEGACY_LIMIT|PREFS_VERIFY_WRITES|PREFS_SUPPRESS_SAME_UNIT_WARNING|PREFS_ALLOW_RESTORE_MISMATCH))goto finish;
     while(bytes>8) {
         DollyPhysicalEntry device;
         DollyIoHints hints;
@@ -116,7 +120,10 @@ const char *dolly_amiga_prefs_load(int argc,char **argv) {
         bytes-=PREFS_RECORD;
     }
     if(Read(f,&extra,1)!=0)goto finish;
-    dolly_amiga_set_legacy_override((int)flags);
+    dolly_amiga_set_legacy_override((flags&PREFS_LEGACY_LIMIT)!=0);
+    dolly_amiga_set_verify_writes((flags&PREFS_VERIFY_WRITES)!=0);
+    dolly_amiga_set_suppress_same_unit_warning((flags&PREFS_SUPPRESS_SAME_UNIT_WARNING)!=0);
+    dolly_amiga_set_allow_restore_mismatch((flags&PREFS_ALLOW_RESTORE_MISMATCH)!=0);
     error=NULL;
 finish:
     Close(f);
@@ -140,7 +147,10 @@ int dolly_amiga_prefs_save(void) {
     memcpy(header+8,"PREFPRHD",8);put32(header+16,6);
     header[20]=PREFS_VERSION;
     memcpy(header+26,"DOIO",4);put32(header+30,bytes);
-    put32(header+34,(uint32_t)dolly_amiga_legacy_override());
+    put32(header+34,(dolly_amiga_legacy_override()?PREFS_LEGACY_LIMIT:0u) |
+                    (dolly_amiga_verify_writes()?PREFS_VERIFY_WRITES:0u) |
+                    (dolly_amiga_suppress_same_unit_warning()?PREFS_SUPPRESS_SAME_UNIT_WARNING:0u) |
+                    (dolly_amiga_allow_restore_mismatch()?PREFS_ALLOW_RESTORE_MISMATCH:0u));
     put32(header+38,count);
     prefix=(size_t)((const char *)FilePart((STRPTR)prefs_path)-prefs_path);
     memcpy(drawer,prefs_path,prefix);

@@ -1,9 +1,21 @@
 #include "dolly_surface_log.h"
+#include "dolly_scan_range.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
 int main(void) {
+    {
+        DollyMediaGeometry geometry={.cylinders=100,.heads=4,.sectors_per_track=16};
+        uint64_t lba;
+        assert(dolly_scan_position("4294967297",&geometry,&lba) && lba==UINT64_C(4294967297));
+        assert(dolly_scan_position("1/2/3",&geometry,&lba) && lba==98);
+        assert(!dolly_scan_position("1/2/0",&geometry,&lba));
+        assert(!dolly_scan_position("100/0/1",&geometry,&lba));
+        assert(!dolly_scan_position("1/4/1",&geometry,&lba));
+        assert(!dolly_scan_position("18446744073709551616",&geometry,&lba));
+    }
+
     DollySurfaceLog log={0};
     DollyMediaGeometry geometry={0};
     DollySurfaceEvent error={0,1,DOLLY_SURFACE_UNREADABLE,DOLLY_BLOCK_EIO};
