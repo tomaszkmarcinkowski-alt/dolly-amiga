@@ -28,6 +28,16 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
+# Bounded write/flush/readback policy, independent of the target transport.
+add_library(dollyblocktarget STATIC src/dolly_block_target.c)
+target_include_directories(dollyblocktarget PUBLIC ${PROJECT_SOURCE_DIR}/include)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollyblocktarget PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  if(DOLLY_NATIVE_M68000)
+    target_compile_options(dollyblocktarget PRIVATE -m68000)
+  endif()
+endif()
+
 # Shared content-based minimum size preflight (pure C99; host + m68k).
 add_library(dollyguimin STATIC src/dolly_gui_minimum.c)
 target_include_directories(dollyguimin PUBLIC ${PROJECT_SOURCE_DIR}/include)
@@ -268,6 +278,9 @@ endif()
 add_executable(test-io-plan tests/test_io_plan.c)
 target_link_libraries(test-io-plan PRIVATE dollyioplan)
 add_test(NAME io_64bit_planning COMMAND test-io-plan)
+add_executable(test-block-target tests/test_block_target.c)
+target_link_libraries(test-block-target PRIVATE dollyblocktarget)
+add_test(NAME verified_bounded_write COMMAND test-block-target)
 
 # Fake Exec API catches adapter mistakes on host. This is NOT a 68000 build.
 add_executable(test-amiga-mock tests/test_amiga_device_mock.c
@@ -343,7 +356,7 @@ add_test(NAME rdb_mutation_stability COMMAND test-rdb-mutations)
 # Several M0 test cases use assert() both for setup and validation.
 # Force assertions on in all GNU/Clang test executables, even Release builds.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  foreach(dolly_test IN ITEMS test-probe test-block-source test-rdb test-partition-map test-io-plan test-amiga-mock test-iff test-maxtransfer test-rdb-audit test-rdb-mutations)
+  foreach(dolly_test IN ITEMS test-probe test-block-source test-rdb test-partition-map test-io-plan test-block-target test-amiga-mock test-iff test-maxtransfer test-rdb-audit test-rdb-mutations)
     target_compile_options(${dolly_test} PRIVATE -UNDEBUG)
   endforeach()
 endif()
