@@ -1,0 +1,76 @@
+name: Publish Dolly 0.1.0 Alpha 1
+
+on:
+  push:
+    branches: [release/v0.1.0-alpha.1-build]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'tomaszkmarcinkowski-alt/dolly-amiga'
+    runs-on: ubuntu-latest
+    env:
+      DOLLY_RELEASE_SOURCE: a2ef546de788d8fbb440e57c05757e20152a52f7
+      DOLLY_RELEASE_TAG: v0.1.0-alpha.1
+    steps:
+      - name: Fetch the pinned main snapshot
+        run: |
+          mkdir source native package output
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://codeload.github.com/$GITHUB_REPOSITORY/tar.gz/$DOLLY_RELEASE_SOURCE" \
+            | tar --extract --gzip --directory source --strip-components 1
+      - name: Install the cross-build CMake frontend
+        run: python3 -m pip install --target "$RUNNER_TEMP/dolly-cmake" cmake==3.31.6
+      - name: Build MC68000 executable
+        run: |
+          for phase in configure build; do
+            if [ "$phase" = configure ]; then
+              set -- -S /src -B /build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE=/src/cmake/toolchains/amigaos-m68k.cmake \
+                -DDOLLY_NATIVE_ONLY=ON -DDOLLY_NATIVE_M68000=ON
+            else
+              set -- --build /build --target dolly-two-window-demo --parallel 2
+            fi
+            docker run --rm --network none \
+              -v "$PWD/source:/src:ro" -v "$PWD/native:/build" \
+              -v "$RUNNER_TEMP/dolly-cmake/cmake/data:/cmake:ro" -w /src \
+              amigadev/crosstools@sha256:7cf1f503b04bb3acaa60e16ee49b4d308784befc424cba429d6038c21b628d65 \
+              /cmake/bin/cmake "$@"
+          done
+          install -m 755 native/dolly-two-window-demo package/Dolly
+          file package/Dolly | tee output/binary-type.txt
+          grep -qi 'AmigaOS loadseg' output/binary-type.txt
+      - name: Package the release
+        run: |
+          cp source/LICENSE package/
+          cat >package/README.txt <<'NOTES'
+          Dolly 0.1.0 Alpha 1 (M1.46 prototypes)
+          AmigaOS 2.04+ / Motorola 68000 / GadTools
+          Extract the ZIP and run Dolly from an AmigaDOS Shell.
+          The prototypes have been tested on A600 in FS-UAE with AmigaOS 2.05.
+          Source device access is read-only. Use disposable images for testing.
+          NOTES
+          (cd package && zip -q ../output/Dolly-0.1.0-alpha.1-Amiga-68000.zip Dolly LICENSE README.txt)
+          (cd output && sha256sum Dolly-0.1.0-alpha.1-Amiga-68000.zip > SHA256SUMS.txt)
+          cat >output/release-notes.md <<'NOTES'
+          First public Dolly alpha from the M1.46 development line.
+
+          - Native MC68000 GadTools build targeting AmigaOS 2.04+.
+          - Sheep Inventory with RDB/MBR details and metadata backup.
+          - Surface Scan with qualified UAE-IDE large-offset reads and LBA/CHS logs.
+          - Create Image to RAW, HDF, or single-file IFF DOLY with Fast and Compact compression.
+
+          Tested in FS-UAE on A600 / AmigaOS 2.05. Physical-controller validation remains open. Imaging uses a qualified read-only source and a staged file on a separate verified destination. The single-file writer is limited to less than 2 GiB.
+
+          Build source: `a2ef546de788d8fbb440e57c05757e20152a52f7`.
+          NOTES
+      - name: Create the prerelease and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$DOLLY_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$DOLLY_RELEASE_SOURCE" --title 'Dolly 0.1.0 Alpha 1' \
+            --prerelease --notes-file output/release-notes.md \
+            output/Dolly-0.1.0-alpha.1-Amiga-68000.zip output/SHA256SUMS.txt
