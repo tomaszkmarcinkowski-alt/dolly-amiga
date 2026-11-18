@@ -17,6 +17,7 @@ const char *dolly_block_status_name(DollyBlockStatus s) {
     case DOLLY_BLOCK_EIO: return "I/O error";
     case DOLLY_BLOCK_ENOMEM: return "Out of memory";
     case DOLLY_BLOCK_EUNSUPPORTED: return "Unsupported operation";
+    case DOLLY_BLOCK_EDEVICE: return "Device or media unavailable";
     default: return "Unknown error";
     }
 }

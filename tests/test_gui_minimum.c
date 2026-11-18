@@ -19,6 +19,12 @@ int main(void) {
     assert(a.outer_width>=2*(104+12)+6+8+8);
     assert(b.outer_width>=24*10+8+8+8);
     assert(b.outer_height>=140+4+12+4);
+    /* Blocks, Errors, Show Log and Hide must all fit on the footer. */
+    assert(b.outer_width>=80+6+80+6+76+6+76+8+8);
+    m.log_button_text_width=96;
+    c=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_SHEEP,m);
+    assert(c.valid && c.outer_width==b.outer_width+32);
+    m.log_button_text_width=0;
     /* A longer heading that still fits within the control-imposed
      * 320px client minimum must not enlarge the window.
      */

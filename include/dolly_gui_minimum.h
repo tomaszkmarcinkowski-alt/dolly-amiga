@@ -18,7 +18,7 @@ typedef struct DollyGuiMinMetrics {
     uint32_t heading_width;
     uint32_t show_button_text_width;
     uint32_t quit_button_text_width;
-    uint32_t hide_button_text_width;
+    uint32_t hide_button_text_width,log_button_text_width;
 } DollyGuiMinMetrics;
 typedef struct DollyGuiMinimum {
     uint32_t outer_width,outer_height;

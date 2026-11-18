@@ -3,6 +3,7 @@
 #include <exec/memory.h>
 #include <devices/trackdisk.h>
 #include <proto/exec.h>
+#include <proto/dos.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -81,6 +82,8 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
                     ULONG base_lba,ULONG scan_limit) {
     ULONG block,head=RDB_END,header_block=RDB_END;
     ULONG seen[DOLLY_PART_MAX];
+    ULONG reserved_lo=0,reserved_hi=0;
+    int backup_range_ok=0;
     unsigned used=0,i,j;
     r->base_lba=base_lba;
     for(block=0;block<scan_limit;++block) {
@@ -95,9 +98,23 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         }
         head=be32(r->buffer+28);
         header_block=block;
+        if(base_lba==0 && be32(r->buffer+4)>=39u) {
+            ULONG offset;
+            reserved_lo=be32(r->buffer+128);
+            reserved_hi=be32(r->buffer+132);
+            backup_range_ok=reserved_lo<=block && block<=reserved_hi &&
+                reserved_hi<=0xfffffffful/BLK &&
+                ((uint64_t)reserved_hi+1u)*BLK<=r->total_bytes &&
+                be32(r->buffer+152)<=reserved_hi;
+            for(offset=24u;offset<=36u;offset+=4u) {
+                ULONG link=be32(r->buffer+offset);
+                if(link!=RDB_END && (link<reserved_lo || link>reserved_hi))
+                    backup_range_ok=0;
+            }
+        }
         break;
     }
-    if(head==RDB_END)return 0;
+    if(header_block==RDB_END)return 0;
     while(head!=RDB_END) {
         ULONG next,envwords,blockwords,heads,spt,low,high,dos;
         uint64_t cyl_bytes,begin,length;
@@ -112,6 +129,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
             return -1;
         }
         seen[used++]=head;
+        if(head<reserved_lo || head>reserved_hi)backup_range_ok=0;
         if(!load_sector(r,head) || memcmp(r->buffer,"PART",4)!=0) {
             strcpy(out->status,"Invalid RDB PART block");
             return -1;
@@ -129,8 +147,8 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         low=be32(r->buffer+164);
         high=be32(r->buffer+168);
         dos=envwords>=16u?be32(r->buffer+192):0ul;
-        if(!heads || !spt || !blockwords ||
-           blockwords>8192ul || high<low) {
+        if(!heads || !spt || blockwords<BLK/4u ||
+           blockwords%(BLK/4u)!=0 || blockwords>8192ul || high<low) {
             strcpy(out->status,"Invalid RDB geometry");
             return -1;
         }
@@ -151,6 +169,8 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         safe_label(p->label,r->buffer+37,r->buffer[36]);
         if(!p->label[0])sprintf(p->label,"RDB %lu",(unsigned long)out->count);
         p->is_rdb=1;
+        p->rdb_bootable=(unsigned char)((be32(r->buffer+20)&1u)!=0);
+        p->rdb_automount=(unsigned char)((be32(r->buffer+20)&2u)==0);
         p->start_bytes=begin;p->length_bytes=length;
         p->low_cyl=low;p->high_cyl=high;
         p->fs_block_bytes=blockwords*4u;
@@ -188,6 +208,8 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         DollyNativePartition *part=&out->parts[i];
         uint64_t metadata=((uint64_t)base_lba+
                            (uint64_t)header_block)*BLK;
+        if(part->start_bytes<((uint64_t)reserved_hi+1u)*BLK)
+            backup_range_ok=0;
         if(metadata>=part->start_bytes &&
            metadata-part->start_bytes<part->length_bytes) {
             strcpy(out->status,"Partition overlaps RDB header");
@@ -213,10 +235,13 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
             }
         }
     strcpy(out->status,"RDB");
+    out->format=DOLLY_NATIVE_PARTITION_RDB;
+    if(backup_range_ok)out->rdb_backup_blocks=reserved_hi+1u;
     return 1;
 }
-static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
+static int scan_mbr(Reader *r,DollyNativePartitionMap *out,int inventory) {
     unsigned i,j;
+    int primary_only=1;
     r->base_lba=0;
     if(!load_sector(r,0)) {
         strcpy(out->status,"MBR read failed");return 0;
@@ -226,18 +251,26 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
     }
     for(i=0;i<4u;++i) {
         const UBYTE *p=r->buffer+446+16u*i;
+        int container=p[4]==0x05u || p[4]==0x0fu ||
+                      p[4]==0x85u || p[4]==0x76u;
         ULONG first=le32(p+8),count=le32(p+12);
         uint64_t begin=(uint64_t)first*BLK;
         uint64_t length=(uint64_t)count*BLK;
         DollyNativePartition *part;
         char label_copy[40];
         if(!p[4] && !first && !count)continue;
-        if(!first || !count || (p[0]!=0 && p[0]!=0x80) ||
-           p[4]==0xeeu || p[4]==0x05u || p[4]==0x0fu ||
-           p[4]==0x85u || p[4]==0x76u ||
+        if(p[4]==0xeeu) {
+            strcpy(out->status,"Protective MBR / GPT unsupported");
+            return 0;
+        }
+        if(container && !inventory) {
+            strcpy(out->status,"Extended or nested RDB MBR unsupported here");
+            return 0;
+        }
+        if(!p[4] || !first || !count || (p[0]!=0 && p[0]!=0x80) ||
            begin>r->total_bytes ||
            length>r->total_bytes-begin) {
-            strcpy(out->status,"Unsupported MBR/GPT/extended/nested RDB");
+            strcpy(out->status,"Invalid MBR partition entry");
             return 0;
         }
         part=&out->parts[out->count++];
@@ -245,8 +278,11 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
         sprintf(part->label,"MBR %lu",(unsigned long)(i+1u));
         strcpy(label_copy,part->label);
         part->mbr_type=p[4];
+        part->mbr_slot=(UBYTE)(i+1u);
+        part->mbr_active=(UBYTE)(p[0]==0x80u);
+        part->mbr_container=(UBYTE)container;
+        if(container)primary_only=0;
         part->start_bytes=begin;part->length_bytes=length;
-        part->fs_block_bytes=BLK;
         sprintf(part->summary,"%s | %lu MiB | Type %02lx | LBA %lu+%lu | %lu B",
                label_copy,(unsigned long)(length/1048576u),
                (unsigned long)p[4],(unsigned long)first,
@@ -262,10 +298,15 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out) {
             }
         }
     strcpy(out->status,out->count?"MBR":"Empty MBR");
+    if(out->count) {
+        out->format=DOLLY_NATIVE_PARTITION_MBR;
+        out->mbr_backup_available=(unsigned char)primary_only;
+    }
     return out->count>0;
 }
-int dolly_amiga_partition_scan(const char *driver,ULONG unit,
-          const DollyMediaGeometry *geometry,DollyNativePartitionMap *out) {
+static int scan_device(const char *driver,ULONG unit,
+          const DollyMediaGeometry *geometry,DollyNativePartitionMap *out,
+          DollyNativePartitionFormat expected,BPTR backup_file,int inventory) {
     struct MsgPort *port=NULL;
     struct IOExtTD *io=NULL;
     Reader r;
@@ -304,13 +345,52 @@ int dolly_amiga_partition_scan(const char *driver,ULONG unit,
                    r.buffer[482]!=0 || r.buffer[498]!=0)) {
             strcpy(out->status,"Hybrid RDB/MBR unsupported");
         } else ok=1;
-    } else if(rs==0)ok=scan_mbr(&r,out);
+    } else if(rs==0)ok=scan_mbr(&r,out,inventory);
+    if(ok && backup_file) {
+        ok=out->format==expected;
+        if(ok && expected==DOLLY_NATIVE_PARTITION_MBR) {
+            /* scan_mbr left the validated LBA 0 in the read buffer. */
+            ok=Write(backup_file,r.buffer,BLK)==BLK;
+        } else if(ok) {
+            ULONG block;
+            ok=out->rdb_backup_blocks!=0;
+            for(block=0;ok && block<out->rdb_backup_blocks;++block)
+                ok=load_sector(&r,block) &&
+                    Write(backup_file,r.buffer,BLK)==BLK;
+        }
+    }
 finish:
     if(opened)CloseDevice((struct IORequest *)io);
     if(r.buffer)FreeMem(r.buffer,BLK);
     if(io)DeleteIORequest((struct IORequest *)io);
     if(port)DeleteMsgPort(port);
-    if(!ok)out->count=0;
+    if(!ok) {
+        out->count=0;
+        out->format=DOLLY_NATIVE_PARTITION_NONE;
+        out->rdb_backup_blocks=0;
+        out->mbr_backup_available=0;
+    }
     if(!opened)strcpy(out->status,"Device open failed");
+    return ok;
+}
+int dolly_amiga_partition_scan(const char *driver,ULONG unit,
+          const DollyMediaGeometry *geometry,DollyNativePartitionMap *out) {
+    return scan_device(driver,unit,geometry,out,DOLLY_NATIVE_PARTITION_NONE,0,0);
+}
+int dolly_amiga_inventory_scan(const char *driver,ULONG unit,
+          const DollyMediaGeometry *geometry,DollyNativePartitionMap *out) {
+    return scan_device(driver,unit,geometry,out,DOLLY_NATIVE_PARTITION_NONE,0,1);
+}
+int dolly_amiga_partition_backup(const char *driver,ULONG unit,
+          const DollyMediaGeometry *geometry,DollyNativePartitionFormat format,
+          BPTR file) {
+    DollyNativePartitionMap *map;
+    int ok;
+    if(!file || (format!=DOLLY_NATIVE_PARTITION_RDB &&
+                 format!=DOLLY_NATIVE_PARTITION_MBR))return 0;
+    map=AllocMem(sizeof(*map),MEMF_PUBLIC);
+    if(!map)return 0;
+    ok=scan_device(driver,unit,geometry,map,format,file,0);
+    FreeMem(map,sizeof(*map));
     return ok;
 }

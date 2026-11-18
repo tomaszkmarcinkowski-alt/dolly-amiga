@@ -40,7 +40,8 @@ extern struct DosLibrary *DOSBase;
 #define PICK_GEOMETRY_INFO_TEXT 517u
 
 static STRPTR image_formats[]={
-    (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",NULL
+    (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",
+    (STRPTR)"IFF DOLY Fast",(STRPTR)"IFF DOLY Compact",NULL
 };
 static STRPTR mode_names[]={
     (STRPTR)"Physical device",
@@ -978,7 +979,7 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
         }
     }
     if(initial && initial->kind==DOLLY_ENDPOINT_FILE &&
-       (unsigned)initial->image_format<=3u)
+       (unsigned)initial->image_format<=DOLLY_IMAGE_IFF_COMPACT)
         p->output_format=initial->image_format;
     p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE &&
              dolly_mode_allowed(p->allowed_mask,
@@ -1077,10 +1078,14 @@ static int commit_picker(DollyEndpointPicker *p) {
             p->partition<p->partition_count) {
         ok=dolly_endpoint_set_partition(&p->result,p->device,
                                         p->unit,p->partition);
-        if(ok)sprintf(p->result.path,"%s / Unit %lu / %s",
-                       p->physical_names[p->device],
-                       (unsigned long)p->physical_units[p->unit],
-                       p->partition_map.parts[p->partition].label);
+        if(ok) {
+            const DollyNativePartition *part=&p->partition_map.parts[p->partition];
+            sprintf(p->result.path,"%s / Unit %lu / %s",
+                    p->physical_names[p->device],
+                    (unsigned long)p->physical_units[p->unit],part->label);
+            p->result.partition_start_bytes=part->start_bytes;
+            p->result.partition_length_bytes=part->length_bytes;
+        }
     }
     else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
         if(p->logical<p->logical_count) {
@@ -1194,13 +1199,13 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                       p->physical_units[p->unit],
                       p->disk_info_display,sizeof(p->disk_info_display),
                       p->disk_size_display,sizeof(p->disk_size_display),
-                      &p->media_geometry);
+                      &p->media_geometry,0);
                 refresh_disk_info(p);
                 change_enabled(p);
             }
         } else if(id==PICK_SELECT) {
             close=commit_picker(p);
-        } else if(id==PICK_IMAGE_FORMAT && p->role && code<4u) {
+        } else if(id==PICK_IMAGE_FORMAT && p->role && code<=DOLLY_IMAGE_IFF_COMPACT) {
             p->output_format=(DollyImageFormat)code;
         } else if(id==PICK_FILE && p->mode==DOLLY_MODE_FILE) {
             DollyEndpoint selected={0};
@@ -1240,7 +1245,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                   p->physical_units[p->unit],
                   p->disk_info_display,sizeof(p->disk_info_display),
                   p->disk_size_display,sizeof(p->disk_size_display),
-                  &p->media_geometry);
+                  &p->media_geometry,0);
             p->has_partition=0;
             p->partition_scanned=0;
             p->partition_count=0;

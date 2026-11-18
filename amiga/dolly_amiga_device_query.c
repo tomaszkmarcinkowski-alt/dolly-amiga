@@ -9,6 +9,38 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Endpoint.path is constructed by our picker as "driver / Unit N".
+ * The endpoint's byte-sized unit field is only an index, NOT the
+ * actual controller unit number; never pass it to OpenDevice.
+ */
+const char *dolly_amiga_parse_unit(const char *path,char *driver,
+                      unsigned capacity,ULONG *unit) {
+    const char *marker,*digits,*p;
+    ULONG number=0;
+    size_t n;
+    if(!path || !driver || !unit)return NULL;
+    marker=strstr(path," / Unit ");
+    if(!marker)return NULL;
+    n=(size_t)(marker-path);
+    if(!n || n>=capacity || n<7u)return NULL;
+    /* Verify the driver suffix, no implicit device-name guesses. */
+    if(strncmp(marker-7,".device",7)!=0)return NULL;
+    digits=marker+8;
+    if(*digits<'0' || *digits>'9')return NULL;
+    p=digits;
+    while(*p>='0' && *p<='9') {
+        ULONG digit=(ULONG)(*p-'0');
+        if(number>(0xfffffffful-digit)/10ul)return NULL;
+        number=number*10ul+digit;
+        ++p;
+    }
+    if(*p!='\0' && strncmp(p," / ",3)!=0)return NULL;
+    memcpy(driver,path,n);
+    driver[n]='\0';
+    *unit=number;
+    return p;
+}
+
 /* Reject corrupt/nonstandard geometry instead of enabling selection
  * based on an arbitrary nonzero size. Both probes use this policy.
  */
@@ -48,10 +80,41 @@ static void capacity_string(char *out,unsigned cap,uint64_t bytes) {
     sprintf(buffer,"%lu MiB",(unsigned long)(bytes/1048576u));
     assign_string(out,cap,buffer);
 }
+/* MODE SENSE(6), current values. The DMA buffer also holds the CDB. */
+static const UBYTE *mode_page(struct IOExtTD *io,UBYTE *data,
+                              UBYTE page,unsigned minimum) {
+    struct SCSICmd sc;
+    unsigned length,offset;
+    memset(data,0,64);
+    memset(&sc,0,sizeof(sc));
+    data[40]=0x1au;
+    data[41]=0x08u; /* Disable block descriptors. */
+    data[42]=page;
+    data[44]=40u;
+    sc.scsi_Data=(UWORD *)data;
+    sc.scsi_Length=40;
+    sc.scsi_Command=data+40;
+    sc.scsi_CmdLength=6;
+    sc.scsi_Flags=SCSIF_READ;
+    io->iotd_Req.io_Command=HD_SCSICMD;
+    io->iotd_Req.io_Data=&sc;
+    io->iotd_Req.io_Length=sizeof(sc);
+    io->iotd_Req.io_Offset=0;
+    io->iotd_Req.io_Flags=0;
+    if(DoIO((struct IORequest *)io)!=0 || sc.scsi_Status!=0 ||
+       sc.scsi_Actual<4 || sc.scsi_Actual>40)return NULL;
+    length=(unsigned)data[0]+1u;
+    if(length>sc.scsi_Actual)length=(unsigned)sc.scsi_Actual;
+    offset=4u+data[3];
+    if(offset+minimum>length || (data[offset]&0x7fu)!=page ||
+       (unsigned)data[offset+1]+2u<minimum ||
+       offset+(unsigned)data[offset+1]+2u>length)return NULL;
+    return data+offset;
+}
 int dolly_amiga_device_query(const char *driver,ULONG unit,
                             char *name,unsigned name_capacity,
                             char *size,unsigned size_capacity,
-                            DollyMediaGeometry *geometry) {
+                            DollyMediaGeometry *geometry,int probe_chs) {
     struct MsgPort *port=NULL;
     struct IOExtTD *io=NULL;
     struct DriveGeometry geom;
@@ -93,6 +156,9 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             geometry->block_bytes=geom.dg_SectorSize;
             geometry->capacity_valid=1;
             geometry->capacity_source=DOLLY_GEOMETRY_TRACKDISK;
+            geometry->cylinders=geom.dg_Cylinders;
+            geometry->heads=geom.dg_Heads;
+            geometry->sectors_per_track=geom.dg_TrackSectors;
         }
     }
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
@@ -156,9 +222,21 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 }
             }
         }
+        if(probe_chs && geometry &&
+           geometry->capacity_source==DOLLY_GEOMETRY_SCSI_CAPACITY10) {
+            const UBYTE *page=mode_page(io,data,4u,6u);
+            if(page) {
+                geometry->cylinders=((ULONG)page[2]<<16)|
+                                    ((ULONG)page[3]<<8)|page[4];
+                geometry->heads=page[5];
+            }
+            page=mode_page(io,data,3u,12u);
+            if(page)
+                geometry->sectors_per_track=((ULONG)page[10]<<8)|page[11];
+        }
     }
     /* A successful INQUIRY alone never verifies physical media. */
-    if(have_capacity && !have_name && geometry) {
+    if(have_capacity && !have_name && geometry && !probe_chs) {
         char info[56];
         sprintf(info,"%lu B/sector (%s)",
                 (unsigned long)geometry->block_bytes,

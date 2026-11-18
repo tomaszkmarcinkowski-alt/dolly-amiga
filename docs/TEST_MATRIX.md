@@ -1,5 +1,19 @@
 # Dolly — staged testing matrix
 
+## Current branch verification
+
+| Scope | Observed result | Remaining coverage |
+| --- | --- | --- |
+| Host CTest | 32/32 passed | GitHub Actions is tracked separately. |
+| Native build | MC68000 `dolly-two-window-demo` compiled with the m68k toolchain. | Physical Amiga certification. |
+| Sheep Inventory | FS-UAE A600 / AmigaOS 2.05 exercised RDB/MBR detail views and clipboard. | Real controllers and broader disk layouts. |
+| Surface Scan | Whole-unit and partition checks, a 5 GiB image with distinct test data across 4 GiB, retry/error injection, LBA/CHS log export and Sheep Counter resize. | Interactive ASL selection for log export, all-media coverage and intermittent READ CAPACITY(10) sentinel on reopen. |
+| Create Image | FS-UAE wrote a 6,193,152-byte partition HDF to RAM: and matched the source byte for byte. DLY v1 for that extent passed independent CRC32 verification for 378 data chunks. | Interactive ASL selection, output to a separate physical unit and ADF creation. |
+| DLY v2 | Both modes decoded byte for byte with independent CRC verification on a 192-sector mixed fixture. Cycle-exact A600: Fast 66,276 bytes in 7.40 s, Compact 38,164 bytes in 9.56 s, raw DLY reference 98,508 bytes. | Larger media and additional profiles. |
+
+The sections below retain their historical test plans and results.
+
+
 Created after acceptance of M1.19 on MC68000 / Kickstart 2.04 /
 Workbench 640x256. **Planning document only:** listing a test does not
 mean it was run. User deferred RTG tests and memory profiling until
@@ -1006,14 +1020,82 @@ User confirmed the tested UAE-IDE image has four partitions. Initial screenshot 
 |---|---|---|
 | GUI-198 | Open four-partition UAE-IDE HDF, Inventory | Four correctly named entries; initial prompt on right |
 | GUI-199 | Click each partition | Selection remains active; right panel updates without a new disk read |
-| GUI-200 | RDB DOSx partition | Hex DosType, signed BootPri, MaxTransfer and Mask from PART DosEnvec |
+| GUI-200 | RDB DOSx/PFS/SFS partition | Hex and escaped ASCII DosType, declared filesystem name, Bootable, Automount, signed BootPri, MaxTransfer and Mask |
 | GUI-201 | RDB short DosEnvec | Missing optional values displayed as unavailable, not zero |
-| GUI-202 | RDB cylinders and block size | Low/high cylinder, filesystem block bytes, SectorPerBlock and size in MiB |
-| GUI-203 | MBR image | MBR type and size; RDB-only fields marked not in MBR |
+| GUI-202 | RDB cylinders and block size | Low/high cylinder, filesystem block bytes, SectorPerBlock and partition size (bytes below 1 MiB, otherwise whole MiB) |
+| GUI-203 | MBR image | Declared type code/name, role, active flag, LBA range, sector count and size |
 | GUI-204 | Refresh/close/reopen | Selected row and text stay consistent; no stale gadgets |
 | GUI-205 | Main Dolly window | M1.41 approved layout unchanged, SHINEPEN build marker Dolly M1.46 |
+| GUI-206 | Resize Sheep Inventory with a selected MBR or RDB row | Driver, Unit, Geometry, Disk Name and the partition count stay at the top. The list scales, the selection stays visible, and the buttons follow the bottom edge. |
 
-No native compile/WinUAE regression has yet been performed for M1.46.
+M1.46 Release cross-build passed with `-m68000 -noixemul`.
+`m68k-amigaos-objdump -f` identified `dolly-two-window-demo` as Amiga
+format with architecture `m68k:68000`. WinUAE checks GUI-198 through
+GUI-205 are pending.
+The ten native console test executables and `dolly-native-smoke --selftest`
+passed in vamos with CPU 68000 and 512 KiB of emulated RAM. That run used
+vamos library emulation and did not exercise GadTools or real Chip RAM.
+In FS-UAE 3.1.66, Dolly opened on an emulated A600 with Kickstart 2.05
+37.350, Workbench 2.05 and GadTools 37.110. Inventory opened for the
+logical source DF0:, displayed the unsupported-source status, closed
+and reopened, and Dolly exited with code 0. A separate read-only UAE-IDE
+HDF prepared with AmiPart exposed DH0–DH3 on `scsi.device` unit 0. All
+four rows displayed the expected DosType, BootPri, MaxTransfer, Mask,
+block geometry and cylinder range. In a second read-only HDF, the DH3
+PART checksum covered a shortened DosEnvec ending at index 12. The
+four optional fields showed `unavailable`; cylinder range and size
+were still visible. Closing and reopening Inventory restored all four
+rows with no selection. On a separate read-only MBR image at
+`scsi.device` unit 1, Inventory showed one partition of type `0x83`
+and size 4 MiB, marked the RDB-only fields as absent from MBR, and
+disabled **Backup RDB**. The AmigaOS 2.04 run remains pending.
 The view uses a saved, bounded read-only scan result; selection never sends
 additional device I/O and all displayed RDB fields are *declared* metadata,
 not an assertion about active filesystem/controller configuration.
+
+### Sheep Inventory RDB backup
+
+On the same FS-UAE A600 with GadTools 37.110, **Backup RDB** opened the
+ASL save requester and saved to the selected `DOLLYTEST:` drawer. The
+2,560-byte output matched the source HDF byte for byte across all five
+reserved sectors. Cancelling the requester returned to Inventory.
+Selecting the existing destination again was refused and preserved the
+first backup.
+A host run of the native scanner with mock Exec/DOS and UBSan also
+covered a short write, an RDB reserved area overlapping a partition,
+and an MBR-only disk. The backup call failed in all three cases.
+
+After adding MBR export, selecting the read-only MBR disk in FS-UAE
+showed **Backup MBR** and disabled **Restore MBR**. The file saved via
+ASL was exactly 512 bytes and matched LBA 0 byte for byte. Switching
+to the RDB disk showed **Backup RDB** and disabled **Restore RDB**.
+The resulting RDB backup still matched all five reserved sectors.
+
+The expanded Inventory view was checked in FS-UAE on AmigaOS 2.05.
+The MBR fixture showed active primary `0x07`, extended `0x0F`, unknown
+`0x99` and FAT32 LBA `0x0C` entries with their LBA ranges. The extended
+container was listed without traversing its contents and disabled backup.
+The RDB fixture showed `DOS\7` as FastFileSystem (long filenames),
+`DOS\1` as FastFileSystem and `PFS\3` as ProfessionalFileSystem 3.
+The shortened DosEnvec still showed the DosType as unavailable.
+
+On the same A600, shrinking the MBR and RDB Inventory windows kept the
+selected row, header and details visible. The list grew again when the
+RDB window was enlarged. The footer buttons tracked the window edge,
+and the partition count appeared only in the list heading.
+
+The reordered header was verified in FS-UAE at the actual Inventory
+limits of 504×230 and 640×256 pixels, using the same selected MBR row.
+SCSI MODE SENSE reported 130 cylinders, 4 heads and 63 sectors per
+track. Capacity remained 32,760 sectors of 512 bytes in both views.
+
+The experimental right-hand LISTVIEW was tested with GadTools 37.110
+in FS-UAE. Right Amiga+C copied the selected MBR detail to the actual
+guest clipboard. Reading unit 0 returned a valid FTXT/CHRS clip with
+`Last LBA: 24287`. At minimum window width, a clipped role row still
+returned the full text `Role: Extended | Active: No`.
+
+With click-to-copy enabled, clicking the geometry row, the extended
+partition and its Last LBA detail separately put each full row on
+clipboard unit 0 without a keyboard shortcut. The partition and
+details lists aligned above the shared recessed status box.

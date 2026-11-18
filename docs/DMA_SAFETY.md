@@ -1,6 +1,6 @@
 # Dolly — DMA safety profile for read-only AmigaOS I/O
 
-**Status:** experimental implementation with verified host mock tests. **NOT** validated against AmigaOS NDK, WinUAE, a real DMA controller or any physical drive.
+**Status:** host mocks, native MC68000 builds and emulated UAE-IDE checks. Physical-controller qualification remains open. See [AmigaOS I/O](AMIGA_IO.md).
 
 ## Why it matters
 

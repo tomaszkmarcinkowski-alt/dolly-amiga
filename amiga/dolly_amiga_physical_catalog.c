@@ -77,3 +77,85 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
     }
     UnLockDosList(flags);
 }
+int dolly_logical_extent(const char *name,DollyPhysicalEntry *device,
+                         uint64_t *start,uint64_t *length,ULONG *sector_bytes) {
+    const ULONG flags=LDF_DEVICES|LDF_READ;
+    struct DosList *list,*entry;
+    char dos_name[40];
+    size_t n=strlen(name);
+    int ok=0;
+    if(n<2 || n>=sizeof(dos_name) || name[n-1]!=':')return 0;
+    memcpy(dos_name,name,n-1);
+    dos_name[n-1]='\0';
+    list=LockDosList(flags);
+    if(!list)return 0;
+    entry=FindDosEntry(list,(STRPTR)dos_name,LDF_DEVICES);
+    if(entry && bptr_valid(entry->dol_misc.dol_handler.dol_Startup,
+                            sizeof(struct FileSysStartupMsg))) {
+        struct FileSysStartupMsg *f=BADDR(entry->dol_misc.dol_handler.dol_Startup);
+        if(bptr_valid(f->fssm_Environ,11u*sizeof(ULONG)) &&
+           driver_name(device->driver,f->fssm_Device)) {
+            const struct DosEnvec *e=BADDR(f->fssm_Environ);
+            if(e->de_TableSize>=10u && !e->de_SecOrg && e->de_SectorPerBlock==1 &&
+               e->de_SizeBlock>=128 && e->de_SizeBlock<=8192 &&
+               e->de_Surfaces && e->de_BlocksPerTrack &&
+               e->de_HighCyl>=e->de_LowCyl) {
+                uint64_t sectors=(uint64_t)e->de_Surfaces*e->de_BlocksPerTrack;
+                ULONG block=e->de_SizeBlock*4u;
+                uint64_t limit=UINT64_MAX;
+                if(sectors<=limit/block) {
+                    uint64_t cylinder=sectors*block;
+                    if((uint64_t)e->de_HighCyl+1u<=limit/cylinder) {
+                        device->unit=f->fssm_Unit;
+                        *sector_bytes=block;
+                        *start=(uint64_t)e->de_LowCyl*cylinder;
+                        *length=((uint64_t)e->de_HighCyl-e->de_LowCyl+1u)*cylinder;
+                        ok=1;
+                    }
+                }
+            }
+        }
+    }
+    UnLockDosList(flags);
+    return ok;
+}
+
+int dolly_physical_from_lock(BPTR lock,DollyPhysicalEntry *device) {
+    const ULONG flags=LDF_DEVICES|LDF_READ;
+    const struct FileLock *file_lock;
+    const struct DosList *ram;
+    struct DosList *list,*entry;
+    int found=0;
+    if(!bptr_valid(lock,sizeof(*file_lock)))return 0;
+    file_lock=BADDR(lock);
+    if(!file_lock->fl_Task)return 0;
+    list=LockDosList(flags);
+    if(!list)return 0;
+    ram=FindDosEntry(list,(STRPTR)"RAM",LDF_DEVICES);
+    entry=list;
+    while((entry=NextDosEntry(entry,LDF_DEVICES))!=NULL) {
+        const struct FileSysStartupMsg *startup;
+        DollyPhysicalEntry candidate;
+        BPTR b;
+        if(entry->dol_Task!=file_lock->fl_Task)continue;
+        b=entry->dol_misc.dol_handler.dol_Startup;
+        if(bptr_valid(b,sizeof(*startup)) &&
+           (startup=BADDR(b), driver_name(candidate.driver,startup->fssm_Device))) {
+            candidate.unit=startup->fssm_Unit;
+            if(found && (found!=1 || device->unit!=candidate.unit ||
+                         strcmp(device->driver,candidate.driver)!=0)) {
+                found=0;
+                break;
+            }
+            *device=candidate;
+            found=1;
+        } else if(!found && entry==ram) {
+            found=2;
+        } else {
+            found=0;
+            break;
+        }
+    }
+    UnLockDosList(flags);
+    return found;
+}

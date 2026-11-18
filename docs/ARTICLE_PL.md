@@ -4,7 +4,7 @@
 
 W świecie Amigi nośniki pamięci mają za sobą często kilkadziesiąt lat pracy. Dyskietki zawodzą, stare dyski twarde zaczynają gubić sektory, a współczesne rozwiązania — od kart CF po PiStorm/Emu68 — wprowadzają zupełnie nowe układy partycji. Przeniesienie sprawnego Workbencha na inny nośnik bywa łatwe tylko wtedy, gdy nic nie idzie źle.
 
-**Dolly** ma powstać właśnie na takie sytuacje. To darmowy program do tworzenia obrazów, klonowania, diagnostyki i odzyskiwania danych z dysków Amigi. Nazwa nawiązuje oczywiście do słynnej sklonowanej owcy.
+**Dolly** powstaje właśnie na takie sytuacje. To darmowy program do tworzenia obrazów, klonowania, diagnostyki i odzyskiwania danych z dysków Amigi. Nazwa nawiązuje oczywiście do słynnej sklonowanej owcy.
 
 ## Nie tylko kopiowanie sektorów
 
@@ -26,7 +26,7 @@ Dolly jest rozwijana publicznie na licencji MIT. Program ma być darmowy, a korz
 
 ## Stan prac
 
-**Listopad 2026:** projekt ma już publiczne repozytorium, podstawowy parser RDB/MBR, odczytowe narzędzia inspekcji, strukturalny parser IFF i zestawy automatycznych testów. Natywny program dla Amigi, zapis, kompresja i DiskDoctor pozostają pracą do wykonania. Aktualny kod jest prototypem — nie należy używać go do modyfikowania cennych nośników.
+**Listopad 2026.** Od narzędzi inspekcji M0 projekt przeszedł do natywnego prototypu GadTools dla MC68000. Sheep Inventory pokazuje dane urządzeń i partycji, Surface Scan zapisuje logi błędów i ponowień, a Create Image tworzy obrazy RAW, HDF oraz IFF DOLY z dwiema metodami kompresji. Testy odbyły się w FS-UAE. Smart Clone, DiskDoctor oraz walidacja na rzeczywistych kontrolerach pozostają w planie. [Aktualny stan projektu](ROADMAP.md)
 
 Każdy istotny błąd, niespójność czy nieoczekiwane odkrycie trafi do osobnego, publicznego dziennika technicznego. Chcemy zachować nie tylko rezultaty, ale także drogę ich powstawania.
 
