@@ -105,7 +105,12 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_physical_catalog.c
       amiga/dolly_amiga_device_query.c
       amiga/dolly_amiga_partition_scan.c
-      amiga/dolly_amiga_inventory_view.c)
+      amiga/dolly_amiga_inventory_view.c
+      amiga/dolly_amiga_surface_scan.c amiga/dolly_amiga_source.c
+      amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
+      amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
+      src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
+      src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
@@ -272,6 +277,11 @@ target_include_directories(test-amiga-mock PRIVATE
 target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan dollydma)
 add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
 
+add_executable(test-surface-log tests/test_surface_log.c amiga/dolly_surface_log.c)
+target_include_directories(test-surface-log PRIVATE ${PROJECT_SOURCE_DIR}/amiga)
+target_link_libraries(test-surface-log PRIVATE dollyblock)
+add_test(NAME surface_log COMMAND test-surface-log)
+
 # Strict streaming IFF FORM DOLY envelope inspection.
 add_library(dollyiff STATIC src/dolly_iff.c)
 target_include_directories(dollyiff PUBLIC ${PROJECT_SOURCE_DIR}/include)
@@ -279,8 +289,8 @@ target_link_libraries(dollyiff PUBLIC dollyblock)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyiff PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
-add_executable(test-iff tests/test_iff.c)
-target_link_libraries(test-iff PRIVATE dollyiff)
+add_executable(test-iff tests/test_iff.c src/dolly_dly_writer.c src/dolly_dly_codec.c)
+target_link_libraries(test-iff PRIVATE dollyiff dollychecksum)
 add_test(NAME iff_form_doly COMMAND test-iff)
 add_executable(dolly-iff src/dolly_iff_inspect.c)
 target_link_libraries(dolly-iff PRIVATE dollyiff)

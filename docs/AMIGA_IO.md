@@ -1,12 +1,12 @@
-# Dolly M0 — AmigaOS native I/O design (experimental)
+# Dolly — experimental AmigaOS native I/O
 
-**Status: prototype source published, NOT tested with an actual Amiga compiler, NDK, emulator or physical device. No writes exist.**
+**Status:** native MC68000 build and FS-UAE checks completed for the qualified UAE-IDE read path. The device backend remains read-only. Create Image writes a staged file on a separate destination.
 
 ## Architecture
 
 The portable `DollyBlockSource` owns a caller-provided backend and enforces range checks. The POSIX file adapter resides in `src/dolly_file_source.c`; the separate device adapter is `amiga/dolly_amiga_source.c`, with `DollyAmigaDeviceOptions` in `include/dolly_amiga_source.h`.
 
-`DollyAmigaDeviceOptions` deliberately requires **explicit, trusted** device size, physical block size and maximum transfer size. These are **not guessed** from an unverified driver. A bad capacity value or controller DMA constraints can invalidate the safety guarantee; user-facing native device selection is therefore disabled until device capacity probing and testing are added.
+`DollyAmigaDeviceOptions` deliberately requires **explicit, trusted** device size, physical block size and maximum transfer size. These are **not guessed** from an unverified driver. A bad capacity value or controller DMA constraints can invalidate the safety guarantee; the native picker uses explicit read-only queries and the backend requires a qualified profile.
 
 ## Initial read path
 
@@ -20,16 +20,20 @@ The portable `DollyBlockSource` owns a caller-provided backend and enforces rang
 
 The device adapter is **read-only**. It contains no `CMD_WRITE`, `TD_FORMAT` or other mutating device command.
 
+The native GUI uses this backend for UAE-IDE
+[Surface Scan](SURFACE_SCAN.md) and [Create Image](CREATE_IMAGE.md), with a bounded read loop and sector
+error reporting. It opens a large range only when the device advertises
+NSD READ64 or the qualified UAE-IDE SCSI READ(10) fallback covers it.
+Physical controllers still need a verified profile.
+
 ## Test coverage
 
-`tests/test_io_plan.c` checks the command choice around 4 GiB, alignment, transfer size and overflow. `tests/test_amiga_device_mock.c` exercises open/read/close and 64-bit capability selection with a **mocked Exec**, not a real OS. Earlier host suites passed in isolated runs, but a full current-branch CTest and CI result has not yet been independently confirmed.
+`tests/test_io_plan.c` checks the command choice around 4 GiB, alignment, transfer size and overflow. `tests/test_amiga_device_mock.c` exercises open/read/close and 64-bit capability selection with a **mocked Exec**, not a real OS. The [current test matrix](TEST_MATRIX.md) records native and host coverage.
 
 ## Important limitations
 
-- A POSIX-free native smoke **source** and CMake target now exist, but no verified native 68000 binary has been built. See [NATIVE_SMOKE.md](NATIVE_SMOKE.md).
-- `CreateMsgPort`, `CreateIORequest`, `OpenDevice` and the NSD struct ABI must be checked against an installed Amiga NDK.
-- Only the NSD 64-bit path is prototyped; **TD64 is not yet implemented**.
-- Actual drive capacity, `TD_GETGEOMETRY`, change counters, driver-specific MaxTransfer, DMA-suitable memory beyond preliminary mask checks, retries, media-change handling and mounted-volume coordination remain unverified.
+- Qualified reads across 4 GiB use NSD READ64 or the UAE-IDE SCSI READ(10) fallback. Legacy TD64 is pending.
+- Real-device capacity and geometry, driver-specific MaxTransfer, DMA reachability, media changes and mounted-volume coordination require physical-controller testing.
 - The read callback currently assumes the hardware can satisfy a complete aligned transfer to its bounce buffer. A device-specific failed or short transfer returns an error.
 - A large `DollyPartitionMap` still needs heap/scratch-based lifetime management for tiny Amiga task stacks.
 - A driver claiming NSD support may still be buggy. No destructive trial-and-error probes are allowed.

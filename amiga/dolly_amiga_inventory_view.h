@@ -11,18 +11,33 @@
 #include <libraries/gadtools.h>
 #include <exec/lists.h>
 #define DOLLY_INVENTORY_ROWS (DOLLY_PART_MAX + 1u)
+#define DOLLY_INVENTORY_DETAILS 10u
+#define DOLLY_INVENTORY_DETAIL_BYTES 96u
+#define DOLLY_INVENTORY_HEADER_ROWS 4u
+#define DOLLY_INVENTORY_HEADER_BYTES 176u
 typedef struct DollyNativeInventoryView {
     struct Window *window;
     APTR visual;
     struct Gadget *gadgets;
+    struct Menu *menu;
     struct List rows;
     struct Node nodes[DOLLY_INVENTORY_ROWS];
     char row_text[DOLLY_INVENTORY_ROWS][88];
+    struct List header_rows;
+    struct Node header_nodes[DOLLY_INVENTORY_HEADER_ROWS];
+    char header_text[DOLLY_INVENTORY_HEADER_ROWS][DOLLY_INVENTORY_HEADER_BYTES];
+    const char *clipboard_row;
+    struct List details;
+    struct Node detail_nodes[DOLLY_INVENTORY_DETAILS];
+    char detail_text[DOLLY_INVENTORY_DETAILS][DOLLY_INVENTORY_DETAIL_BYTES];
+    unsigned detail_count,selected_detail;
     DollyNativePartitionMap map;
     DollyMediaGeometry geometry;
+    char driver[64];
+    ULONG unit;
     char device_info[112];
-    char disk_size[40];
-    char geometry_info[112];
+    char chs_info[112];
+    char geometry_info[160];
     char status[112];
     unsigned count;
     unsigned selected_partition;

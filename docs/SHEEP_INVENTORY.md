@@ -1,6 +1,6 @@
 # Sheep Inventory — initial engineering design (prototype)
 
-**Status:** early read-only *host-side* prototype, not the planned AmigaOS GUI. Epic: [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13) / DOL-060.
+**Status:** host CLI and native GadTools prototype. Native views include device geometry, RDB/MBR partition details, clipboard copying and metadata backup. Restore controls are disabled pending safety work. Historical sections preserve their original scope. Epic: [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13) / DOL-060.
 
 ## Why a streaming model?
 Classic Amigas may have little free Fast RAM and very limited stack space. The first implementation emits one `DollyInventoryField` at a time via a callback; the GUI or CLI consumes each field immediately without allocating an inventory list or copying the entire RDB layout again.
@@ -121,10 +121,73 @@ The scanner retains explicit presence flags for DosType (DosEnvec index 16),
 BootPri (15), DMA Mask (14), and MaxTransfer (13). An absent field is
 shown as `unavailable`; a valid zero remains zero. BootPri is signed.
 
-RDB records expose DosType as a raw hexadecimal value, signed BootPri,
+RDB records expose DosType in hexadecimal and escaped ASCII (for example
+`DOS\1` and `PFS\3`), with the known filesystem family and variant.
+They also show signed BootPri, the declared Bootable and Automount flags,
 MaxTransfer, Mask, filesystem block size, SectorPerBlock, cylinder range
-and partition size. For MBR entries, type and size are displayed and
-RDB-only fields are stated not to exist in that format. These values are
+and partition size. `DOS\6` and `DOS\7` identify long-filename formats.
+The DosType does not identify the installed filesystem handler version
+or the version of AmigaOS that formatted the disk.
+
+For MBR entries, Inventory shows the role, active flag,
+type code and common name, inclusive LBA range, sector count and size.
+The type name comes from the MBR entry. Dolly does not probe the actual
+filesystem. Extended entries and type 0x76 appear as containers without
+scanning their contents. These values are
 read from the on-disk partition metadata and do not certify mounted
 configuration or DMA safety. The source list and main Dolly layout stay
-otherwise unchanged. Compile and WinUAE validation are pending.
+otherwise unchanged. The MC68000 Release cross-build passed. WinUAE
+validation on AmigaOS 2.04 is pending.
+
+### Backup RDB and Backup MBR
+
+For a supported whole-disk RDB on a queried 512-byte device, the
+**Backup RDB** button opens the AmigaOS ASL save requester. Choose a
+drawer and a new filename. Dolly revalidates the partition map and
+streams the raw sectors from LBA 0 through the RDB's declared reserved
+area. Starting at LBA 0 preserves the original offsets. The source
+device is accessed with read commands.
+
+The output is a raw binary prefix of the source disk. Dolly publishes
+it under the selected name after the temporary `.part` file has been
+written and closed. An existing destination is refused. Partition data
+and a restore workflow are outside the scope of this export.
+
+For a supported primary MBR on a queried 512-byte device, **Backup MBR**
+uses the same ASL save flow. It exports the full LBA 0, including boot
+code, the primary partition entries and the MBR signature. Export is
+disabled for layouts with extended or nested RDB containers. Protective
+MBR (GPT) and hybrid layouts remain unsupported. The matching
+**Restore RDB** or **Restore MBR** button is disabled.
+
+### Resizable window
+
+The header shows Driver and the actual controller unit, Device Name,
+then two Geometry lines. The first shows the reported cylinders, heads
+and sectors per track. The second shows capacity, sector size and sector
+count. CHS comes from TD_GETGEOMETRY or SCSI MODE SENSE pages 4 and 3
+when the driver supports them. Unreported values are left unknown.
+Reported CHS may be translated by a controller or emulator.
+
+The header stays anchored at the top and the buttons stay anchored at
+the bottom. The heading above the list is `4 MBR Partitions:` or
+`4 RDB Partitions:`, using the current count. MBR rows show the role and
+the original slot number, for example `MBR Partition (Extended) 2`.
+The partition and details lists touch and have equal heights. A recessed
+status box spans both lists directly above the buttons. Resizing updates
+the GadTools controls after replying to the queued messages and preserves
+the selected partition without querying the source again.
+
+### Experimental lists and clipboard
+
+Clicking a row in the driver/geometry header, partition list or details
+list copies the entire row, including text clipped by the list width.
+Clicking a partition also displays its details. **Edit → Copy** or
+**Right Amiga+C** copies the most recently clicked row again.
+Dolly writes IFF FORM FTXT with a CHRS
+chunk to clipboard.device unit 0. [GadTools listview](https://wiki.amigaos.net/wiki/GadTools_Gadgets#Listview_Gadgets) · [Clipboard Device](https://wiki.amigaos.net/wiki/Clipboard_Device#Writing_to_the_Clipboard_Device)
+
+Character-range selection in the drawn details pane would require
+application-owned text, Intuition mouse tracking, hit testing against
+the screen font and selection highlighting. The same Copy action
+could export the resulting range through clipboard.device.

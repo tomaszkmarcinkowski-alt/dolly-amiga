@@ -1,6 +1,6 @@
 # Dolly GUI architecture — MVP GadTools only; future optional backends
 
-**Status 2026-11-17:** architecture and portable layout/notification components are in the repository. There is **no native GadTools window, ReAction/MUI module loader, verified 68000 binary or WinUAE run** yet.
+**Current status:** the native GadTools prototype includes the frozen main window, endpoint pickers, Sheep Inventory, resizable Sheep Counter, Surface Scan log and Create Image. Optional ReAction/MUI backends remain design work. Dated entries below record the state at their milestones. See the [current test matrix](TEST_MATRIX.md).
 
 ## GUI backends
 
@@ -1489,3 +1489,48 @@ filesystem block size, SectorPerBlock, cylinder interval, partition size.
 For MBR partitions display type and explicit RDB-field unavailability.
 The controls retain the fixed window height for 640x256. Real
 WinUAE/AmigaOS 2.04 visual verification remains pending.
+
+### Destructive operation confirmation — proposed design
+
+Use a small modal Intuition window with GadTools buttons, visually
+styled like a requester and opened over the window that initiated the
+operation. Size it using the current screen font and fit it within the
+640×256 baseline. Use the title **Confirm destructive operation**.
+Show the proposed operation, the exact destination and the affected
+scope above the warning. For a device, include the driver and unit;
+for a partition, include its name and parent device. Display the full
+target so that similar names remain distinguishable.
+
+> This operation is destructive. Incorrect use can cause data loss.
+> Before proceeding, we recommend backing up the affected device,
+> disk or partition.
+
+Place **Proceed** on the left and **Cancel** on the right. Directly
+above **Proceed**, show `Proceed available in 10 s` and update the
+number once per second. Initially disable **Proceed**. After ten full
+seconds, enable it and remove the countdown. **Cancel** is available
+throughout. Closing the window or pressing Esc cancels. A fresh click
+on the enabled **Proceed** confirms. Enter and expiration of the timer
+never confirm, and clicks made during the countdown are discarded.
+
+For an AmigaOS 2.04 implementation, use asynchronous relative
+`timer.device` requests and wait on the timer and window message ports.
+Start the delay when the warning is shown. Keep countdown state outside
+the redraw handler so refresh and focus changes preserve it. If the
+window or timer cannot be initialized, return cancellation. Cancel and
+reap outstanding timer I/O on exit.
+
+The requester takes a description of the operation, destination and
+scope, and returns the user's decision. The caller owns the write
+plan, rechecks its destination and scope before writing, and requires
+a new confirmation if either changes. This design is for subsequent
+destructive workflows such as Restore RDB and Restore MBR.
+
+### Read-only data views
+
+Use a GadTools LISTVIEW with clipboard support for new views that present
+queried or parsed data. Follow Sheep Inventory: clicking a row copies its
+complete text to the Amiga clipboard, even when the visible label is
+clipped. Keep the existing meaning of the row selection and show the copy
+result in the status area. Use IFF FTXT/CHRS on clipboard.device unit 0.
+Review existing windows before applying this pattern to them.

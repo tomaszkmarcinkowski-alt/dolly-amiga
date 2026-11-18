@@ -13,7 +13,7 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
        m.main_build_label_width>8192 ||
        m.show_button_text_width>8192 ||
        m.quit_button_text_width>8192 ||
-       m.hide_button_text_width>8192 ||
+       m.hide_button_text_width>8192 || m.log_button_text_width>8192 ||
        m.border_left>128 || m.border_right>128 ||
        m.border_top>128 || m.border_bottom>128)
         return out;
@@ -38,9 +38,10 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
         client_h=max_u32(m.main_content_height,
                          m.line_height+4u);
     } else {
-        /* 24x8 grid, minimum 10x9 pixels per cell; labels and Hide remain. */
+        /* The native caller also checks tile size against the pixel aspect. */
         client_w=max_u32(m.heading_width,24u*10u+8u);
         client_w=max_u32(client_w,80u+6u+80u+6u+
+                         max_u32(76u,m.log_button_text_width+12u)+6u+
                          max_u32(76u,m.hide_button_text_width+12u));
         client_w=max_u32(client_w,120u+7u+46u);
         /* Fits current geometry: header, grid, bevel/bar and control row.

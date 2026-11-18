@@ -18,7 +18,9 @@ typedef enum DollyImageFormat {
     DOLLY_IMAGE_RAW=0,
     DOLLY_IMAGE_HDF=1,
     DOLLY_IMAGE_ADF=2,
-    DOLLY_IMAGE_IFF_DOLY=3
+    DOLLY_IMAGE_IFF_DOLY=3,
+    DOLLY_IMAGE_IFF_FAST=4,
+    DOLLY_IMAGE_IFF_COMPACT=5
 } DollyImageFormat;
 typedef struct DollyEndpoint {
     DollyEndpointKind kind;
@@ -28,6 +30,7 @@ typedef struct DollyEndpoint {
     uint8_t logical;
     DollyImageFormat image_format; /* Selected output format; no writer yet. */
     char path[256];
+    uint64_t partition_start_bytes,partition_length_bytes;
 } DollyEndpoint;
 typedef enum DollyDemoOperation {
     DOLLY_DEMO_SCAN=0,

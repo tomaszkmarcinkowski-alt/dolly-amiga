@@ -1,5 +1,7 @@
 # Dolly — first native 68000 smoke milestone
 
+**Current coverage:** later MC68000 builds include the two-window GadTools prototype. FS-UAE checks on A600 / AmigaOS 2.05 cover Inventory, Surface Scan and Create Image. The dated sections retain their original verification status. See [test matrix](TEST_MATRIX.md).
+
 **Status (2026-11-17):** user-reported successful cross-build and WinUAE MC68000 / Kickstart 2.04 smoke run (`PASS`, RC=0). Physical Amiga hardware has not been tested. Host CTest is not a substitute for a native run.
 
 ## Goal

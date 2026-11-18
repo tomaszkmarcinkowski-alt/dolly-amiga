@@ -1,5 +1,7 @@
 # Dolly — Milestone M0 status
 
+**Historical checkpoint.** Test counts and open tasks below describe the M0 work in progress. For current figures and native prototypes, see the [roadmap](ROADMAP.md) and [test matrix](TEST_MATRIX.md).
+
 **Goal:** public, tested, non-destructive foundations for a future Motorola 68000 / AmigaOS 2.04 utility.
 
 ## Implemented

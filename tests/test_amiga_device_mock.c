@@ -18,7 +18,7 @@ int main(void){
  DollyBlockSource *s=NULL;DollyBlockReadResult r;
  DollyAmigaDeviceOptions opt={
      "mock.device",0,UINT64_C(0x200000000),512,1024,
-     0x00fffffeu,2u,1u,1u,report_dma,&dma_report_count
+     0x00fffffeu,2u,1u,1u,report_dma,&dma_report_count,0,0
  };
  unsigned char buf[2048];unsigned i;
  /* Fail closed before opening anything if DMA limits are unknown. */
@@ -73,6 +73,37 @@ int main(void){
  assert(r.status==DOLLY_BLOCK_EIO && r.bytes_read==1024);
  dolly_block_close(s);
  dolly_mock_read_fault(0,0);
+ opt.required_read_end=UINT64_C(0x100000800);
+ dolly_mock_set_nsd(0);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EUNSUPPORTED && s==NULL);
+ opt.verified_uae_ide=1;
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,UINT64_C(0xfffffe00),buf,1024);
+ assert(r.status==DOLLY_BLOCK_OK && r.bytes_read==1024);
+ assert(dolly_mock_last_scsi_lba()==0x7fffffu && buf[0]==0xa5 && buf[1023]==0xa5);
+ r=dolly_block_read(s,UINT64_C(0x100000200),buf,512);
+ assert(r.status==DOLLY_BLOCK_OK && r.bytes_read==512);
+ assert(dolly_mock_last_scsi_lba()==0x800001u);
+ dolly_mock_read_fault(1,1);
+ r=dolly_block_read(s,UINT64_C(0x100000200),buf,512);
+ assert(r.status==DOLLY_BLOCK_ESHORT && r.bytes_read==0);
+ dolly_mock_read_fault(1,3);
+ r=dolly_block_read(s,UINT64_C(0x100000200),buf,512);
+ assert(r.status==DOLLY_BLOCK_EUNSUPPORTED && r.bytes_read==0);
+ dolly_mock_read_fault(1,4);
+ r=dolly_block_read(s,UINT64_C(0x100000200),buf,512);
+ assert(r.status==DOLLY_BLOCK_EIO && r.bytes_read==0);
+ dolly_mock_read_fault(0,0);
+ dolly_block_close(s);
+ dolly_mock_set_nsd(1);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_OK);
+ r=dolly_block_read(s,UINT64_C(0x100000200),buf,512);
+ assert(r.status==DOLLY_BLOCK_OK && dolly_mock_last_read64());
+ assert(!dolly_mock_last_scsi_lba());
+ dolly_block_close(s);
+ opt.capacity_bytes=opt.required_read_end=UINT64_C(0x2000000200);
+ dolly_mock_set_nsd(0);
+ assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EUNSUPPORTED && s==NULL);
  assert(dma_report_count==3); /* No DMA warnings during valid-profile reads. */
  puts("Mock Exec backend checks passed");return 0;
 }

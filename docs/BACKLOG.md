@@ -4,6 +4,14 @@
 
 **Zasada:** MVP i aktywne M0–M8 są osobne od [post-MVP Dolly Flock Manager](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/7).
 
+
+## Bieżący stan prototypów
+
+[Surface Scan](SURFACE_SCAN.md) jest przyjętym prototypem odczytowym.
+[Create Image](CREATE_IMAGE.md) zapisuje RAW, HDF i jednoplikowe DLY na
+oddzielny cel. Otwarte pozostają między innymi walidacja rzeczywistych
+kontrolerów, ADF, weryfikacja obrazu po zapisie i operacje przywracania.
+
 ## Epic: Architecture
 
 ### DOL-001 — Kontrakt BlockDevice
@@ -180,6 +188,8 @@
 
 **Kryterium akceptacji:** Publiczna specyfikacja definiuje dokładne offsety i endian pól.
 
+**Stan:** opisano i wdrożono jednoplikowy [IFF DOLY v1/v2](IFF_FORMAT.md). Segmentacja, wznawianie i mapy błędów pozostają osobnymi pozycjami.
+
 ### DOL-022 — Jednoplikowy DLY
 
 **Priorytet:** P0 · **Etap:** M3 · **Story Points:** 8
@@ -187,6 +197,8 @@
 **User story:** Jako użytkownik chcę mieć funkcję „Jednoplikowy DLY”, aby bezpiecznie i przewidywalnie wykonywać zadanie zgodnie z jej przeznaczeniem.
 
 **Kryterium akceptacji:** Roundtrip danych i checksum po kompresji/dekompresji jest zgodny.
+
+**Stan prototypu:** DLY v1 oraz v2 Fast i Compact zapisują sektory z CRC32. Niezależna dekompresja obrazów z FS-UAE potwierdziła zgodność. Zintegrowany odczyt i przywracanie obrazu pozostają otwarte.
 
 ### DOL-023 — Segmentowanie dużych obrazów
 
@@ -678,7 +690,14 @@
 
 **Bezpieczeństwo:** Restore wymaga weryfikacji nośnika docelowego, kopii aktualnego RDB, podglądu planowanych zmian blok po bloku, jawnego potwierdzenia, zapisu z późniejszym odczytem weryfikującym, procedury odzyskiwania po przerwanym zapisie. Nie obiecywać atomowości. W przypadku niezgodnej pojemności nie wykonywać Restore bez osobnej, bezpiecznej analizy.
 
-**Status:** backlog, **brak implementacji**.
+**Status:** Sheep Inventory zapisuje surową kopię zarezerwowanego obszaru RDB na obsługiwanym dysku oraz sektor LBA 0 dla klasycznego MBR z partycjami podstawowymi. Przyciski Restore RDB i Restore MBR pozostają nieaktywne do czasu wdrożenia przywracania.
+
+#### Restore RDB i Restore MBR — wymagania przed wdrożeniem
+
+- Zweryfikować format i integralność kopii, tożsamość urządzenia i jednostki docelowej, rozmiar sektora, pojemność oraz zgodność zakresów partycji. Ustalić procedurę dla zamontowanych woluminów i przerwania operacji.
+- Przed zapisem pokazać urządzenie docelowe i zakres nadpisywanych sektorów. Wyjaśnić, że błędna lub niezgodna kopia może uniemożliwić rozruch albo dostęp do danych. Wyjaśnić, że kopia tablicy partycji nie obejmuje zawartości partycji.
+- Zaplanować kopię bieżącej tablicy, świadome potwierdzenie po podglądzie zmian, odczyt weryfikujący po zapisie i procedurę odzyskiwania po błędzie. Uwzględnić, że Restore MBR nadpisuje również kod rozruchowy w LBA 0.
+- **GPT — opcjonalne.** Rozważyć oddzielnie obsługę nagłówków i tablic GPT, w tym kopii zapasowej na końcu dysku i ich sum kontrolnych.
 
 ### DOL-074 — Wykrywanie RDB niezgodnego z rzeczywistą pojemnością nośnika
 
