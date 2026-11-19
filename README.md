@@ -1,8 +1,8 @@
 # 🐑 Dolly — Disk Imaging, Cloning & Recovery for Amiga
-[Dolly Alpha 3](docs/RELEASE_ALPHA_3.md) · [GitHub Releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+[Dolly Alpha 3.1 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.1) · [Alpha 3 notes](docs/RELEASE_ALPHA_3.md) · [GitHub Releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
 [Restore RDB test build](docs/RELEASE_RDB_TEST.md) · [Warning review test for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/warning-review-test-20261119) · [Main-window test build for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/main-window-test-20261119)
 
-**Public development repository • Alpha 3 development preview • experimental native prototypes**
+**Public development repository • Alpha 3.1 development preview • experimental native prototypes**
 
 **No sector left behind. No sheep uncounted.**
 
@@ -12,7 +12,7 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 
 ![Dolly Alpha 3 showing sector-by-sector copying from scsi.device Unit 0 to Unit 1, with Sheep Counter open](docs/screenshots/sector-copy.png)
 
-Sector-by-sector copying in an Alpha 3 development build. [Download the test build](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/warning-review-test-20261119)
+Sector-by-sector copying in an Alpha 3 development build. [Download Alpha 3.1](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.1)
 
 ## Goals
 - AmigaOS 2.04+, Motorola 68000 baseline, no FPU or MMU required.
