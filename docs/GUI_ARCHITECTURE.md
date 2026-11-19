@@ -1618,3 +1618,18 @@ is half the width of an action button and opens Sheep Counter during
 running or paused operations. An already open counter stays available
 after completion. Window height follows the active font and resizing
 is horizontal.
+
+
+### Medium picker font and type selection
+
+The Source and Destination pickers use the same allowed-medium masks
+as the main window. A Cycle appears when multiple types are allowed.
+For a single allowed type, the header displays its name. **Use selection**
+commits the endpoint and updates the main window's Cycle. **Cancel**
+discards the choice.
+
+Field heights and caption baselines follow the active Dolly font.
+Unit and Partition number widths account for the widest digit.
+The Logical device view accepts a registered DOS device name in the
+editable **Selected device** field. Case is ignored and the trailing
+colon is optional. Choosing a list entry populates the field.

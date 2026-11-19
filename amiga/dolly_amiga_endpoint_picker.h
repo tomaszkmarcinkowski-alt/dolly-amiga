@@ -13,7 +13,7 @@ typedef struct DollyEndpointPicker {
     struct Window *window;
     APTR visual;
     struct Gadget *gadgets;
-    struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
+    struct Gadget *device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text,*partition_info_text;

@@ -1378,7 +1378,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 dolly_picker_close(&target_picker);
                 if(!dolly_picker_open(&source_picker,public_screen,0,
                                       &selected_source,
-                                      medium_modes[0],DOLLY_MODE_BIT(medium_modes[0])))
+                                      medium_modes[0],source_mode_mask()))
                     dolly_picker_close(&source_picker);
                 update_main_actions();
             } else if(id==MAIN_TARGET_ID && !operation_active() && !relayout &&
@@ -1394,7 +1394,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     }
                 } else if(!dolly_picker_open(&target_picker,public_screen,1,
                                              &selected_target,
-                                             medium_modes[1],DOLLY_MODE_BIT(medium_modes[1])))
+                                             medium_modes[1],destination_mode_mask()))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
             } else if(cls==IDCMP_GADGETUP &&
@@ -1618,6 +1618,7 @@ int main(int argc,char **argv) {
         }
         if(source_picker.changed) {
             selected_source=source_picker.result;
+            medium_modes[0]=dolly_endpoint_mode(&selected_source);
             source_picker.changed=0;
             if(!dolly_mode_allowed(destination_mode_mask(),
                                    dolly_endpoint_mode(&selected_target)))
@@ -1627,7 +1628,9 @@ int main(int argc,char **argv) {
         }
         if(target_picker.changed) {
             selected_target=target_picker.result;
+            medium_modes[1]=dolly_endpoint_mode(&selected_target);
             target_picker.changed=0;
+            if(rebuild_gadgets(&main_view,1))draw_full(&main_view,1);
             refresh_main_selection();
         }
         if(sheep_view.window)process_view(&sheep_view,0,&quit);

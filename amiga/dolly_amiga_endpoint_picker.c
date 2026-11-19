@@ -89,18 +89,34 @@ static void sync_mode_index(DollyEndpointPicker *p) {
  */
 typedef struct PickerGeometry {
     WORD left,right,full_width;
-    WORD mode_x,mode_w,query_w;
+    WORD mode_x,mode_w,query_w,row_h,baseline;
     WORD list_y,list_h,action_y,preview_y,disk_info_y,partition_info_y;
     WORD geometry_info_y,size_y,ata_info_y;
     WORD browse_y,path_y,detail_y;
-    WORD cycle_y,heading_y,list_label_y,file_label_y;
+    WORD cycle_y,heading_y,list_label_y;
     WORD value_x,value_w,unit_x,unit_w,unit_label_x,partition_w;
     WORD name_w,geometry_w,size_label_x,size_x,size_w;
 } PickerGeometry;
-static LONG picker_text_span(const struct Window *window,const char *text,LONG minimum) {
-    LONG width=TextLength(window->RPort,(STRPTR)text,(ULONG)strlen(text))+10;
+static LONG picker_text_span(struct RastPort *rp,const char *text,LONG minimum) {
+    LONG width=TextLength(rp,(STRPTR)text,(ULONG)strlen(text))+10;
     return width>minimum?width:minimum;
 }
+static LONG picker_number_span(struct RastPort *rp,LONG digits,LONG minimum) {
+    LONG widest=0,width;
+    char digit;
+    for(digit='0';digit<='9';++digit) {
+        width=TextLength(rp,(STRPTR)&digit,1);
+        if(width>widest)widest=width;
+    }
+    width=digits*widest+12;
+    return width>minimum?width:minimum;
+}
+
+static LONG picker_row_height(const struct TextFont *font) {
+    LONG height=(LONG)font->tf_YSize+6;
+    return height>16?height:16;
+}
+
 static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     PickerGeometry g;
     const struct Window *w=p->window;
@@ -113,35 +129,31 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
      */
     int compact=(ULONG)p->screen->Width >
                 2ul*(ULONG)p->screen->Height;
-    LONG lift=compact?5:0;
-    LONG action=(LONG)w->Height-(LONG)w->BorderBottom-
-                (compact?23:31);
-    /* Physical/Partition: two 16px inset panels with 3px gaps.
-     * Logical: one panel. Give all reclaimed height to LISTVIEWs.
-     */
-    LONG preview=action-19;
-    LONG first=action-76;
-    LONG list_top=66-lift;
+    LONG row=picker_row_height(w->RPort->Font);
+    LONG step=row+3;
+    LONG header=w->BorderTop+(compact?8:13);
+    LONG list_top=header+row+w->RPort->TxHeight+13;
+    LONG action=w->Height-w->BorderBottom-row-(compact?7:15);
+    LONG preview=action-step;
+    LONG first=action-4*step;
     LONG height=(p->mode==DOLLY_MODE_PHYSICAL ||
-                 p->mode==DOLLY_MODE_PARTITION ? first : preview)-
-                 list_top-3;
-    if(right<left+320)right=left+320;
-    if(height<40)height=40;
+                 p->mode==DOLLY_MODE_PARTITION ? first : preview)-list_top-3;
+    g.row_h=(WORD)row;
+    g.baseline=(WORD)((row-w->RPort->TxHeight)/2+w->RPort->TxBaseline);
     g.left=(WORD)left;
     g.right=(WORD)right;
     g.full_width=(WORD)(right-left);
     /* Both role-specific captions are longer than the former
      * "Select type:"; reserve space before the CYCLE gadget.
      */
-    g.mode_x=(WORD)(left+picker_text_span(w,p->role?
+    g.mode_x=(WORD)(left+picker_text_span(w->RPort,p->role?
                   "Select Destination Medium":"Select Source Medium",230));
     g.mode_w=(WORD)(right-g.mode_x);
-    g.query_w=(WORD)picker_text_span(w,"Query",80);
+    g.query_w=(WORD)picker_text_span(w->RPort,"Query",80);
     g.list_y=(WORD)list_top;
-    g.cycle_y=(WORD)(24-lift);
-    g.heading_y=(WORD)(36-lift);
-    g.list_label_y=(WORD)(59-lift);
-    g.file_label_y=(WORD)(99-lift);
+    g.cycle_y=(WORD)header;
+    g.heading_y=(WORD)(header+g.baseline);
+    g.list_label_y=(WORD)(list_top-4-w->RPort->TxHeight+w->RPort->TxBaseline);
     g.list_h=(WORD)height;
     g.action_y=(WORD)action;
     g.preview_y=(WORD)(p->mode==DOLLY_MODE_PHYSICAL ||
@@ -149,33 +161,33 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
                             first:preview);
     g.disk_info_y=(WORD)((p->mode==DOLLY_MODE_PARTITION ||
                             p->mode==DOLLY_MODE_PHYSICAL) ?
-                            action-57:preview);
-    g.ata_info_y=(WORD)(action-38);
+                            first+step:preview);
+    g.ata_info_y=(WORD)(action-2*step);
     g.geometry_info_y=(WORD)preview;
     g.partition_info_y=(WORD)preview;
     g.browse_y=(WORD)list_top;
-    g.path_y=(WORD)(105-lift);
-    g.detail_y=(WORD)(132-lift);
+    g.path_y=(WORD)(list_top+row+16);
+    g.detail_y=(WORD)(g.path_y+row+11);
     /* A shared label column keeps the previews aligned in all
      * modes. The Size field is right-anchored and stays separate.
      */
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
-        label_width=picker_text_span(w,"Device",84);
-        label_width=picker_text_span(w,"SCSI name",label_width);
-        label_width=picker_text_span(w,"ATA IDENTIFY",label_width);
-        label_width=picker_text_span(w,p->mode==DOLLY_MODE_PHYSICAL?
+        label_width=picker_text_span(w->RPort,"Device",84);
+        label_width=picker_text_span(w->RPort,"SCSI name",label_width);
+        label_width=picker_text_span(w->RPort,"ATA IDENTIFY",label_width);
+        label_width=picker_text_span(w->RPort,p->mode==DOLLY_MODE_PHYSICAL?
                                      "Geometry":"Partition",label_width);
-    } else label_width=picker_text_span(w,p->mode==DOLLY_MODE_FILE?
+    } else label_width=picker_text_span(w->RPort,p->mode==DOLLY_MODE_FILE?
                                            "Selected file":"Selected device",140);
     g.value_x=(WORD)(left+label_width);
     g.value_w=(WORD)(right-g.value_x);
-    g.unit_w=(WORD)picker_text_span(w,"0000000000",58);
+    g.unit_w=(WORD)picker_number_span(w->RPort,10,58);
+    g.partition_w=(WORD)picker_number_span(w->RPort,2,32);
     g.unit_x=(WORD)(right-g.query_w-4-g.unit_w);
-    g.unit_label_x=(WORD)(g.unit_x-picker_text_span(w,"Unit",38));
-    g.partition_w=(WORD)picker_text_span(w,"00",32);
-    g.size_w=(WORD)picker_text_span(w,"999999 MiB",102);
+    g.unit_label_x=(WORD)(g.unit_x-picker_text_span(w->RPort,"Unit",38));
+    g.size_w=(WORD)picker_text_span(w->RPort,"999999 MiB",102);
     g.size_x=(WORD)(right-g.size_w);
-    g.size_label_x=(WORD)(g.size_x-picker_text_span(w,"Size",46));
+    g.size_label_x=(WORD)(g.size_x-picker_text_span(w->RPort,"Size",46));
     g.geometry_w=(WORD)(g.size_label_x-8-g.value_x);
     g.name_w=p->mode==DOLLY_MODE_PHYSICAL?g.value_w:g.geometry_w;
     g.size_y=p->mode==DOLLY_MODE_PHYSICAL?g.geometry_info_y:g.disk_info_y;
@@ -318,7 +330,7 @@ static struct Gadget *button(struct Gadget *last,DollyEndpointPicker *p,
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=x;ng.ng_TopEdge=y;
-    ng.ng_Width=w;ng.ng_Height=16;
+    ng.ng_Width=w;ng.ng_Height=picker_geometry(p).row_h;
     ng.ng_GadgetID=id;ng.ng_GadgetText=(STRPTR)name;
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
@@ -421,19 +433,16 @@ static struct Gadget *selection_text(struct Gadget *last,DollyEndpointPicker *p,
     ng.ng_TopEdge=g.preview_y;
     ng.ng_Width=unit?g.unit_w:
                 physical_mode(p)?g.unit_label_x-g.value_x-6:g.value_w;
-    ng.ng_Height=16;
+    ng.ng_Height=g.row_h;
     ng.ng_GadgetID=unit?PICK_UNIT_TEXT:PICK_SELECTION_TEXT;
     if(unit)
         return CreateGadget(STRING_KIND,last,&ng,
                             GTST_String,(ULONG)p->unit_display,GTST_MaxChars,10UL,
                             GA_Disabled,(ULONG)!p->has_device,TAG_DONE);
-    if(physical_mode(p))
-        return CreateGadget(STRING_KIND,last,&ng,
-                            GTST_String,(ULONG)p->selection_display,
-                            GTST_MaxChars,(ULONG)(sizeof(p->selection_display)-1),TAG_DONE);
-    return CreateGadget(TEXT_KIND,last,&ng,
-                        GTTX_Text,(ULONG)p->selection_display,
-                        GTTX_Border,TRUE,GTTX_Clipped,TRUE,TAG_DONE);
+    return CreateGadget(STRING_KIND,last,&ng,
+                        GTST_String,(ULONG)p->selection_display,
+                        GTST_MaxChars,(ULONG)(physical_mode(p)?
+                            DOLLY_PHYS_DRIVER_LEN-1u:DOLLY_DOS_NAME_BYTES-1u),TAG_DONE);
 }
 static struct Gadget *partition_number(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng={0};
@@ -443,7 +452,7 @@ static struct Gadget *partition_number(struct Gadget *last,DollyEndpointPicker *
     ng.ng_LeftEdge=g.value_x;
     ng.ng_TopEdge=g.partition_info_y;
     ng.ng_Width=g.partition_w;
-    ng.ng_Height=16;
+    ng.ng_Height=g.row_h;
     ng.ng_GadgetID=PICK_PARTITION_NUMBER;
     return CreateGadget(INTEGER_KIND,last,&ng,
                         GTIN_Number,p->has_partition?(ULONG)p->partition+1:0UL,
@@ -454,7 +463,7 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
     update_selection_preview(p);
     if(p->selection_text)
         GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
-                          physical_mode(p)?GTST_String:GTTX_Text,
+                          GTST_String,
                           (ULONG)p->selection_display,TAG_DONE);
     if(p->unit_text)
         GT_SetGadgetAttrs(p->unit_text,p->window,NULL,
@@ -504,7 +513,7 @@ static struct Gadget *disk_info_text(struct Gadget *last,
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.disk_info_y;
-    ng.ng_Width=g.name_w;ng.ng_Height=16;
+    ng.ng_Width=g.name_w;ng.ng_Height=g.row_h;
     ng.ng_GadgetID=PICK_DISK_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -519,7 +528,7 @@ static struct Gadget *disk_size_text(struct Gadget *last,
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.size_x;ng.ng_TopEdge=g.size_y;
-    ng.ng_Width=g.size_w;ng.ng_Height=16;
+    ng.ng_Width=g.size_w;ng.ng_Height=g.row_h;
     ng.ng_GadgetID=PICK_DISK_SIZE_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -534,7 +543,7 @@ static struct Gadget *geometry_info_text(struct Gadget *last,
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=ata?g.ata_info_y:g.geometry_info_y;
-    ng.ng_Width=ata?g.value_w:g.geometry_w;ng.ng_Height=16;
+    ng.ng_Width=ata?g.value_w:g.geometry_w;ng.ng_Height=g.row_h;
     ng.ng_GadgetID=ata?PICK_ATA_INFO_TEXT:PICK_GEOMETRY_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -630,7 +639,7 @@ static struct Gadget *partition_info_text(struct Gadget *last,
     ng.ng_LeftEdge=g.value_x+g.partition_w+6;
     ng.ng_TopEdge=g.partition_info_y;
     ng.ng_Width=g.value_w-g.partition_w-6;
-    ng.ng_Height=16;
+    ng.ng_Height=g.row_h;
     ng.ng_GadgetID=PICK_PARTITION_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -651,7 +660,7 @@ static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=picker_geometry(p).value_x;
     ng.ng_TopEdge=picker_geometry(p).path_y;
-    ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=17;
+    ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=picker_geometry(p).row_h;
     ng.ng_GadgetID=PICK_FILE_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(STRING_KIND,last,&ng,
@@ -665,7 +674,7 @@ static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=picker_geometry(p).value_x;
     ng.ng_TopEdge=picker_geometry(p).detail_y;
-    ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=16;
+    ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=picker_geometry(p).row_h;
     ng.ng_GadgetID=PICK_FILE_INFO;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->file_details,
@@ -730,7 +739,7 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=picker_geometry(p).mode_x;
     ng.ng_TopEdge=picker_geometry(p).cycle_y;
-    ng.ng_Width=picker_geometry(p).mode_w;ng.ng_Height=17;
+    ng.ng_Width=picker_geometry(p).mode_w;ng.ng_Height=picker_geometry(p).row_h;
     ng.ng_GadgetID=PICK_MODE;ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(CYCLE_KIND,last,&ng,
                         GTCY_Labels,(ULONG)p->allowed_mode_labels,
@@ -764,6 +773,11 @@ static void captions(DollyEndpointPicker *p) {
         Text(rp,(STRPTR)"Select Destination Medium",25);
     else
         Text(rp,(STRPTR)"Select Source Medium",20);
+    if(p->mode_count==1u) {
+        STRPTR name=p->allowed_mode_labels[0];
+        Move(rp,g.mode_x,g.heading_y);
+        Text(rp,name,strlen((const char *)name));
+    }
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
         WORD x,w;
         unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
@@ -786,35 +800,35 @@ static void captions(DollyEndpointPicker *p) {
      * lines. The same placement works on the reference 640x256 screen.
      */
     if(p->mode==DOLLY_MODE_FILE) {
-        Move(rp,g.left,(LONG)g.path_y+12);
+        Move(rp,g.left,(LONG)g.path_y+g.baseline);
         Text(rp,(STRPTR)"Selected file",13);
         if(!p->role) {
-            Move(rp,g.left,(LONG)g.detail_y+12);
+            Move(rp,g.left,(LONG)g.detail_y+g.baseline);
             Text(rp,(STRPTR)"File info",9);
         }
     } else {
-        Move(rp,g.left,(LONG)g.preview_y+12);
+        Move(rp,g.left,(LONG)g.preview_y+g.baseline);
         if(physical_mode(p))Text(rp,(STRPTR)"Device",6);
         else Text(rp,(STRPTR)"Selected device",15);
         if(physical_mode(p)) {
-            Move(rp,g.unit_label_x,(LONG)g.preview_y+12);
+            Move(rp,g.unit_label_x,(LONG)g.preview_y+g.baseline);
             Text(rp,(STRPTR)"Unit",4);
         }
         if(p->mode==DOLLY_MODE_PHYSICAL ||
            p->mode==DOLLY_MODE_PARTITION) {
-            Move(rp,g.left,(LONG)g.disk_info_y+12);
+            Move(rp,g.left,(LONG)g.disk_info_y+g.baseline);
             Text(rp,(STRPTR)"SCSI name",9);
-            Move(rp,g.size_label_x,(LONG)g.size_y+12);
+            Move(rp,g.size_label_x,(LONG)g.size_y+g.baseline);
             Text(rp,(STRPTR)"Size",4);
-            Move(rp,g.left,(LONG)g.ata_info_y+12);
+            Move(rp,g.left,(LONG)g.ata_info_y+g.baseline);
             Text(rp,(STRPTR)"ATA IDENTIFY",12);
         }
         if(p->mode==DOLLY_MODE_PHYSICAL) {
-            Move(rp,g.left,(LONG)g.geometry_info_y+12);
+            Move(rp,g.left,(LONG)g.geometry_info_y+g.baseline);
             Text(rp,(STRPTR)"Geometry",8);
         }
         if(p->mode==DOLLY_MODE_PARTITION) {
-            Move(rp,g.left,(LONG)g.partition_info_y+12);
+            Move(rp,g.left,(LONG)g.partition_info_y+g.baseline);
             Text(rp,(STRPTR)"Partition",9);
         }
     }
@@ -834,7 +848,7 @@ static void change_enabled(DollyEndpointPicker *p) {
         int ready=(p->mode==DOLLY_MODE_PHYSICAL &&
                    physical_choice(p) && p->queried &&
                    p->media_geometry.capacity_valid) ||
-                  (p->mode==DOLLY_MODE_LOGICAL && p->has_logical) ||
+                  (p->mode==DOLLY_MODE_LOGICAL && p->logical_count) ||
                   (p->mode==DOLLY_MODE_PARTITION &&
                    physical_choice(p) && p->queried &&
                    p->media_geometry.capacity_valid &&
@@ -869,11 +883,19 @@ static void clear_picker_client(DollyEndpointPicker *p) {
 static int rebuild(DollyEndpointPicker *p) {
     struct Gadget *last;
     PickerGeometry g;
+    WORD cancel_width;
     if(!p->window)return 0;
     g=picker_geometry(p);
+    if(physical_mode(p) && (g.unit_label_x-g.value_x<44 || g.geometry_w<24))
+        return 0;
+    if(p->mode!=DOLLY_MODE_FILE && g.list_h<p->window->RPort->TxHeight+3)
+        return 0;
     capture_file_text(p);
     file_details(p);
-    if(p->mode!=DOLLY_MODE_FILE)update_selection_preview(p);
+    if(p->mode==DOLLY_MODE_LOGICAL && p->gadgets && p->selection_text) {
+        const struct StringInfo *info=p->selection_text->SpecialInfo;
+        strcpy(p->selection_display,(const char *)info->Buffer);
+    } else if(p->mode!=DOLLY_MODE_FILE)update_selection_preview(p);
     if(p->mode==DOLLY_MODE_PHYSICAL ||
        p->mode==DOLLY_MODE_PARTITION)update_disk_info(p);
     if(p->mode==DOLLY_MODE_PARTITION)update_partition_details(p);
@@ -889,7 +911,7 @@ static int rebuild(DollyEndpointPicker *p) {
     clear_picker_client(p);
     p->device_list=NULL;p->unit_list=NULL;
     p->partition_list=NULL;p->logical_list=NULL;
-    p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
+    p->choose_button=NULL;p->file_text=NULL;
     p->file_info=NULL;
     p->selection_text=NULL;p->unit_text=NULL;p->partition_number=NULL;
     p->disk_info_text=NULL;
@@ -898,9 +920,10 @@ static int rebuild(DollyEndpointPicker *p) {
     p->geometry_info_text=NULL;p->ata_info_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
-    last=cycle(last,p);
-    if(!last)return 0;
-    p->mode_cycle=last;
+    if(p->mode_count>1u) {
+        last=cycle(last,p);
+        if(!last)return 0;
+    }
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
         WORD x,w;
         unsigned columns=p->mode==DOLLY_MODE_PHYSICAL?2u:3u;
@@ -984,11 +1007,12 @@ static int rebuild(DollyEndpointPicker *p) {
     }
     /* File mode now commits exactly like every other mode. */
     last=button(last,p,PICK_SELECT,g.left,g.action_y,
-                172,"Use selection",1);
+                (WORD)picker_text_span(p->window->RPort,"Use selection",172),"Use selection",1);
     if(!last)return 0;
     p->choose_button=last;
+    cancel_width=(WORD)picker_text_span(p->window->RPort,"Cancel",176);
     last=button(last,p,PICK_CANCEL,
-                (WORD)(g.right-176),g.action_y,176,"Cancel",0);
+                (WORD)(g.right-cancel_width),g.action_y,cancel_width,"Cancel",0);
     if(!last)return 0;
     AddGList(p->window,p->gadgets,(ULONG)-1,-1,NULL);
     p->gadgets_detached=0;
@@ -1049,11 +1073,30 @@ int dolly_amiga_pick_drawer(struct Window *parent,char path[256]) {
     FreeAslRequest(fr);
     return ok;
 }
+static LONG picker_initial_width(struct Screen *screen,unsigned role) {
+    struct RastPort measure=screen->RastPort;
+    LONG labels,fields,header;
+    SetFont(&measure,dolly_amiga_font(0));
+    labels=picker_text_span(&measure,"ATA IDENTIFY",84);
+    labels=picker_text_span(&measure,"SCSI name",labels);
+    labels=picker_text_span(&measure,"Geometry",labels);
+    labels=picker_text_span(&measure,"Partition",labels);
+    fields=labels+44+picker_text_span(&measure,"Unit",38)+
+           picker_number_span(&measure,10,58)+4+
+           picker_text_span(&measure,"Query",80);
+    header=picker_text_span(&measure,role?"Select Destination Medium":
+                                         "Select Source Medium",230)+
+           picker_text_span(&measure,"Physical device",0)+30;
+    if(fields<header)fields=header;
+    fields+=64; /* Horizontal margins and Intuition resize border. */
+    return fields>606?fields:606;
+}
+
 int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
                       DollyEndpointMode preferred_mode,
                       unsigned allowed_mask) {
-    LONG top,minheight;
+    LONG top,minheight,available,width;
     if(!p || !screen || role>1u ||
        (unsigned)preferred_mode>3u)return 0;
     if(p->window)return 1;
@@ -1112,17 +1155,20 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     p->visual=GetVisualInfo(screen,TAG_DONE);
     if(!p->visual)return 0;
     top=(LONG)screen->BarHeight+1;
-    /* Third Partition info row requires slightly more vertical space
-     * on conventional square-pixel screens; preserve 640x256 at 195.
-     */
+    /* Reserve room for taller fields, then fit inside the public screen. */
     minheight=(ULONG)screen->Width>2ul*(ULONG)screen->Height?
               214:231;
+    available=(LONG)screen->Height-top;
+    minheight+=6*(picker_row_height(dolly_amiga_font(0))-16);
+    if(minheight>available)minheight=available;
+    width=picker_initial_width(screen,role);
+    if(width>screen->Width-12)width=screen->Width-12;
     p->window=OpenWindowTags(NULL,
           WA_PubScreen,(ULONG)screen,
           WA_Title,(ULONG)(role?"Dolly - Destination":"Dolly - Source"),
           WA_Left,12,WA_Top,(ULONG)top,
-          WA_Width,606,WA_Height,(ULONG)minheight,
-          WA_MinWidth,606,WA_MinHeight,(ULONG)minheight,
+          WA_Width,(ULONG)width,WA_Height,(ULONG)minheight,
+          WA_MinWidth,(ULONG)width,WA_MinHeight,(ULONG)minheight,
           WA_MaxWidth,(ULONG)screen->Width-12ul,
           WA_MaxHeight,(ULONG)screen->Height-(ULONG)top,
           WA_SizeGadget,TRUE,
@@ -1239,12 +1285,24 @@ static int commit_picker(DollyEndpointPicker *p) {
                                                     p->media_geometry.block_bytes;
         }
     }
-    else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
-        if(p->logical<p->logical_count) {
-            ok=dolly_endpoint_set_logical(&p->result,p->logical);
-            if(ok)strcpy(p->result.path,
-                         p->dos_devices.names[p->logical]);
+    else if(p->mode==DOLLY_MODE_LOGICAL) {
+        const struct StringInfo *info=p->selection_text->SpecialInfo;
+        const char *name=(const char *)info->Buffer;
+        size_t length=strlen(name);
+        unsigned i;
+        if(length && name[length-1u]==':')--length;
+        for(i=0;i<p->logical_count;++i) {
+            const char *registered=p->dos_devices.names[i];
+            size_t registered_length=strlen(registered);
+            if(registered_length && registered[registered_length-1u]==':')
+                --registered_length;
+            if(length && length==registered_length && !strncasecmp(name,registered,length)) {
+                ok=dolly_endpoint_set_logical(&p->result,i);
+                if(ok)strcpy(p->result.path,registered);
+                break;
+            }
         }
+        if(!ok)DisplayBeep(p->screen);
     } else if(p->mode==DOLLY_MODE_FILE) {
         capture_file_text(p);
         if(p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
@@ -1397,7 +1455,8 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         } else if(id==PICK_PARTITION_NUMBER) {
             (void)capture_partition_number(p);
             change_enabled(p);
-        } else if(id==PICK_SELECT) {
+        } else if(id==PICK_SELECT ||
+                  (id==PICK_SELECTION_TEXT && p->mode==DOLLY_MODE_LOGICAL)) {
             close=commit_picker(p);
         } else if(id==PICK_FILE_TEXT && p->mode==DOLLY_MODE_FILE) {
             capture_file_text(p);
