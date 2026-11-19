@@ -34,12 +34,10 @@ DollyIoHints dolly_amiga_io_override(const DollyPhysicalEntry *device) {
     DollyIoHints empty={0};
     return entry?entry->hints:empty;
 }
+static int legacy_override,verify_writes,suppress_same_unit_warning;
 static int allow_outside_range;
 int dolly_amiga_allow_outside_range(void) { return allow_outside_range; }
 void dolly_amiga_set_allow_outside_range(int enabled) { allow_outside_range=enabled; }
-static int legacy_override,verify_writes,suppress_same_unit_warning,allow_restore_mismatch;
-int dolly_amiga_allow_restore_mismatch(void) { return allow_restore_mismatch; }
-void dolly_amiga_set_allow_restore_mismatch(int enabled) { allow_restore_mismatch=enabled; }
 int dolly_amiga_suppress_same_unit_warning(void) { return suppress_same_unit_warning; }
 void dolly_amiga_set_suppress_same_unit_warning(int enabled) {
     suppress_same_unit_warning=enabled;
@@ -98,7 +96,6 @@ void dolly_amiga_io_settings_clear(void) {
     legacy_override=0;
     verify_writes=0;
     suppress_same_unit_warning=0;
-    allow_restore_mismatch=0;
     allow_outside_range=0;
 }
 static int number(const char *text,uint32_t *out) {
@@ -124,7 +121,6 @@ static const char *const check_labels[]={
     "Bypass legacy scsi.device 4 GiB limit",
     "Verify writes by reading sectors back",
     "Hide same-device speed warning",
-    "Allow Restore compatibility override",
     "Allow partitions outside range"
 };
 static const char *const button_labels[]={"Save","Reset Auto","Cancel"};
@@ -135,7 +131,6 @@ static const char *const help_text[]={
     "Use READ64 when an older driver advertises it.",
     "Compare written sectors with the original data.",
     "Hide the speed notice for the same unit.",
-    "Allow timed approval of Restore mismatches.",
     "Allow reading source partitions beyond driver capacity.",
     "Save changes to the preferences file.",
     "Clear overrides for this unit. Save to apply.",
@@ -193,8 +188,8 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     LONG font_button_width=widest(screen,font_buttons,2)+18;
     uint32_t values[3];
     int done=0,has_device=0,legacy=legacy_override;
-    int allow_mismatch=allow_restore_mismatch,outside_range=allow_outside_range;
     int verify=verify_writes,suppress_warning=suppress_same_unit_warning;
+    int outside_range=allow_outside_range;
     const char *hover=NULL;
     static const char help_default[]="Point to a control to see its purpose.";
     if(endpoint->kind==DOLLY_ENDPOINT_LOGICAL)
@@ -213,7 +208,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     label_width=widest(screen,field_labels,3);
     field_width=text_width(screen,"0x00000000")+14;
     button_width=widest(screen,button_labels,3)+18;
-    check_width=28+widest(screen,check_labels,5);
+    check_width=28+widest(screen,check_labels,sizeof(check_labels)/sizeof(check_labels[0]));
     content_width=widest(screen,help_text,sizeof(help_text)/sizeof(help_text[0]))+12;
     if(content_width<text_width(screen,legend))content_width=text_width(screen,legend);
     if(content_width<check_width)content_width=check_width;
@@ -224,7 +219,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     format_font(font_label,sizeof(font_label),&font);
     if(content_width>(LONG)screen->Width-36)content_width=(LONG)screen->Width-36;
     client_width=content_width+12;
-    client_height=12*row_height+11*3+8;
+    client_height=11*row_height+10*3+8;
     visual=GetVisualInfo(screen,TAG_DONE);
     if(!visual)return;
     window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,WA_Title,(ULONG)title,
@@ -261,8 +256,8 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     if(!last)goto cleanup;
     y+=row_height+3;
     {
-        const int checked[]={legacy,verify,suppress_warning,allow_mismatch,outside_range};
-        for(i=0;i<5;++i) {
+        const int checked[]={legacy,verify,suppress_warning,outside_range};
+        for(i=0;i<sizeof(checked)/sizeof(checked[0]);++i) {
             ng.ng_TopEdge=(WORD)y;ng.ng_Width=22;
             ng.ng_GadgetID=(UWORD)(20+i);
             ng.ng_GadgetText=(STRPTR)check_labels[i];ng.ng_Flags=PLACETEXT_RIGHT;
@@ -300,7 +295,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
         ng.ng_GadgetText=(STRPTR)button_labels[i];
         last=CreateGadget(BUTTON_KIND,last,&ng,GA_Disabled,(ULONG)(i==1 && !has_device),TAG_DONE);
         if(!last)goto cleanup;
-        areas[8+i]=(SettingsHelpArea){x,y,x+button_width,y+row_height};
+        areas[7+i]=(SettingsHelpArea){x,y,x+button_width,y+row_height};
     }
     AddGList(window,gadgets,(ULONG)-1,-1,NULL);
     RefreshGList(gadgets,window,NULL,-1);
@@ -331,8 +326,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
             else if(id==20)legacy=code!=0;
             else if(id==21)verify=code!=0;
             else if(id==22)suppress_warning=code!=0;
-            else if(id==23)allow_mismatch=code!=0;
-            else if(id==24)outside_range=code!=0;
+            else if(id==23)outside_range=code!=0;
             else if(id==30 || id==31) {
                 if(id==31)memset(&font,0,sizeof(font));
                 if(id==31 || dolly_amiga_choose_font(window,&font)) {
@@ -359,13 +353,11 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                     DollyFontChoice previous_font=dolly_amiga_font_choice;
                     int previous=legacy_override,previous_verify=verify_writes;
                     int previous_warning=suppress_same_unit_warning;
-                    int previous_mismatch=allow_restore_mismatch;
                     int previous_outside_range=allow_outside_range;
                     if(existing)existing->hints=next;
                     legacy_override=legacy;
                     verify_writes=verify;
                     suppress_same_unit_warning=suppress_warning;
-                    allow_restore_mismatch=allow_mismatch;
                     allow_outside_range=outside_range;
                     dolly_amiga_font_choice=font;
                     if(dolly_amiga_prefs_save()) {
@@ -377,7 +369,6 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                         legacy_override=previous;
                         verify_writes=previous_verify;
                         suppress_same_unit_warning=previous_warning;
-                        allow_restore_mismatch=previous_mismatch;
                         allow_outside_range=previous_outside_range;
                         if(existing)existing->hints=current;
                         else if(has_device)dolly_amiga_io_store(&device,current);

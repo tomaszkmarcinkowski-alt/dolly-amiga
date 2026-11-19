@@ -24,6 +24,24 @@ static void make_rdb(unsigned char *data,unsigned cylinders) {
     }
 }
 
+/* A checksummed PART descriptor whose declared extent overruns the image. */
+static void add_overrunning_partition(unsigned char data[1024]) {
+    unsigned char *part=data+512;
+    const unsigned words[49]={[0]=0x50415254,[1]=49,[4]=0xffffffffu,
+        [32]=16,[33]=128,[35]=1,[36]=1,[37]=1,[41]=1,[42]=2,
+        [48]=0x444f5301};
+    unsigned i,j,sum=0;
+    data[31]=1;
+    /* Replace END with block 1 and adjust the RDSK checksum by -2. */
+    memset(data+28,0,3);
+    data[11]-=2;
+    for(i=0;i<49;++i)sum+=words[i];
+    for(i=0;i<49;++i) {
+        unsigned word=i==2?0u-sum:words[i];
+        for(j=0;j<4;++j)part[i*4+j]=(unsigned char)(word>>(24-j*8));
+    }
+}
+
 static void check_assessment(void) {
     unsigned char a[1024]={'D','O','S',1},b[1536]={0};
     DollyRestoreExtent source={NULL,0,sizeof(a),512,DOLLY_RESTORE_UNKNOWN};
@@ -46,6 +64,19 @@ static void check_assessment(void) {
     make_rdb(b+512,101);
     result=dolly_restore_assess(&source,&target);
     assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"RDB geometry"));
+    make_rdb(a,100);
+    add_overrunning_partition(a);
+    memcpy(b+512,a,sizeof(a));
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"Image and destination RDB"));
+    make_rdb(b+512,100);
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"Image RDB extends beyond capacity"));
+    memset(b+512,0,512);
+    a[512+11]^=1; /* Corrupt the PART checksum with an equal-sized blank target. */
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"Checksum mismatch"));
+    make_rdb(a,100);
     memset(b+512,0,512);
     memcpy(b+512,"DOS\1",4);
     target.expected_kind=DOLLY_RESTORE_PARTITION;
@@ -55,7 +86,7 @@ static void check_assessment(void) {
     a[510]=0x55;
     a[511]=0xaa;
     result=dolly_restore_assess(&source,&target);
-    assert(result.decision==DOLLY_RESTORE_BLOCKED && strstr(result.reason,"MBR"));
+    assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"MBR"));
     memset(a,0,sizeof(a));
     memcpy(a,"FORM",4);
     memcpy(a+8,"DOLY",4);
@@ -64,6 +95,13 @@ static void check_assessment(void) {
     source.bytes=512;
     result=dolly_restore_assess(&source,&target);
     assert(result.decision==DOLLY_RESTORE_BLOCKED && result.size==DOLLY_RESTORE_SIZE_SMALLER);
+    memcpy(a,"DOS\1",4);
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_MATCH && result.size==DOLLY_RESTORE_SIZE_SMALLER);
+    source.bytes=1024;
+    target.bytes=512;
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_MATCH && result.size==DOLLY_RESTORE_SIZE_LARGER);
     dolly_block_close(source.blocks);
     dolly_block_close(target.blocks);
 }
@@ -114,6 +152,19 @@ static void check_transfer(void) {
                                        &fixture,write_test_batch,1));
     assert(dolly_restore_transfer_step(&transfer,buffer,512)==DOLLY_RESTORE_READ_FAILED);
     assert(fixture.calls==2);
+    fixture=(TransferFixture){0};
+    assert(dolly_restore_transfer_init_prefix(&transfer,source,1024,512,1024,
+                                               &fixture,write_test_batch,1));
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_FINISHED);
+    assert(transfer.processed==1024 && fixture.calls==1 && fixture.dest[1024]==0);
+    dolly_block_close(source);
+
+    fixture=(TransferFixture){0};
+    assert(dolly_block_open_backend(512,read_memory,close_memory,data,&source)==DOLLY_BLOCK_OK);
+    assert(dolly_restore_transfer_init_prefix(&transfer,source,sizeof(fixture.dest),512,1024,
+                                               &fixture,write_test_batch,1));
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_FINISHED);
+    assert(transfer.processed==512 && fixture.calls==1 && fixture.dest[512]==0);
     dolly_block_close(source);
 }
 

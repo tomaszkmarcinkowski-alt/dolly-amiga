@@ -13,7 +13,7 @@ typedef struct DollySurfaceScan {
     uint64_t first_lba,total,processed;
     uint32_t sector_bytes,transfer_bytes,fallback,errors,retries;
     unsigned retry_pending,max_retries;
-    unsigned has_rdb;
+    struct DollyReadGuard *mount_guard;
     const char *failure;
     DollySurfaceLog log;
     DollyMediaGeometry geometry;

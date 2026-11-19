@@ -60,8 +60,10 @@ static void describe_partition_table(const DollySurfaceScan *scan,char out[110])
         return;
     }
     dolly_amiga_partition_scan(scan->device.driver,scan->device.unit,&scan->geometry,map);
-    if(map->format==DOLLY_NATIVE_PARTITION_RDB)
-        strcpy(out,map->rdb_capacity_mismatch?"RDB (extends beyond reported capacity)":"RDB");
+    if(map->format==DOLLY_NATIVE_PARTITION_RDB) {
+        if(map->rdb_capacity_mismatch)snprintf(out,110,"%.109s",map->status);
+        else strcpy(out,"RDB");
+    }
     else if(map->format==DOLLY_NATIVE_PARTITION_MBR)
         strcpy(out,"MBR");
     else if(map->no_partition_table)
@@ -71,9 +73,15 @@ static void describe_partition_table(const DollySurfaceScan *scan,char out[110])
     free(map);
 }
 
+static int mounts_unchanged(DollyAmigaTransfer *t,int source);
 static DollyBlockReadResult read_extent(void *context,uint64_t offset,
                                        void *data,size_t bytes) {
-    DollySurfaceScan *source=context;
+    DollyAmigaTransfer *transfer=context;
+    DollySurfaceScan *source=&transfer->reader;
+    if(!mounts_unchanged(transfer,1)) {
+        transfer->failure="Source filesystem changed during read.";
+        return (DollyBlockReadResult){DOLLY_BLOCK_EDEVICE,0};
+    }
     return dolly_surface_read(source,start_of(source)+offset,data,bytes);
 }
 static void keep_reader(void *context) {
@@ -124,13 +132,20 @@ static int apply_mount_warning(DollyWarning *warning) {
         t->failure="A mount changed. Start the operation again.";
         return -1;
     }
-    if(!source && dolly_amiga_unmount(mount))return 1;
-    if(source)mount->suspended=dolly_amiga_inhibit_mount(mount,1);
+    if(mount->handler)mount->suspended=dolly_amiga_inhibit_mount(mount,1);
+    if(!source && (!mount->handler || mount->suspended) && dolly_amiga_unmount(mount)) {
+        mount->suspended=0;
+        return 1;
+    }
     if(!dolly_amiga_mounted_extents(device,start,length,!source,&t->observed_mounts))
         return -1;
     current=find_mount(&t->observed_mounts,mount);
     if(source && mount->suspended && (!current || !current->volume[0]))return 1;
-    if(!source && current)*mount=*current;
+    if(!source && current) {
+        int suspended=mount->suspended && mount->handler==current->handler;
+        *mount=*current;
+        mount->suspended=suspended;
+    }
     snprintf(message,sizeof(message),"%s: \"%s\"\nVolume: \"%s\"\n"
              "Dolly could not confirm that the filesystem was taken offline. "
              "Continuing while it is active can corrupt data. Proceed at your own risk.",
@@ -154,12 +169,16 @@ static int collect_mount_warnings(DollyAmigaTransfer *t,DollyWarnings *warnings,
         DollyWarning *warning;
         char message[250],title[46];
         if(source && find_mount(&t->target_mounts,mount))continue;
+        if(!source && dolly_amiga_lock_uses_mount(t->image.lock,mount)) {
+            t->failure="The image file uses a filesystem that must be unmounted.";
+            return 0;
+        }
         snprintf(title,sizeof(title),"%s %.29s",source?"Source":"Destination",mount->device);
         snprintf(message,sizeof(message),"%s: \"%s\"\nMounted volume: \"%s\"\n%s",
                  source?"Source":"Destination",mount->device,
                  mount->volume[0]?mount->volume:"name unavailable",
                  source?"Temporarily suspend access to this filesystem?":
-                 "Unmount this partition? A reboot may be needed even if you cancel later.");
+                 "Inhibit and unmount this partition? A reboot may be needed even if you cancel.");
         warning=dolly_warning_add(warnings,title,message,source?"Suspend":"Unmount");
         if(!warning)return 0;
         warning->action=apply_mount_warning;
@@ -185,7 +204,7 @@ static int approve_write_warning(DollyWarning *warning) {
     DollySurfaceScan *disk=approval->disk;
     unsigned open_count;
     char message[330];
-    if(!extent_anchors(approval->input,0,t->target.length,disk->sector_bytes,disk->buffer,
+    if(!extent_anchors(approval->input,0,dolly_block_size(approval->input),disk->sector_bytes,disk->buffer,
                        &t->source_first_crc,&t->source_last_crc) ||
        !extent_anchors(disk->source,t->target.start,t->target.length,disk->sector_bytes,
                        disk->buffer,&t->target_first_crc,&t->target_last_crc)) {
@@ -217,11 +236,15 @@ static int approve_write_warning(DollyWarning *warning) {
              t->device.driver,(unsigned long)t->device.unit);
     return dolly_warning_risk(warning,message);
 }
-static void release_source_mounts(DollyAmigaTransfer *t) {
-    DollyMountList *list=&t->source_mounts;
+static void release_inhibited_mounts(DollyAmigaTransfer *t,DollyMountList *list,int keep_inhibited) {
     unsigned i;
     for(i=0;i<list->count;++i) {
         DollyMountedVolume *mount=&list->entries[i];
+        if(keep_inhibited && mount->suspended) {
+            dolly_amiga_role_request(t->parent,"Dolly - Destination inhibited",
+                "Restart to reload the inhibited destination filesystem safely.","OK",NULL,NULL);
+            break;
+        }
         if(mount->suspended && !dolly_amiga_inhibit_mount(mount,0)) {
             char message[120];
             snprintf(message,sizeof(message),"Could not re-enable \"%s\".",mount->device);
@@ -231,6 +254,42 @@ static void release_source_mounts(DollyAmigaTransfer *t) {
     }
     list->count=0;
 }
+int dolly_amiga_prepare_rdb_unmount(struct Window *parent,const char *driver,ULONG unit,
+                 uint64_t capacity,BPTR image_lock,BPTR recovery_drawer) {
+    DollyWarnings warnings={0};
+    DollyAmigaTransfer *t;
+    unsigned i;
+    int ok=0;
+    if(!dolly_amiga_probe_rom_scsi(unit)) {
+        dolly_amiga_role_request(parent,"Dolly - Restore RDB",
+            "The selected driver does not match the required ROM scsi.device.","OK",NULL,NULL);
+        return 0;
+    }
+    t=calloc(1,sizeof(*t));
+    if(!t)return 0;
+    t->parent=parent;
+    t->check_target_mounts=1;
+    t->image.lock=image_lock;
+    snprintf(t->device.driver,sizeof(t->device.driver),"%s",driver);
+    t->device.unit=unit;
+    t->target.capacity=capacity;
+    if(!collect_mount_warnings(t,&warnings,0))goto out;
+    for(i=0;i<t->target_mounts.count;++i) {
+        if(dolly_amiga_lock_uses_mount(recovery_drawer,&t->target_mounts.entries[i])) {
+            dolly_amiga_role_request(parent,"Dolly - Restore RDB",
+                "The recovery copy must be saved on a different unit.","OK",NULL,NULL);
+            goto out;
+        }
+    }
+    ok=dolly_warnings_review(parent,&warnings) &&
+       dolly_amiga_unit_registered(driver,unit)==0;
+out:
+    dolly_warnings_clear(&warnings);
+    release_inhibited_mounts(t,&t->target_mounts,0);
+    free(t);
+    return ok;
+}
+
 static int target_idle(DollyAmigaTransfer *t) {
     return t->request->io_Device &&
            t->request->io_Device->dd_Library.lib_OpenCnt==t->expected_opens &&
@@ -243,7 +302,11 @@ static DollyBlockWriteStatus write_extent(void *context,uint64_t offset,
         t->failure="Destination became busy. Write stopped.";
         return DOLLY_WRITE_REJECTED;
     }
-    return dolly_amiga_write_batch(&t->target,offset,data,bytes,verify);
+    {
+        DollyBlockWriteStatus status=dolly_amiga_write_batch(&t->target,offset,data,bytes,verify);
+        if(status!=DOLLY_WRITE_REJECTED)t->may_have_written=1;
+        return status;
+    }
 }
 void dolly_amiga_transfer_close(DollyAmigaTransfer *t) {
     if(t->opened)CloseDevice((struct IORequest *)t->request);
@@ -261,8 +324,8 @@ void dolly_amiga_transfer_close(DollyAmigaTransfer *t) {
     t->buffer=NULL;
     t->copy_extent=NULL;
     t->opened=0;
-    release_source_mounts(t);
-    t->target_mounts.count=0;
+    release_inhibited_mounts(t,&t->source_mounts,0);
+    release_inhibited_mounts(t,&t->target_mounts,t->may_have_written);
 }
 
 static DollyRestoreAssessment assess_image(const DollyAmigaTransfer *t,
@@ -330,7 +393,9 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     const char *problem=NULL;
     ULONG batch,verify=dolly_amiga_verify_writes();
     uint32_t first,last;
+    uint64_t transfer_bytes;
     int known_driver=0;
+    int whole_restore=restore && destination->kind==DOLLY_ENDPOINT_UNIT;
     int whole_copy=!restore && source->kind==DOLLY_ENDPOINT_UNIT &&
                    destination->kind==DOLLY_ENDPOINT_UNIT;
     dolly_amiga_transfer_close(t);
@@ -363,17 +428,18 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         problem="Destination extends beyond the legacy writer's 4 GiB address range.";
         goto fail;
     }
-    if(whole_copy)describe_partition_table(&disk,table);
-    else if(!rdb_or_empty(&disk,destination,"Destination",reason,sizeof(reason)) ||
-       (!restore && !rdb_or_empty(&t->reader,source,"Source",reason,sizeof(reason)))) {
+    if(whole_copy || whole_restore)describe_partition_table(&disk,table);
+    if(!whole_copy && !whole_restore &&
+       (!rdb_or_empty(&disk,destination,"Destination",reason,sizeof(reason)) ||
+       (!restore && !rdb_or_empty(&t->reader,source,"Source",reason,sizeof(reason))))) {
         problem=reason;
         goto fail;
     }
     if(!strcasecmp(t->device.driver,"scsi.device"))
         known_driver=!strncmp(t->device_name,"UAE-IDE ",8) ||
                      !strcmp(t->device_name,"UAE-IDE") || dolly_amiga_probe_rom_scsi(t->device.unit);
-    t->check_target_mounts=disk.has_rdb;
-    t->check_source_mounts=!restore && t->reader.has_rdb;
+    t->check_target_mounts=1;
+    t->check_source_mounts=!restore;
     batch=disk.transfer_bytes;
     if(restore) {
         DollyBlockStatus status=dolly_amiga_restore_source_open(&t->image,source,disk.sector_bytes);
@@ -384,10 +450,29 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
             goto fail;
         }
         approval=assess_image(t,disk.source,destination);
-        if(approval.decision==DOLLY_RESTORE_BLOCKED ||
-           (approval.decision!=DOLLY_RESTORE_MATCH && !dolly_amiga_allow_restore_mismatch())) {
+        if(approval.decision==DOLLY_RESTORE_BLOCKED) {
             problem=approval.reason;
             goto fail;
+        }
+        if(approval.size!=DOLLY_RESTORE_SIZE_EQUAL) {
+            uint64_t image_bytes=dolly_block_size(t->image.blocks);
+            int smaller=approval.size==DOLLY_RESTORE_SIZE_SMALLER;
+            char difference[21];
+            dolly_surface_log_decimal(a,image_bytes);
+            dolly_surface_log_decimal(b,t->target.length);
+            dolly_surface_log_decimal(difference,smaller?t->target.length-image_bytes:
+                                                        image_bytes-t->target.length);
+            snprintf(reason,sizeof(reason),"Image: %s bytes. Destination: %s bytes. Difference: %s bytes.\n%s",
+                     a,b,difference,smaller?
+                     "Dolly writes the entire image and leaves the remaining destination sectors untouched. "
+                     "The restored layout may leave that extra space unusable. No partition or filesystem is expanded.":
+                     "Dolly writes only the part that fits. The end of the image will be lost. "
+                     "Partitions or filesystems may be incomplete, corrupt or unreadable.");
+            if(!dolly_warning_add(&warnings,smaller?"Image smaller than destination":
+                                "Image larger than destination",reason,"Accept size difference")) {
+                problem="Cannot collect Restore size warning.";
+                goto fail;
+            }
         }
         if(approval.decision==DOLLY_RESTORE_MISMATCH) {
             snprintf(reason,sizeof(reason),"%s\nProceed at your own risk.",approval.reason);
@@ -441,7 +526,7 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         }
         if(batch>t->reader.transfer_bytes)batch=t->reader.transfer_bytes;
         if(dolly_block_open_backend(length_of(&t->reader),read_extent,keep_reader,
-                                    &t->reader,&t->copy_extent)!=DOLLY_BLOCK_OK) {
+                                    t,&t->copy_extent)!=DOLLY_BLOCK_OK) {
             problem="Cannot allocate the copy source.";
             goto fail;
         }
@@ -449,20 +534,22 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     }
 
     dolly_surface_log_decimal(a,t->target.start/disk.sector_bytes);
-    dolly_surface_log_decimal(b,disk.total);
-    if(whole_copy)
-        snprintf(reason,sizeof(reason),"Sector copy of entire disk\nSource: \"%.135s\"\n"
+    transfer_bytes=dolly_block_size(input);
+    if(transfer_bytes>t->target.length)transfer_bytes=t->target.length;
+    dolly_surface_log_decimal(b,transfer_bytes/disk.sector_bytes);
+    if(whole_copy || whole_restore)
+        snprintf(reason,sizeof(reason),"%s of entire disk\nSource: \"%.135s\"\n"
                  "Destination: \"%.135s\"\n"
                  "Partition table on the disk to be overwritten: %s.\n"
-                 "All %s sectors on this disk will be overwritten. Verification: %s.",
-                 source->path,destination->path,table,b,verify?"on":"off");
+                 "Write %s sectors starting at LBA 0. Verification: %s.",
+                 restore?"Restore image":"Sector copy",source->path,destination->path,table,b,verify?"on":"off");
     else
         snprintf(reason,sizeof(reason),"%s\nSource: %.160s\nDestination: %.160s\n"
                  "Write %s sectors starting at LBA %s. Verification: %s.",
                  restore?"Restore image":"Sector copy",source->path,destination->path,b,a,
                  verify?"on":"off");
     if(!collect_mount_warnings(t,&warnings,0) || !collect_mount_warnings(t,&warnings,1)) {
-        problem="Cannot collect warnings about mounted filesystems.";
+        problem=t->failure?t->failure:"Cannot collect warnings about mounted filesystems.";
         goto fail;
     }
     {
@@ -508,14 +595,16 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         problem="Media geometry or partition selection changed. Query and select it again.";
         goto fail;
     }
-    if(whole_copy) {
+    if(whole_copy || whole_restore) {
         describe_partition_table(&disk,live_table);
         if(strcmp(table,live_table)) {
             problem="Destination partition table changed during confirmation. Start again.";
             goto fail;
         }
-    } else if(!rdb_or_empty(&disk,destination,"Destination",reason,sizeof(reason)) ||
-       (!restore && !rdb_or_empty(&t->reader,source,"Source",reason,sizeof(reason)))) {
+    }
+    if(!whole_copy && !whole_restore &&
+       (!rdb_or_empty(&disk,destination,"Destination",reason,sizeof(reason)) ||
+       (!restore && !rdb_or_empty(&t->reader,source,"Source",reason,sizeof(reason))))) {
         problem=reason;
         goto fail;
     }
@@ -528,7 +617,7 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         problem="Cannot allocate the destination assessment reader.";
         goto fail;
     }
-    if(!extent_anchors(input,0,t->target.length,t->target.sector_bytes,t->buffer,&first,&last) ||
+    if(!extent_anchors(input,0,dolly_block_size(input),t->target.sector_bytes,t->buffer,&first,&last) ||
        first!=t->source_first_crc || last!=t->source_last_crc ||
        !extent_anchors(locked_reader,t->target.start,t->target.length,t->target.sector_bytes,
                        t->buffer,&first,&last) ||
@@ -538,7 +627,8 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     }
     if(restore) {
         DollyRestoreAssessment checked=assess_image(t,locked_reader,destination);
-        if(checked.decision!=approval.decision || strcmp(checked.reason,approval.reason)) {
+        if(checked.decision!=approval.decision || checked.size!=approval.size ||
+           strcmp(checked.reason,approval.reason)) {
             problem="Image or destination assessment changed during confirmation.";
             goto fail;
         }
@@ -560,8 +650,10 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         problem="Destination driver refused CMD_UPDATE. No sectors were written.";
         goto fail;
     }
-    if(dolly_restore_transfer_init(&t->job,input,t->target.length,t->target.sector_bytes,
-                                   batch,t,write_extent,verify))return 1;
+    if(restore?dolly_restore_transfer_init_prefix(&t->job,input,t->target.length,
+                   t->target.sector_bytes,batch,t,write_extent,verify):
+               dolly_restore_transfer_init(&t->job,input,t->target.length,
+                   t->target.sector_bytes,batch,t,write_extent,verify))return 1;
     problem="Cannot initialize the aligned transfer.";
 fail:
     if(problem)dolly_amiga_role_request(parent,restore?"Dolly - Restore blocked":"Dolly - Copy blocked",
@@ -577,7 +669,7 @@ cancel:
 
 void dolly_amiga_transfer_step(DollyAmigaTransfer *t) {
     DollyRestoreTransferState state=dolly_restore_transfer_step(&t->job,t->buffer,t->target.bounce_bytes);
-    if(state==DOLLY_RESTORE_READ_FAILED)t->failure=dolly_block_status_name(t->job.read_status);
+    if(state==DOLLY_RESTORE_READ_FAILED && !t->failure)t->failure=dolly_block_status_name(t->job.read_status);
     else if(state==DOLLY_RESTORE_WRITE_FAILED && !t->failure) {
         switch(t->job.write_status) {
         case DOLLY_WRITE_REJECTED:t->failure="Write rejected before submission.";break;

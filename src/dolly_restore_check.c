@@ -9,7 +9,7 @@ typedef struct RestoreInfo {
     DollyRestoreKind kind;
     DollyRdb *rdb;
     uint32_t fs;
-    int unavailable,unsupported;
+    int unavailable,encoded,extent_overrun;
 } RestoreInfo;
 
 static DollyBlockReadResult read_span(void *context,uint64_t offset,void *data,
@@ -19,7 +19,7 @@ static DollyBlockReadResult read_span(void *context,uint64_t offset,void *data,
 }
 static void close_span(void *context) { (void)context; }
 
-static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info) {
+static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info,int whole_disk) {
     DollyBlockSource *view;
     DollyRdbStatus rdb_status;
     unsigned char boot[512],*sector;
@@ -29,7 +29,8 @@ static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info) {
         info->unavailable=1;
         return "Cannot allocate an inspection view.";
     }
-    rdb_status=dolly_rdb_scan(view,0,span->sector_bytes,16,info->rdb);
+    rdb_status=whole_disk?dolly_rdb_scan_extents(view,span->sector_bytes,16,info->rdb):
+                         dolly_rdb_scan(view,0,span->sector_bytes,16,info->rdb);
     if(rdb_status==DOLLY_RDB_NOT_FOUND) {
         sector=malloc(span->sector_bytes);
         if(!sector) {
@@ -44,6 +45,12 @@ static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info) {
     }
     dolly_block_close(view);
     if(rdb_status==DOLLY_RDB_OK) {
+        unsigned i;
+        for(i=0;i<info->rdb->partition_count;++i) {
+            const DollyPartition *part=&info->rdb->partitions[i];
+            if(part->start_bytes+part->length_bytes>span->bytes)
+                info->extent_overrun=1;
+        }
         info->kind=DOLLY_RESTORE_RDB_DISK;
         return NULL;
     }
@@ -55,14 +62,12 @@ static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info) {
         info->unavailable=1;
         return "Cannot read the boot sector.";
     }
-    if(boot[510]==0x55 && boot[511]==0xaa) {
-        info->unsupported=1;
-        return "MBR or PC boot signature is unsupported for Restore.";
-    }
     if(!memcmp(boot,"FORM",4) && !memcmp(boot+8,"DOLY",4)) {
-        info->unsupported=1;
+        info->encoded=1;
         return "IFF DOLY decoding is unavailable for Restore.";
     }
+    if(boot[510]==0x55 && boot[511]==0xaa)
+        return "MBR or PC boot signature detected. Partition layout was not verified.";
     if((memcmp(boot,"DOS",3)==0 && boot[3]<=7) ||
        (memcmp(boot,"PFS",3)==0 && (boot[3]==1 || boot[3]==2 || boot[3]==3)) ||
        (memcmp(boot,"SFS",3)==0 && (boot[3]==0 || boot[3]==2))) {
@@ -95,14 +100,6 @@ DollyRestoreAssessment dolly_restore_assess(const DollyRestoreExtent *image,
         strcpy(result.reason,"Image or target extent is unavailable.");
         return result;
     }
-    if(image->bytes!=target->bytes) {
-        result.size=image->bytes<target->bytes?DOLLY_RESTORE_SIZE_SMALLER:
-                                             DOLLY_RESTORE_SIZE_LARGER;
-        snprintf(result.reason,sizeof(result.reason),
-                 "Size differs. Image %llu bytes, target %llu bytes.\nResize is unavailable.",
-                 (unsigned long long)image->bytes,(unsigned long long)target->bytes);
-        return result;
-    }
     if(!valid_span(image) || !valid_span(target) ||
        image->sector_bytes!=target->sector_bytes) {
         snprintf(result.reason,sizeof(result.reason),
@@ -110,18 +107,19 @@ DollyRestoreAssessment dolly_restore_assess(const DollyRestoreExtent *image,
                  (unsigned long)image->sector_bytes,(unsigned long)target->sector_bytes);
         return result;
     }
+    if(image->bytes<target->bytes)result.size=DOLLY_RESTORE_SIZE_SMALLER;
+    else if(image->bytes>target->bytes)result.size=DOLLY_RESTORE_SIZE_LARGER;
     source.rdb=malloc(sizeof(*source.rdb));
     dest.rdb=malloc(sizeof(*dest.rdb));
     if(!source.rdb || !dest.rdb) {
         strcpy(result.reason,"Not enough memory to inspect source and target.");
         goto done;
     }
-    source_error=inspect(image,&source);
-    dest_error=inspect(target,&dest);
-    result.decision=source.unavailable || dest.unavailable ||
-                    source.unsupported || dest.unsupported?
+    source_error=inspect(image,&source,target->expected_kind==DOLLY_RESTORE_RDB_DISK);
+    dest_error=inspect(target,&dest,target->expected_kind==DOLLY_RESTORE_RDB_DISK);
+    result.decision=source.unavailable || dest.unavailable || source.encoded?
                     DOLLY_RESTORE_BLOCKED:DOLLY_RESTORE_MISMATCH;
-    if((dest.unavailable || dest.unsupported) && !source.unavailable && !source.unsupported)
+    if(dest.unavailable && !source.unavailable && !source.encoded)
         snprintf(result.reason,sizeof(result.reason),"Target: %s",dest_error);
     else if(source_error)
         snprintf(result.reason,sizeof(result.reason),"Image: %s",source_error);
@@ -176,6 +174,13 @@ DollyRestoreAssessment dolly_restore_assess(const DollyRestoreExtent *image,
                 break;
             }
         }
+    }
+    if(result.decision!=DOLLY_RESTORE_BLOCKED &&
+       (source.extent_overrun || dest.extent_overrun)) {
+        size_t used=strlen(result.reason);
+        snprintf(result.reason+used,sizeof(result.reason)-used,"%s%s RDB extends beyond capacity.",
+                 used?"\n":"",source.extent_overrun?
+                 (dest.extent_overrun?"Image and destination":"Image"):"Destination");
     }
     if(!result.reason[0])result.decision=DOLLY_RESTORE_MATCH;
 done:

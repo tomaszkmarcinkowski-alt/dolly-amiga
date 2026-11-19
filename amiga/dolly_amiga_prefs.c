@@ -13,7 +13,7 @@ struct Library *IconBase;
 #define PREFS_FONT_PAYLOAD (DOLLY_FONT_NAME_BYTES+8u)
 #define PREFS_FONT_CHUNK (8u+PREFS_FONT_PAYLOAD)
 #define PREFS_ALLOW_OUTSIDE_RANGE 16u
-#define PREFS_ALLOW_RESTORE_MISMATCH 8u
+#define PREFS_RETIRED_RESTORE_MISMATCH 8u /* Accepted for existing prefs. */
 #define PREFS_LEGACY_LIMIT 1u
 #define PREFS_VERIFY_WRITES 2u
 #define PREFS_SUPPRESS_SAME_UNIT_WARNING 4u
@@ -103,7 +103,7 @@ const char *dolly_amiga_prefs_load(int argc,char **argv) {
        (bytes-8)%PREFS_RECORD || get32(header+4)!=26u+bytes+PREFS_FONT_CHUNK ||
        get32(header+38)!=(bytes-8)/PREFS_RECORD)goto finish;
     flags=get32(header+34);
-    if(flags&~(PREFS_LEGACY_LIMIT|PREFS_VERIFY_WRITES|PREFS_SUPPRESS_SAME_UNIT_WARNING|PREFS_ALLOW_RESTORE_MISMATCH|PREFS_ALLOW_OUTSIDE_RANGE))goto finish;
+    if(flags&~(PREFS_LEGACY_LIMIT|PREFS_VERIFY_WRITES|PREFS_SUPPRESS_SAME_UNIT_WARNING|PREFS_RETIRED_RESTORE_MISMATCH|PREFS_ALLOW_OUTSIDE_RANGE))goto finish;
     while(bytes>8) {
         DollyPhysicalEntry device;
         DollyIoHints hints;
@@ -137,7 +137,6 @@ const char *dolly_amiga_prefs_load(int argc,char **argv) {
     dolly_amiga_set_verify_writes((flags&PREFS_VERIFY_WRITES)!=0);
     dolly_amiga_set_suppress_same_unit_warning((flags&PREFS_SUPPRESS_SAME_UNIT_WARNING)!=0);
     dolly_amiga_set_allow_outside_range((flags&PREFS_ALLOW_OUTSIDE_RANGE)!=0);
-    dolly_amiga_set_allow_restore_mismatch((flags&PREFS_ALLOW_RESTORE_MISMATCH)!=0);
     error=NULL;
 finish:
     Close(f);
@@ -164,8 +163,7 @@ int dolly_amiga_prefs_save(void) {
     put32(header+34,(dolly_amiga_legacy_override()?PREFS_LEGACY_LIMIT:0u) |
                     (dolly_amiga_verify_writes()?PREFS_VERIFY_WRITES:0u) |
                     (dolly_amiga_suppress_same_unit_warning()?PREFS_SUPPRESS_SAME_UNIT_WARNING:0u) |
-                    (dolly_amiga_allow_outside_range()?PREFS_ALLOW_OUTSIDE_RANGE:0u) |
-                    (dolly_amiga_allow_restore_mismatch()?PREFS_ALLOW_RESTORE_MISMATCH:0u));
+                    (dolly_amiga_allow_outside_range()?PREFS_ALLOW_OUTSIDE_RANGE:0u));
     put32(header+38,count);
     prefix=(size_t)((const char *)FilePart((STRPTR)prefs_path)-prefs_path);
     memcpy(drawer,prefs_path,prefix);

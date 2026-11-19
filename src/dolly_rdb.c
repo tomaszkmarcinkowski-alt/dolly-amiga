@@ -34,7 +34,7 @@ static DollyRdbStatus load_block(DollyBlockSource *src,uint64_t base,
  r=dolly_block_read(src,offset,data,bs);
  return (r.status==DOLLY_BLOCK_OK && r.bytes_read==bs)?DOLLY_RDB_OK:DOLLY_RDB_READ_ERROR;
 }
-static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsigned char *buf){
+static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsigned char *buf,int allow_extent_overrun){
  uint32_t current=out->partition_head,visited[DOLLY_RDB_MAX_PARTITIONS];
  unsigned seen=0;
  while(current!=DOLLY_RDB_END){
@@ -69,7 +69,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
   if(!mul_u64(surfaces,bpt,&cyl_bytes) || !mul_u64(cyl_bytes,fs_block_bytes,&cyl_bytes))return DOLLY_RDB_OUT_OF_RANGE;
   if(!mul_u64(low,cyl_bytes,&relative) || !add_u64(out->base_offset,relative,&start))return DOLLY_RDB_OUT_OF_RANGE;
   if(!mul_u64((uint64_t)high-low+1,cyl_bytes,&length) || !add_u64(start,length,&end))return DOLLY_RDB_OUT_OF_RANGE;
-  if(end>dolly_block_size(src))return DOLLY_RDB_OUT_OF_RANGE;
+  if(end>dolly_block_size(src) && !allow_extent_overrun)return DOLLY_RDB_OUT_OF_RANGE;
   {
    DollyPartition *p=&out->partitions[out->partition_count++];
    memset(p,0,sizeof(*p));p->descriptor_block=current;
@@ -98,7 +98,7 @@ static DollyRdbStatus parse_partitions(DollyBlockSource *src,DollyRdb *out,unsig
  }
  return DOLLY_RDB_OK;
 }
-DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,uint32_t scan_blocks,DollyRdb *out){
+static DollyRdbStatus scan_rdb(DollyBlockSource *src,uint64_t base,uint32_t bs,uint32_t scan_blocks,DollyRdb *out,int allow_extent_overrun){
  unsigned char *buf;uint32_t n;DollyRdbStatus found=DOLLY_RDB_NOT_FOUND;
  int saw_corrupt_checksum=0, saw_invalid_size=0;
  if(!src||!out||!valid_block_size(bs)||scan_blocks==0||scan_blocks>4096)return DOLLY_RDB_BAD_ARGUMENT;
@@ -113,7 +113,7 @@ DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,ui
   if(be32(buf+16)!=bs){saw_invalid_size=1;continue;}
   out->header_block=n;out->partition_head=be32(buf+28);
   out->cylinders=be32(buf+64);out->sectors=be32(buf+68);out->heads=be32(buf+72);
-  found=parse_partitions(src,out,buf);break;
+  found=parse_partitions(src,out,buf,allow_extent_overrun);break;
  }
  free(buf);
  if(found==DOLLY_RDB_NOT_FOUND){
@@ -121,6 +121,12 @@ DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,ui
   if(saw_invalid_size)return DOLLY_RDB_BAD_BLOCK;
  }
  return found;
+}
+DollyRdbStatus dolly_rdb_scan(DollyBlockSource *src,uint64_t base,uint32_t bs,uint32_t scan_blocks,DollyRdb *out){
+ return scan_rdb(src,base,bs,scan_blocks,out,0);
+}
+DollyRdbStatus dolly_rdb_scan_extents(DollyBlockSource *src,uint32_t bs,uint32_t scan_blocks,DollyRdb *out){
+ return scan_rdb(src,0,bs,scan_blocks,out,1);
 }
 const char *dolly_rdb_status_name(DollyRdbStatus s){
  switch(s){

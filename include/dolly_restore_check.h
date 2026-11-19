@@ -35,7 +35,7 @@ typedef struct DollyRestoreAssessment {
 } DollyRestoreAssessment;
 
 /* Assess read-only spans before authorization. Size relation is reported
- * separately for a future resize policy. This interface transfers no data. */
+ * separately for explicit approval of a bounded sector transfer. This interface transfers no data. */
 DollyRestoreAssessment dolly_restore_assess(const DollyRestoreExtent *image,
                                              const DollyRestoreExtent *target);
 #endif

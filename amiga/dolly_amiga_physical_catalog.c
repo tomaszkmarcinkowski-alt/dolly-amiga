@@ -393,3 +393,11 @@ int dolly_amiga_unmount(const DollyMountedVolume *mount) {
     /* The DOS node and startup resources belong to its original owner. */
     return removed;
 }
+
+
+int dolly_amiga_lock_uses_mount(BPTR lock,const DollyMountedVolume *mount) {
+    const struct FileLock *opened;
+    if(!mount->handler || !bptr_valid(lock,sizeof(*opened)))return 0;
+    opened=BADDR(lock);
+    return opened->fl_Task==mount->handler;
+}

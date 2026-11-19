@@ -1,4 +1,5 @@
 #include "dolly_amiga_surface_scan.h"
+#include "dolly_amiga_transfer_guard.h"
 #include "dolly_amiga_io_settings.h"
 #include "dolly_amiga_destructive.h"
 #include <intuition/intuition.h>
@@ -23,6 +24,7 @@ void dolly_surface_close(DollySurfaceScan *scan) {
     free(scan->buffer);
     scan->source=NULL;
     scan->buffer=NULL;
+    dolly_amiga_read_guard_close(&scan->mount_guard);
 }
 
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
@@ -77,7 +79,6 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             return 0;
         }
         found=dolly_amiga_partition_scan(device.driver,device.unit,&geometry,map);
-        scan->has_rdb=found && map->format==DOLLY_NATIVE_PARTITION_RDB;
         ok=endpoint->kind!=DOLLY_ENDPOINT_PARTITION;
         if(found && endpoint->kind==DOLLY_ENDPOINT_UNIT) {
             complete_rdb=map->format==DOLLY_NATIVE_PARTITION_RDB && map->count!=0 &&
@@ -214,6 +215,10 @@ DollyBlockReadResult dolly_surface_read(DollySurfaceScan *scan,uint64_t offset,
     uint64_t capacity=scan->geometry.block_count*scan->sector_bytes;
     size_t readable=bytes;
     DollyBlockReadResult result={DOLLY_BLOCK_OK,0};
+    if(!dolly_amiga_read_guard_check(scan->mount_guard)) {
+        scan->failure="Source filesystem changed during read.";
+        return (DollyBlockReadResult){DOLLY_BLOCK_EDEVICE,0};
+    }
     if(scan->outside_range!=DOLLY_RANGE_ZERO_FILL)
         return dolly_block_read(scan->source,offset,buffer,bytes);
     if(offset>=capacity)readable=0;
@@ -247,13 +252,13 @@ void dolly_surface_step(DollySurfaceScan *scan) {
         }
         if(count>driver_end-lba)count=(uint32_t)(driver_end-lba);
     }
-    read=dolly_block_read(scan->source,lba*scan->sector_bytes,
+    read=dolly_surface_read(scan,lba*scan->sector_bytes,
                          scan->buffer,(size_t)count*scan->sector_bytes);
     if(read.status!=DOLLY_BLOCK_OK) {
         if(read.status!=DOLLY_BLOCK_EIO && read.status!=DOLLY_BLOCK_ESHORT) {
             dolly_surface_log_add(&scan->log,DOLLY_SURFACE_ABORTED,
                                   lba,count,read.status);
-            scan->failure=dolly_block_status_name(read.status);
+            if(!scan->failure)scan->failure=dolly_block_status_name(read.status);
             return;
         }
         if(count>1u) {

@@ -4,13 +4,23 @@
 int dolly_restore_transfer_init(DollyRestoreTransfer *transfer,DollyBlockSource *source,
                       uint64_t target_bytes,uint32_t sector_bytes,uint32_t max_transfer,
                       void *target,DollyRestoreWriteBatch write_batch,int verify) {
-    if(!transfer || !source || !write_batch ||
-       dolly_restore_check_raw(dolly_block_size(source),target_bytes,sector_bytes)
-           !=DOLLY_BLOCK_OK ||
+    if(!source || dolly_block_size(source)!=target_bytes)return 0;
+    return dolly_restore_transfer_init_prefix(transfer,source,target_bytes,sector_bytes,
+                                              max_transfer,target,write_batch,verify);
+}
+
+int dolly_restore_transfer_init_prefix(DollyRestoreTransfer *transfer,DollyBlockSource *source,
+                      uint64_t target_bytes,uint32_t sector_bytes,uint32_t max_transfer,
+                      void *target,DollyRestoreWriteBatch write_batch,int verify) {
+    uint64_t image_bytes=source?dolly_block_size(source):0;
+    if(!transfer || !write_batch ||
+       dolly_restore_check_raw(image_bytes,image_bytes,sector_bytes)!=DOLLY_BLOCK_OK ||
+       dolly_restore_check_raw(target_bytes,target_bytes,sector_bytes)!=DOLLY_BLOCK_OK ||
        max_transfer<sector_bytes || max_transfer%sector_bytes)
         return 0;
     *transfer=(DollyRestoreTransfer){.source=source,.target=target,.write_batch=write_batch,
-        .bytes=target_bytes,.batch_bytes=max_transfer,.verify=verify!=0,
+        .bytes=image_bytes<target_bytes?image_bytes:target_bytes,
+        .batch_bytes=max_transfer,.verify=verify!=0,
         .state=DOLLY_RESTORE_TRANSFERRING};
     return 1;
 }

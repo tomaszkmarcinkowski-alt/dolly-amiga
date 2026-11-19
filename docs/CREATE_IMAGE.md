@@ -56,9 +56,13 @@ emulated controller. They exclude file writes and GUI updates.
 
 ## Imaging a running Amiga system
 
-Create Image opens the source through the read-only sector adapter. It
-does not send AmigaDOS Inhibit to source partitions. A booted volume
-remains live, so any concurrent filesystem writes can leave an image
-with inconsistent filesystem contents. A sector image includes
-unformatted partitions as raw bytes. Workbench volume labels do not
-establish whether Dolly inhibited a partition.
+Create Image opens the source through the read-only sector adapter.
+Before copying data it maps the selected driver, unit and byte range to
+active AmigaDOS filesystems and asks to inhibit every overlapping
+filesystem. It releases the suspension on completion, failure or
+cancellation. If inhibition cannot be verified, explicitly approving a
+live read can leave an image with inconsistent filesystem contents.
+
+The output filesystem must stay available to DOS. Dolly blocks a
+destination file whose drawer uses a handler that the imaging source
+must inhibit. An unformatted partition is included as raw bytes.

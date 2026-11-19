@@ -1,3 +1,4 @@
+#include "dolly_amiga_transfer_guard.h"
 #include "dolly_amiga_fonts.h"
 /* M1.12: responsive, two-window GadTools OperationSession demo.
  * MC68000 / AmigaOS 2.04: system pens, live window borders, aspect margins,
@@ -75,7 +76,7 @@ static const char hide_label[]="Hide";
 #define MAIN_DESC_ID 214u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.2"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.3"
 #define MAIN_GADGET_HEIGHT 15
 #define MAIN_COLUMN_GAP 6
 
@@ -1473,9 +1474,14 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                         DollyWarnings warnings={0};
                         if(dolly_surface_open(&surface,&selected_source,main_view.window,
                                               DOLLY_IO_SOURCE,1,&warnings)) {
-                            if(dolly_warnings_review(main_view.window,&warnings))total=surface.total;
+                            if(dolly_amiga_guard_read(&surface.mount_guard,main_view.window,
+                                   &warnings,&surface.device,surface.first_lba*surface.sector_bytes,
+                                   surface.total*surface.sector_bytes,0) &&
+                               dolly_warnings_review(main_view.window,&warnings) &&
+                               dolly_amiga_read_guard_check(surface.mount_guard))
+                                total=surface.total;
                             else {
-                                surface.failure="Operation cancelled.";
+                                surface.failure="Scan cancelled or source filesystem changed.";
                                 dolly_surface_close(&surface);
                             }
                         }

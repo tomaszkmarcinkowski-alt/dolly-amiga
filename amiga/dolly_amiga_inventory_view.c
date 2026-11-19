@@ -9,6 +9,8 @@
 #include "dolly_amiga_clipboard.h"
 #include "dolly_amiga_destructive.h"
 #include "dolly_amiga_physical_catalog.h"
+#include "dolly_amiga_transfer_guard.h"
+#include "dolly_amiga_transfer.h"
 #include <exec/types.h>
 #include <dos/dosextens.h>
 #include <libraries/asl.h>
@@ -497,7 +499,13 @@ static void backup_partition_table(DollyNativeInventoryView *v) {
     struct FileRequester *fr;
     char path[256],partial[sizeof(path)+sizeof(".part")-1u];
     const char *drawer,*file;
-    BPTR handle;
+    BPTR handle,drawer_lock;
+    DollyReadGuard *guard=NULL;
+    DollyWarnings warnings={0};
+    DollyPhysicalEntry device={0};
+    uint64_t read_bytes;
+    size_t prefix;
+    char output_drawer[256];
     int ok;
     int mbr=v->map.format==DOLLY_NATIVE_PARTITION_MBR;
     if(!backup_available(v))return;
@@ -534,13 +542,35 @@ static void backup_partition_table(DollyNativeInventoryView *v) {
         set_status(v,"Temporary backup file unavailable");
         return;
     }
+    prefix=(size_t)((const char *)FilePart((STRPTR)path)-path);
+    memcpy(output_drawer,path,prefix);
+    output_drawer[prefix]=0;
+    drawer_lock=Lock((STRPTR)output_drawer,ACCESS_READ);
+    if(!drawer_lock) {
+        set_status(v,"Could not lock the backup drawer");
+        return;
+    }
+    strcpy(device.driver,v->driver);
+    device.unit=v->unit;
+    read_bytes=(uint64_t)(mbr?16u:v->map.rdb_backup_blocks)*512u;
+    ok=dolly_amiga_guard_read(&guard,v->window,&warnings,&device,0,read_bytes,drawer_lock) &&
+       dolly_warnings_review(v->window,&warnings) && dolly_amiga_read_guard_check(guard);
+    dolly_warnings_clear(&warnings);
+    UnLock(drawer_lock);
+    if(!ok) {
+        dolly_amiga_read_guard_close(&guard);
+        set_status(v,"Partition table backup cancelled");
+        return;
+    }
     handle=Open((STRPTR)partial,MODE_NEWFILE);
     if(!handle) {
+        dolly_amiga_read_guard_close(&guard);
         set_status(v,"Could not create backup file");
         return;
     }
     ok=dolly_amiga_partition_backup(v->driver,v->unit,&v->geometry,
                                    v->map.format,handle);
+    dolly_amiga_read_guard_close(&guard);
     if(!Close(handle))ok=0;
     if(ok && path_is_unused((STRPTR)path) &&
        Rename((STRPTR)partial,(STRPTR)path)) {
@@ -608,7 +638,9 @@ static void show_restore_failure(DollyNativeInventoryView *v,const char *reason)
 }
 static void restore_partition_table(DollyNativeInventoryView *v) {
     char input[256],recovery[256],warning[128];
-    BPTR file;
+    BPTR file,image_lock,recovery_lock;
+    char drawer[256];
+    size_t prefix;
     const char *reason;
     if(v->driver[0])
         snprintf(warning,sizeof(warning),"Restore RDB on %s / Unit %lu.",
@@ -628,10 +660,6 @@ static void restore_partition_table(DollyNativeInventoryView *v) {
         show_restore_failure(v,reason);
         return;
     }
-    if(dolly_amiga_unit_registered(v->driver,v->unit)!=0) {
-        show_restore_failure(v,"Restore RDB requires an offline target.\nNo AmigaDOS device registration may refer to it.");
-        return;
-    }
     if(!choose_restore_file(v->window,0,input) ||
        !choose_restore_file(v->window,1,recovery))return;
     file=Open((STRPTR)input,MODE_OLDFILE);
@@ -639,6 +667,22 @@ static void restore_partition_table(DollyNativeInventoryView *v) {
         show_restore_failure(v,"Could not open the RDB backup.");
         return;
     }
+    image_lock=DupLockFromFH(file);
+    prefix=(size_t)((const char *)FilePart((STRPTR)recovery)-recovery);
+    memcpy(drawer,recovery,prefix);
+    drawer[prefix]=0;
+    recovery_lock=Lock((STRPTR)drawer,ACCESS_READ);
+    if(!image_lock || !recovery_lock ||
+       !dolly_amiga_prepare_rdb_unmount(v->window,v->driver,v->unit,
+            v->geometry.block_count*v->geometry.block_bytes,image_lock,recovery_lock)) {
+        if(image_lock)UnLock(image_lock);
+        if(recovery_lock)UnLock(recovery_lock);
+        Close(file);
+        set_status(v,"Restore RDB cancelled. Destination must be offline.");
+        return;
+    }
+    UnLock(image_lock);
+    UnLock(recovery_lock);
     reason=dolly_amiga_restore_rdb(v->window,v->driver,v->unit,&v->geometry,
                  v->map.rdb_backup_blocks,file,save_rdb_recovery,recovery);
     Close(file);

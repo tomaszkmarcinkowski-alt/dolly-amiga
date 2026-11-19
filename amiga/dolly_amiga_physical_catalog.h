@@ -45,5 +45,6 @@ typedef struct DollyMountList {
 int dolly_amiga_mounted_extents(const DollyPhysicalEntry *device,uint64_t start,
                                uint64_t bytes,int include_inactive,DollyMountList *out);
 int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend);
+int dolly_amiga_lock_uses_mount(BPTR lock,const DollyMountedVolume *mount);
 int dolly_amiga_unmount(const DollyMountedVolume *mount);
 #endif

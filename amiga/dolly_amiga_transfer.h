@@ -23,7 +23,7 @@ typedef struct DollyAmigaTransfer {
     DollyMountList source_mounts,target_mounts,observed_mounts;
     struct Window *parent;
     unsigned expected_opens;
-    int check_source_mounts,check_target_mounts;
+    int check_source_mounts,check_target_mounts,may_have_written;
     int opened,restoring;
     const char *failure;
 } DollyAmigaTransfer;
@@ -32,4 +32,6 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *transfer,struct Window *parent
                      const DollyEndpoint *source,const DollyEndpoint *destination,int restore);
 void dolly_amiga_transfer_step(DollyAmigaTransfer *transfer);
 void dolly_amiga_transfer_close(DollyAmigaTransfer *transfer);
+int dolly_amiga_prepare_rdb_unmount(struct Window *parent,const char *driver,ULONG unit,
+                uint64_t capacity,BPTR image_lock,BPTR recovery_drawer);
 #endif

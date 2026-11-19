@@ -122,11 +122,21 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
                                  image->failure,"OK",NULL,NULL);
         goto fail;
     }
+    if(!dolly_amiga_guard_read(&image->reader.mount_guard,parent,&warnings,
+                   &image->reader.device,image->reader.first_lba*image->reader.sector_bytes,
+                   image->reader.total*image->reader.sector_bytes,image->drawer)) {
+        image->failure="Cannot prepare source filesystem inhibition.";
+        goto fail;
+    }
     if(!dolly_warnings_review(parent,&warnings)) {
         image->failure="Operation cancelled.";
         goto fail;
     }
     dolly_warnings_clear(&warnings);
+    if(!dolly_amiga_read_guard_check(image->reader.mount_guard)) {
+        image->failure="Source filesystem changed before imaging.";
+        goto fail;
+    }
 
     strcpy(image->name,name);
     strcpy(image->partial,name);

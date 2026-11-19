@@ -29,6 +29,10 @@ typedef struct DollyRestoreTransfer {
 int dolly_restore_transfer_init(DollyRestoreTransfer *transfer,DollyBlockSource *source,
                       uint64_t target_bytes,uint32_t sector_bytes,uint32_t max_transfer,
                       void *target,DollyRestoreWriteBatch write_batch,int verify);
+/* After explicit size approval, transfer only the common prefix. */
+int dolly_restore_transfer_init_prefix(DollyRestoreTransfer *transfer,DollyBlockSource *source,
+                      uint64_t target_bytes,uint32_t sector_bytes,uint32_t max_transfer,
+                      void *target,DollyRestoreWriteBatch write_batch,int verify);
 /* Up to one batch. A failed batch is terminal and processed remains the
  * offset of that batch, even if the device may have written some of it. */
 DollyRestoreTransferState dolly_restore_transfer_step(DollyRestoreTransfer *transfer,

@@ -15,8 +15,6 @@ int dolly_amiga_suppress_same_unit_warning(void);
 void dolly_amiga_set_suppress_same_unit_warning(int enabled);
 int dolly_amiga_allow_outside_range(void);
 void dolly_amiga_set_allow_outside_range(int enabled);
-int dolly_amiga_allow_restore_mismatch(void);
-void dolly_amiga_set_allow_restore_mismatch(int enabled);
 void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint);
 void dolly_amiga_io_settings_clear(void);
 const char *dolly_amiga_prefs_load(int argc,char **argv);

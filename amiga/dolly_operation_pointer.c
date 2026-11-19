@@ -265,8 +265,9 @@ static int write_transfer_pointer(BPTR file,const DollyEndpoint *source,
     dolly_dlrp_u32(src+8,source->partition);
     dolly_dlrp_u32(src+12,r->effective_io.mask);
     dolly_dlrp_u64(src+16,r->first_lba*r->sector_bytes);
-    dolly_dlrp_u64(src+24,t->job.bytes);
-    dolly_dlrp_u64(src+32,t->restoring?t->job.bytes:r->geometry.block_count*r->sector_bytes);
+    dolly_dlrp_u64(src+24,dolly_block_size(t->job.source));
+    dolly_dlrp_u64(src+32,t->restoring?dolly_block_size(t->job.source):
+                                      r->geometry.block_count*r->sector_bytes);
     dolly_dlrp_u32(src+40,r->effective_io.buffer_memory);
     dolly_dlrp_u32(src+44,r->effective_io.max_transfer);
     dolly_dlrp_u32(src+48,source->image_format);

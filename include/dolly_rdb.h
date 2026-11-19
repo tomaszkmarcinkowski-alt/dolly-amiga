@@ -37,5 +37,9 @@ typedef struct DollyRdb {
  */
 DollyRdbStatus dolly_rdb_scan(DollyBlockSource *source,uint64_t base_offset,
  uint32_t block_bytes,uint32_t scan_blocks,DollyRdb *out);
+/* Inspect declared extents even when they exceed the device. Metadata reads
+ * remain bounded. Callers must never use these extents as I/O bounds. */
+DollyRdbStatus dolly_rdb_scan_extents(DollyBlockSource *source,
+ uint32_t block_bytes,uint32_t scan_blocks,DollyRdb *out);
 const char *dolly_rdb_status_name(DollyRdbStatus status);
 #endif
