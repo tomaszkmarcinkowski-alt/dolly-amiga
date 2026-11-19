@@ -133,6 +133,7 @@ static DollyAmigaImage image;
 static char cell_result[GRID_TOTAL];
 static DollyDemoView main_view, sheep_view;
 static DollyEndpoint selected_source,selected_target;
+static char source_file_status[64];
 static DollyEndpointPicker source_picker,target_picker;
 static DollyNativeInventoryView inventory_view;
 static STRPTR demo_operations[]={
@@ -396,6 +397,9 @@ static void update_main_status(void) {
             text_copy(main_view.status_label,sizeof(main_view.status_label),
                       "Operation in progress.");
     }
+    else if(selected_source.kind==DOLLY_ENDPOINT_FILE && source_file_status[0] &&
+            dolly_mode_allowed(source_mode_mask(),DOLLY_MODE_FILE))
+        text_copy(main_view.status_label,sizeof(main_view.status_label),source_file_status);
     else if(selected_operation==DOLLY_DEMO_INVENTORY && can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Ready for read-only Inventory.");
@@ -1374,7 +1378,10 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             else if(id==MAIN_SOURCE_ID && !operation_active() && !relayout &&
                     !source_picker.window && !target_picker.window && source_mode_mask()) {
                 dolly_picker_close(&target_picker);
-                if(!dolly_picker_open(&source_picker,public_screen,0,
+                if(medium_modes[0]==DOLLY_MODE_FILE && AslBase) {
+                    if(dolly_amiga_pick_file(v->window,&source_picker.result,0))
+                        source_picker.changed=1;
+                } else if(!dolly_picker_open(&source_picker,public_screen,0,
                                       &selected_source,
                                       medium_modes[0],source_mode_mask()))
                     dolly_picker_close(&source_picker);
@@ -1447,6 +1454,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                       operation.state!=DOLLY_OP_RUNNING &&
                       operation.state!=DOLLY_OP_PAUSED &&
                       !source_picker.window && !target_picker.window &&
+                      !source_picker.changed && !target_picker.changed &&
                       !relayout && can_start_operation()) {
                 quit_blocked=0;
                 if(selected_operation==DOLLY_DEMO_INVENTORY) {
@@ -1631,6 +1639,9 @@ int main(int argc,char **argv) {
         if(source_picker.changed) {
             transfer_result=0;
             selected_source=source_picker.result;
+            source_file_status[0]=0;
+            if(selected_source.kind==DOLLY_ENDPOINT_FILE)
+                dolly_amiga_describe_file(&selected_source,source_file_status,sizeof(source_file_status));
             medium_modes[0]=dolly_endpoint_mode(&selected_source);
             source_picker.changed=0;
             if(!dolly_mode_allowed(destination_mode_mask(),

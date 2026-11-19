@@ -1,3 +1,4 @@
+#include "dolly_amiga_restore_source.h"
 #include "dolly_amiga_fonts.h"
 /* Native AmigaOS 2.04 endpoint picker, synthetic device tree.
  * Mode-first workflow: Physical device, Logical device, Partition, File.
@@ -692,36 +693,33 @@ static int suffix_is(const char *name,const char *ext) {
     }
     return 1;
 }
-static void file_details(DollyEndpointPicker *p) {
+void dolly_amiga_describe_file(const DollyEndpoint *file,char *out,size_t capacity) {
     const char *hint="unknown";
-    struct FileInfoBlock fib;
-    BPTR lock;
-    ULONG len;
-    if(p->pending_file.kind!=DOLLY_ENDPOINT_FILE) {
-        strcpy(p->file_details,p->role ?
-               "Output file not created yet." : "No source file selected.");
+    BPTR handle;
+    uint64_t size;
+    if(file->kind!=DOLLY_ENDPOINT_FILE) {
+        snprintf(out,capacity,"No source file selected.");
         return;
     }
-    if(p->role)return; /* Destination shows image format Cycle instead. */
-    if(suffix_is(p->pending_file.path,".adf"))hint="ADF (name only)";
-    else if(suffix_is(p->pending_file.path,".hdf"))hint="HDF (name only)";
-    else if(suffix_is(p->pending_file.path,".raw") ||
-            suffix_is(p->pending_file.path,".img"))hint="RAW (name only)";
-    else if(suffix_is(p->pending_file.path,".doly") ||
-            suffix_is(p->pending_file.path,".iff"))hint="IFF? (name only)";
-    sprintf(p->file_details,"Size: unavailable | Type: %s",hint);
-    if(DOSBase) {
-        lock=Lock((STRPTR)p->pending_file.path,ACCESS_READ);
-        if(lock) {
-            memset(&fib,0,sizeof(fib));
-            if(Examine(lock,&fib) && fib.fib_DirEntryType<0 &&
-               fib.fib_Size>=0) {
-                sprintf(p->file_details,"Size: %lu bytes | Type: %s",
-                        (unsigned long)fib.fib_Size,hint);
-            }
-            UnLock(lock);
-        }
-    }
+    if(suffix_is(file->path,".adf"))hint="ADF (extension)";
+    else if(suffix_is(file->path,".hdf"))hint="HDF (extension)";
+    else if(suffix_is(file->path,".raw") || suffix_is(file->path,".img"))
+        hint="RAW (extension)";
+    else if(suffix_is(file->path,".doly") || suffix_is(file->path,".iff"))
+        hint="IFF? (extension)";
+    snprintf(out,capacity,"Type: %s | Size: unavailable",hint);
+    if(!DOSBase)return;
+    handle=Open((STRPTR)file->path,MODE_OLDFILE);
+    if(!handle)return;
+    if(dolly_amiga_image_file_size(handle,&size)==DOLLY_BLOCK_OK)
+        snprintf(out,capacity,"Type: %s | Size: %lu bytes",hint,(unsigned long)size);
+    Close(handle);
+}
+
+static void file_details(DollyEndpointPicker *p) {
+    ULONG len;
+    if(p->role)return;
+    dolly_amiga_describe_file(&p->pending_file,p->file_details,sizeof(p->file_details));
     /* Clip only the display string, not the stored filename/path. */
     if(p->window) {
         LONG available=(LONG)picker_geometry(p).value_w-16;
@@ -911,7 +909,7 @@ static int rebuild(DollyEndpointPicker *p) {
     clear_picker_client(p);
     p->device_list=NULL;p->unit_list=NULL;
     p->partition_list=NULL;p->logical_list=NULL;
-    p->choose_button=NULL;p->file_text=NULL;
+    p->choose_button=NULL;p->file_text=NULL;p->mode_cycle=NULL;
     p->file_info=NULL;
     p->selection_text=NULL;p->unit_text=NULL;p->partition_number=NULL;
     p->disk_info_text=NULL;
@@ -923,6 +921,7 @@ static int rebuild(DollyEndpointPicker *p) {
     if(p->mode_count>1u) {
         last=cycle(last,p);
         if(!last)return 0;
+        p->mode_cycle=last;
     }
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
         WORD x,w;
@@ -1366,7 +1365,7 @@ static void query_picker_unit(DollyEndpointPicker *p) {
  */
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
-    enum {CHANGE_NONE,CHANGE_MODE,CHANGE_DEVICE,CHANGE_UNIT,RUN_QUERY,
+    enum {CHANGE_NONE,CHANGE_MODE,CHANGE_DEVICE,CHANGE_UNIT,RUN_QUERY,SELECT_SOURCE_FILE,
           MANUAL_UNIT,MANUAL_UNIT_QUERY,MANUAL_DEVICE,MANUAL_DEVICE_QUERY};
     unsigned deferred=CHANGE_NONE;
     char pending_driver[DOLLY_PHYS_DRIVER_LEN]={0};
@@ -1406,6 +1405,10 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         if(cls==IDCMP_CLOSEWINDOW || id==PICK_CANCEL)close=1;
         else if(id==PICK_MODE && (unsigned)code<p->mode_count) {
+            if(!p->role && AslBase && p->allowed_mode_ids[code]==DOLLY_MODE_FILE) {
+                deferred=SELECT_SOURCE_FILE;
+                continue;
+            }
             capture_file_text(p);
             p->mode_index=code;
             p->mode=p->allowed_mode_ids[code];
@@ -1486,6 +1489,15 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         /* No IntuiMessage can refer to the old gadgets after this
          * point. Detach BEFORE changing list nodes and label buffers.
          */
+        if(deferred==SELECT_SOURCE_FILE) {
+            if(dolly_amiga_pick_file(p->window,&p->result,0)) {
+                p->changed=1;
+                dolly_picker_close(p);
+            } else if(p->mode_cycle)
+                GT_SetGadgetAttrs(p->mode_cycle,p->window,NULL,
+                                  GTCY_Active,(ULONG)p->mode_index,TAG_DONE);
+            return;
+        }
         if(deferred==RUN_QUERY) {
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,

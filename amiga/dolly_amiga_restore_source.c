@@ -26,10 +26,27 @@ static DollyBlockReadResult read_image(void *opaque,uint64_t offset,
     return result;
 }
 
+DollyBlockStatus dolly_amiga_image_file_size(BPTR file,uint64_t *size) {
+    struct FileInfoBlock *info=AllocDosObject(DOS_FIB,NULL);
+    DollyBlockStatus status=DOLLY_BLOCK_EIO;
+    LONG end;
+    if(!info)return DOLLY_BLOCK_ENOMEM;
+    if(ExamineFH(file,info) && info->fib_DirEntryType<0)
+        status=info->fib_Size<0?DOLLY_BLOCK_EUNSUPPORTED:DOLLY_BLOCK_OK;
+    FreeDosObject(DOS_FIB,info);
+    if(status!=DOLLY_BLOCK_OK)return status;
+    /* Seek returns the previous position. The second call returns EOF
+     * and rewinds the handle for subsequent reads. */
+    if(Seek(file,0,OFFSET_END)==-1)return DOLLY_BLOCK_EIO;
+    end=Seek(file,0,OFFSET_BEGINNING);
+    if(end<0)return DOLLY_BLOCK_EUNSUPPORTED;
+    *size=(uint64_t)end;
+    return DOLLY_BLOCK_OK;
+}
+
 DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source,
                          const DollyEndpoint *image,
                          uint32_t sector_bytes) {
-    struct FileInfoBlock *info;
     ImageFile *file;
     DollyBlockStatus status=DOLLY_BLOCK_EIO;
     uint64_t size=0;
@@ -42,18 +59,9 @@ DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source
     if(!file)return DOLLY_BLOCK_ENOMEM;
     file->file=Open((STRPTR)image->path,MODE_OLDFILE);
     if(!file->file)goto fail;
-    info=AllocDosObject(DOS_FIB,NULL);
-    if(!info) {
-        status=DOLLY_BLOCK_ENOMEM;
-        goto fail;
-    }
-    if(ExamineFH(file->file,info) && info->fib_DirEntryType<0) {
-        if(info->fib_Size>=0) {
-            size=(uint64_t)info->fib_Size;
-            status=dolly_restore_check_raw(size,size,sector_bytes);
-        } else status=DOLLY_BLOCK_EUNSUPPORTED;
-    }
-    FreeDosObject(DOS_FIB,info);
+    status=dolly_amiga_image_file_size(file->file,&size);
+    if(status!=DOLLY_BLOCK_OK)goto fail;
+    status=dolly_restore_check_raw(size,size,sector_bytes);
     if(status!=DOLLY_BLOCK_OK)goto fail;
     file->lock=DupLockFromFH(file->file);
     status=dolly_block_open_backend(size,read_image,close_image,file,&source->blocks);

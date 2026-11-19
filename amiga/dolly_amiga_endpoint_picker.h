@@ -13,7 +13,7 @@ typedef struct DollyEndpointPicker {
     struct Window *window;
     APTR visual;
     struct Gadget *gadgets;
-    struct Gadget *device_list,*unit_list,*partition_list;
+    struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text,*partition_info_text;
@@ -76,6 +76,7 @@ int dolly_picker_open(DollyEndpointPicker *picker,struct Screen *screen,
                       DollyEndpointMode preferred_mode,
                       unsigned allowed_mask);
 int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination);
+void dolly_amiga_describe_file(const DollyEndpoint *file,char *out,size_t capacity);
 int dolly_amiga_pick_drawer(struct Window *parent,char path[256]);
 void dolly_picker_pump(DollyEndpointPicker *picker);
 void dolly_picker_refresh_font(DollyEndpointPicker *p);

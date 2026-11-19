@@ -4,6 +4,10 @@
 #include "dolly_restore_source.h"
 #include <dos/dos.h>
 
+/* Measure an open regular image file using classic DOS offsets.
+ * A successful call leaves the file positioned at its beginning. */
+DollyBlockStatus dolly_amiga_image_file_size(BPTR file,uint64_t *size);
+
 typedef struct DollyAmigaRestoreSource {
     DollyBlockSource *blocks;
     BPTR lock; /* Borrowed from the source. Kept until close; zero if unavailable. */

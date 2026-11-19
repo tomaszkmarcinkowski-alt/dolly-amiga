@@ -1538,7 +1538,7 @@ visible label is clipped. The left list selects a partition. Keep the existing m
 result in the status area. Use IFF FTXT/CHRS on clipboard.device unit 0.
 Review existing windows before applying this pattern to them.
 
-In Restore and Create Image, the file picker uses a GadTools string
+In the original Restore and Create Image pickers, the file field used a GadTools string
 field for the full path. Browse fills the field. Use selection commits
 the current text, including edits made without pressing Return.
 
@@ -1657,3 +1657,10 @@ vertical resizing. Its minimum size follows the active font and measured
 buttons. Resizing reflows the current detail text and preserves the selected
 warning and its approval state. During an operation, both endpoint fields
 stay visible and are ghosted along with the selection controls.
+
+
+When Source is set to File, Source opens the native ASL requester
+directly. Choosing File in the Source medium picker also opens ASL.
+Cancel preserves the previous endpoint. The main status shows the
+opened file's byte length and the type suggested by its extension.
+The main Source field continues to show the selected filename.
