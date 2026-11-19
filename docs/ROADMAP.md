@@ -26,6 +26,10 @@ Dolly pozostaje darmowym projektem **MIT + dobrowolne Retroware**. Każda faza w
   etapy obejmują parser i GUI DLRP, kwalifikację celu oraz kontrolowany
   zapis Restore i Copy/Clone. Zmiana rozmiaru pozostaje w planie.
 
+- **GUI Alpha 3** ma kompaktowe okno główne, pasek postępu i przycisk Details
+  otwierający Sheep Counter podczas operacji oraz wybór czcionki przez ASL.
+  Nowy układ i zmiana czcionki na żywo czekają na weryfikację pod AmigaOS.
+
 Status wydań i sprzętu opisują [README](../README.md) i [macierz testów](TEST_MATRIX.md).
 
 ## Po MVP — Dolly Flock Manager

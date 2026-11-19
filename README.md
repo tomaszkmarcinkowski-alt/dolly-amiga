@@ -1,6 +1,6 @@
 # 🐑 Dolly — Disk Imaging, Cloning & Recovery for Amiga
 [Dolly Alpha 3](docs/RELEASE_ALPHA_3.md) · [GitHub Releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
-[Restore RDB test build](docs/RELEASE_RDB_TEST.md)
+[Restore RDB test build](docs/RELEASE_RDB_TEST.md) · [Main-window test build for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/main-window-test-20261119)
 
 **Public development repository • Alpha 3 development preview • experimental native prototypes**
 
@@ -23,7 +23,7 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 | Area | Availability |
 | --- | --- |
 | M0 foundations | Read-only BlockSource, host image inspection, bounded RDB/MBR parsing, hybrid and capacity diagnostics, structural IFF inspection, device-profile safety checks. |
-| Native GadTools | Approved main window, Source/Destination pickers, Sheep Inventory and resizable Sheep Counter. |
+| Native GadTools | Compact main window with in-frame progress, Source/Destination pickers, Sheep Inventory and resizable Sheep Counter. Settings offers an ASL font selector. |
 | Surface Scan | Read-only scans using validated RDB settings and per-unit I/O overrides, selectable LBA/CHS ranges and retries, progress, error map and text logs with LBA and CHS when reported geometry permits. |
 | Create Image | Whole unit, partition or logical volume to RAW, HDF or IFF DOLY. Staged output and DLRP checkpoints after supported unexpected failures. |
 | Restore and Copy/Clone | Restore runs read-only RAW/HDF preflight. Raw device writes in the GUI, Copy/Clone and resizing remain in development. |

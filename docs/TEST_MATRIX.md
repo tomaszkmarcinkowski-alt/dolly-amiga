@@ -8,6 +8,16 @@
 | Native build | MC68000 GUI, write adapter and Restore source targets cross-compiled. | Runtime checks of the new scan dialog, Pause/Resume, the Restore timer and checkpoint save. |
 | Disk-unit enumeration | User confirmed that the disk-units test build reports the correct units and Query results for scsi.device Unit 0 with a valid RDB and two FFS partitions, and uaehf.device Units 0 and 1 with no RDB. | Additional controller and media configurations. |
 
+### Main-window test build
+
+- MC68000 cross-build and 36/36 host CTest cases passed.
+- The maintainer confirmed that an older preferences file triggers the
+  version warning and loads defaults.
+- Pending on AmigaOS: check the idle and active progress states, Pause/Resume,
+  Details opening Sheep Counter, horizontal resizing on 640×256 Topaz 8 and
+  a proportional font, and applying a font choice without restarting.
+- [Download the test executable](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/main-window-test-20261119).
+
 ### 512 MiB RDB image on emulated IDE
 
 The supplied HDF contains 1,048,576 sectors of 512 bytes and two valid

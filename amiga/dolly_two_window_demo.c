@@ -22,6 +22,7 @@
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <graphics/gfxbase.h>
+#include <graphics/gfxmacros.h>
 #include <graphics/rastport.h>
 #include <graphics/text.h>
 #include <dos/dosextens.h>
@@ -50,10 +51,8 @@ static const char grid_legend_prefix[]="1 grid = ";
 static const char grid_legend_suffix[]=" sectors";
 static const char show_log_label[]="Show Log";
 static const char hide_label[]="Hide";
-#define MAIN_SHOW_ID 201u
-#define MAIN_QUIT_ID 202u
+#define MAIN_DETAILS_ID 201u
 #define SHEEP_HIDE_ID 203u
-#define MAIN_COUNT_ID 204u
 #define SHEEP_COUNT_ID 205u
 #define SHEEP_ERRORS_ID 206u
 #define SHEEP_PERCENT_ID 207u
@@ -76,20 +75,15 @@ static const char hide_label[]="Hide";
 #define MAIN_SOURCE_TEXT_ID 215u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
-#define MAIN_PLACEHOLDER_ID 219u
 #define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3"
-#define MAIN_CONTROLS_OFFSET 47
-#define MAIN_PROGRESS_OFFSET 85
-#define MAIN_STATUS_OFFSET 107
 #define MAIN_GADGET_HEIGHT 15
 #define MAIN_COLUMN_GAP 6
-#define MAIN_STATUS_BEVEL_HEIGHT 19
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
     LONG endpoint_button_y,endpoint_frame_y,main_operation_y;
-    LONG main_desc_y, main_status_y, main_count_y;
-    LONG progress_x, progress_w, stop_x, quit_x, stop_quit_w;
+    LONG main_desc_y, main_status_y, main_progress_y;
+    LONG progress_x, progress_percent_w, details_x, details_w;
     LONG selector_x[3],selector_w[3],selector_y,selector_h;
     LONG pad_x, pad_y;
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
@@ -100,7 +94,7 @@ typedef struct DemoLayout {
 typedef struct DollyDemoView {
     struct Window *window;
     struct Gadget *gadgets;
-    struct Gadget *show, *settings, *placeholder, *stop, *quit;
+    struct Gadget *details, *settings, *stop;
     struct Gadget *start, *hide, *log, *pause, *count, *errors, *percent;
     const char *action_label;
     struct Gadget *device,*target_button,*source_text;
@@ -238,14 +232,23 @@ static LONG selector_height(const struct TextFont *font) {
     LONG height=font->tf_YSize+4;
     return height>MAIN_GADGET_HEIGHT?height:MAIN_GADGET_HEIGHT;
 }
-static LONG main_selector_extra(const struct TextFont *font) {
-    return font->tf_YSize+3*selector_height(font)-3;
+static LONG place_main_rows(DemoLayout *d,const struct TextFont *font) {
+    LONG row=d->selector_h=selector_height(font);
+    d->main_operation_y=d->top+3;
+    d->selector_y=d->main_operation_y+font->tf_YSize+4;
+    d->endpoint_button_y=d->selector_y+row+4;
+    d->endpoint_frame_y=d->endpoint_button_y+row+4;
+    d->main_desc_y=d->endpoint_frame_y+row+5;
+    d->controls_y=d->main_desc_y+row+6;
+    d->main_progress_y=d->controls_y+row+4;
+    d->main_status_y=d->main_progress_y+row+6;
+    return d->main_status_y+row+3-d->top;
 }
 static LONG main_selector_width(struct RastPort *rp) {
     LONG width=0;
     unsigned i;
     static const char *const extra_labels[]={
-        "Not Required","Sheep Counter","Destination...",
+        "<not required>","Destination...",
         "Sector-to-sector","Clone and resize","Not compressed",
         "Analyze (read only)","Analyze & repair","Repair in place","File recovery"
     };
@@ -261,7 +264,12 @@ static LONG main_selector_width(struct RastPort *rp) {
         LONG label=TextLength(rp,demo_operations[i],strlen((const char *)demo_operations[i]));
         if(label>width)width=label;
     }
-    return 3*(width+30)+2*MAIN_COLUMN_GAP;
+    {
+        LONG details=2*(TextLength(rp,(STRPTR)"Details",7)+12);
+        width+=30;
+        if(width<details)width=details;
+    }
+    return 3*width+2*MAIN_COLUMN_GAP;
 }
 
 static void text_copy(char *dst,size_t cap,const char *src) {
@@ -415,7 +423,7 @@ static void update_main_status(void) {
                   recovery_drawer[0]?recovery_drawer:"<not selected>");
     else if(need)
         format_endpoint(main_view.target_label,sizeof(main_view.target_label),&selected_target);
-    else text_copy(main_view.target_label,sizeof(main_view.target_label),"Not Required");
+    else text_copy(main_view.target_label,sizeof(main_view.target_label),"<not required>");
     if(main_view.window) {
         DemoLayout *d=&main_view.l;
         clip_main(main_view.source_label,d->selector_w[1]-8);
@@ -463,16 +471,11 @@ static void update_labels(DollyDemoView *v) {
     unsigned long total=(unsigned long)operation.total_blocks;
     unsigned long percent=progress_units(100);
     v->displayed_percent=percent;
-    if(v==&main_view) {
-        append_u32(&p,limit,percent>100ul?100ul:percent);
-        append_char(&p,limit,'%');
-    } else {
-        append_u32(&p,limit,current);
-        append_char(&p,limit,' ');
-        append_char(&p,limit,'/');
-        append_char(&p,limit,' ');
-        append_u32(&p,limit,total);
-    }
+    append_u32(&p,limit,current);
+    append_char(&p,limit,' ');
+    append_char(&p,limit,'/');
+    append_char(&p,limit,' ');
+    append_u32(&p,limit,total);
     *p='\0';
     p=v->percent_label;
     limit=v->percent_label+sizeof(v->percent_label)-1;
@@ -554,40 +557,24 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_w=d.right-d.left+1;
     avail_h=d.bottom-d.top+1;
     if(main_window) {
-        LONG extra=main_selector_extra(w->RPort->Font);
         LONG column_width=(avail_w-2*MAIN_COLUMN_GAP)/3;
-        LONG footer_extra=selector_height(w->RPort->Font)-MAIN_GADGET_HEIGHT;
-        LONG progress=TextLength(w->RPort,(STRPTR)"Progress:",9)+10;
         unsigned column;
-        if(avail_w<320 || avail_w<main_selector_width(w->RPort) ||
-           avail_h<MAIN_STATUS_OFFSET+MAIN_STATUS_BEVEL_HEIGHT+extra+footer_extra)
-            return 0;
-        d.main_operation_y=d.top+3;
-        d.selector_y=d.main_operation_y+w->RPort->Font->tf_YSize+4;
-        d.selector_h=selector_height(w->RPort->Font);
+        LONG digit_width=0;
+        char digit;
+        if(avail_w<main_selector_width(w->RPort) ||
+           avail_h<place_main_rows(&d,w->RPort->Font))return 0;
         for(column=0;column<3u;++column) {
             d.selector_x[column]=d.left+(LONG)column*(column_width+MAIN_COLUMN_GAP);
             d.selector_w[column]=column_width;
         }
-        d.endpoint_button_y=d.selector_y+d.selector_h+4;
-        d.endpoint_frame_y=d.endpoint_button_y+d.selector_h+4;
-        d.main_desc_y=d.top+23+extra;
-        d.controls_y=d.top+MAIN_CONTROLS_OFFSET+extra;
-        d.main_count_y=d.top+MAIN_PROGRESS_OFFSET+extra+footer_extra;
-        d.main_status_y=d.top+MAIN_STATUS_OFFSET+extra+footer_extra;
-        d.progress_x=d.left+(progress>86?progress:86);
-        d.progress_w=66;
-        /* Keep 320px client layouts viable: shorten both buttons
-         * together instead of raising the minimum width.
-         */
-        d.stop_quit_w=avail_w<360?70:90;
-        d.quit_x=d.right-d.stop_quit_w+1;
-        d.stop_x=d.quit_x-d.stop_quit_w-6;
-        if(d.stop_x<d.progress_x+d.progress_w+12+
-           (LONG)TextLength(w->RPort,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
-                            (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL)))return 0;
-        d.number_w=avail_w/3;
-        if(d.number_w>150)d.number_w=150;
+        d.details_w=column_width/2;
+        d.details_x=d.selector_x[2]+column_width-d.details_w;
+        d.progress_x=d.left+TextLength(w->RPort,(STRPTR)"Progress:",9)+8;
+        for(digit='0';digit<='9';++digit) {
+            LONG width=TextLength(w->RPort,(STRPTR)&digit,1);
+            if(width>digit_width)digit_width=width;
+        }
+        d.progress_percent_w=3*digit_width+TextLength(w->RPort,(STRPTR)"%",1);
     } else {
         if(avail_w<248 || avail_h<140)return 0;
         d.hide_w=sheep_button_width(w->RPort,hide_label);
@@ -621,18 +608,15 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
-    ng.ng_Height=(id==MAIN_SHOW_ID || id==MAIN_SETTINGS_ID || id==MAIN_PLACEHOLDER_ID ||
-                  id==MAIN_SOURCE_ID || id==MAIN_TARGET_ID)?
-                 (WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
+    ng.ng_Height=v==&main_view?(WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)title;
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)(
-                          id==MAIN_PLACEHOLDER_ID ||
                           (id==SHEEP_LOG_ID && !log_available()) ||
                           (id==MAIN_STOP_ID &&
                            !operation_active()) ||
-                          (id==MAIN_SHOW_ID && !counter_available()) ||
+                          (id==MAIN_DETAILS_ID && !operation_active()) ||
                           (id==MAIN_START_ID && !operation_active() && !can_start_operation()) ||
                           (id==SHEEP_PAUSE_ID && !operation_active()) ||
                           (id==MAIN_TARGET_ID && !destination_button_available())),
@@ -664,8 +648,7 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
-    ng.ng_Height=id==MAIN_SOURCE_TEXT_ID?
-                 (WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
+    ng.ng_Height=v==&main_view?(WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -710,8 +693,8 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
             RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
-        v->show=NULL;v->settings=NULL;v->placeholder=NULL;
-        v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+        v->details=NULL;v->settings=NULL;
+        v->stop=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;v->log=NULL;v->pause=NULL;
         v->device=NULL;v->target_button=NULL;
         v->source_text=NULL;
@@ -776,36 +759,22 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                        d->right-d->left-5,v->desc_label,FALSE);
         if(!last)return 0;
         v->description=last;
-        last=make_button(last,v,MAIN_SHOW_ID,d->selector_x[0],d->controls_y+19,
-                         d->selector_w[0],"Sheep Counter");
-        if(!last)return 0;
-        v->show=last;
-        last=make_button(last,v,MAIN_SETTINGS_ID,
-                         d->selector_x[1],d->controls_y+19,
-                         d->selector_w[1],"Settings");
+        last=make_button(last,v,MAIN_SETTINGS_ID,d->selector_x[0],d->controls_y,
+                         d->selector_w[0],"Settings");
         if(!last)return 0;
         v->settings=last;
-        last=make_button(last,v,MAIN_PLACEHOLDER_ID,
-                         d->selector_x[2],d->controls_y+19,
-                         d->selector_w[2],"");
-        if(!last)return 0;
-        v->placeholder=last;
-        last=make_button(last,v,MAIN_START_ID,d->left,
-                         d->controls_y,d->right-d->left+1,action_label(1));
+        last=make_button(last,v,MAIN_START_ID,d->selector_x[1],d->controls_y,
+                         d->selector_w[1],"");
         if(!last)return 0;
         v->start=last;
-        last=make_text(last,v,MAIN_COUNT_ID,d->progress_x,d->main_count_y,
-                       d->progress_w,v->block_label,TRUE);
-        if(!last)return 0;
-        v->count=last;
-        last=make_button(last,v,MAIN_STOP_ID,
-                         d->stop_x,d->main_count_y,d->stop_quit_w,"Stop");
+        last=make_button(last,v,MAIN_STOP_ID,d->selector_x[2],d->controls_y,
+                         d->selector_w[2],"Stop");
         if(!last)return 0;
         v->stop=last;
-        last=make_button(last,v,MAIN_QUIT_ID,
-                         d->quit_x,d->main_count_y,d->stop_quit_w,"Quit");
+        last=make_button(last,v,MAIN_DETAILS_ID,d->details_x,d->main_progress_y,
+                         d->details_w,"Details");
         if(!last)return 0;
-        v->quit=last;
+        v->details=last;
         last=make_text(last,v,MAIN_STATUS_ID,d->left+3,d->main_status_y,
                        d->right-d->left-5,v->status_label,FALSE);
         if(!last)return 0;
@@ -856,8 +825,8 @@ static void destroy_view(DollyDemoView *v) {
     }
     if(v->gadgets) {FreeGadgets(v->gadgets);v->gadgets=NULL;}
     if(v->visual) {FreeVisualInfo(v->visual);v->visual=NULL;}
-    v->show=NULL;v->settings=NULL;v->placeholder=NULL;
-    v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
+    v->details=NULL;v->settings=NULL;
+    v->stop=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
     v->device=NULL;v->target_button=NULL;
     v->source_text=NULL;
@@ -884,37 +853,13 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     m.padding_y=2u;
     m.line_height=(ULONG)rp->Font->tf_YSize;
     if(main_window) {
-        ULONG status_bottom=(ULONG)(MAIN_STATUS_OFFSET-2+
-                                    MAIN_STATUS_BEVEL_HEIGHT);
-        ULONG progress_bottom=(ULONG)(MAIN_PROGRESS_OFFSET+
-                                      MAIN_GADGET_HEIGHT);
-        ULONG buttons_bottom=(ULONG)(MAIN_CONTROLS_OFFSET+19+
-                                     MAIN_GADGET_HEIGHT);
-        m.main_content_height=status_bottom;
-        if(m.main_content_height<progress_bottom)
-            m.main_content_height=progress_bottom;
-        if(m.main_content_height<buttons_bottom)
-            m.main_content_height=buttons_bottom;
-        /* Same visual breathing room below as above the controls. */
-        m.main_content_height+=3u+(ULONG)main_selector_extra(rp->Font)+
-            (ULONG)(selector_height(rp->Font)-MAIN_GADGET_HEIGHT);
-        m.main_build_label_width=(ULONG)TextLength(rp,
-            (STRPTR)DOLLY_DEMO_BUILD_LABEL,
-            (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
-        {
-            static const char choice[]="Restore a file image to a destination.";
-            ULONG progress=(ULONG)TextLength(rp,(STRPTR)"Progress:",9)+10u;
-            ULONG b=(ULONG)TextLength(rp,(STRPTR)choice,
-                                       (ULONG)strlen(choice));
-            m.heading_width=(ULONG)main_selector_width(rp);
-            if(m.heading_width<b)m.heading_width=b;
-            if(progress>86u)m.main_build_label_width+=progress-86u;
-        }
-        m.show_button_text_width=(ULONG)TextLength(rp,
-                (STRPTR)"Sheep Counter",13);
-        m.quit_button_text_width=(ULONG)TextLength(rp,
-                (STRPTR)"Quit",4);
-    } else {
+        DemoLayout d={0};
+        LONG width=main_selector_width(rp)+w->BorderLeft+w->BorderRight+2*m.padding_x;
+        LONG height=place_main_rows(&d,rp->Font)+w->BorderTop+w->BorderBottom+2*m.padding_y;
+        if(width>w->Width || height>w->Height)return 0;
+        return WindowLimits(w,width,w->Height,0,w->Height)!=FALSE;
+    }
+    {
         ULONG digit_width=0;
         char digit;
         for(digit='0';digit<='9';++digit) {
@@ -935,10 +880,9 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         m.log_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)show_log_label,sizeof(show_log_label)-1);
     }
-    minimum=dolly_gui_measure_minimum(
-        main_window?DOLLY_GUI_WINDOW_MAIN:DOLLY_GUI_WINDOW_SHEEP,m);
+    minimum=dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_SHEEP,m);
     if(!minimum.valid)return 0;
-    if(!main_window) {
+    {
         LONG pixel_x,pixel_y,span;
         ULONG width,height;
         grid_pixel_size(&pixel_x,&pixel_y);
@@ -954,10 +898,6 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     }
     if(minimum.outer_width>(ULONG)w->Width ||
        minimum.outer_height>(ULONG)w->Height)return 0;
-    if(main_window)
-        /* Keep current height fixed; allow only horizontal resizing. */
-        return WindowLimits(w,(LONG)minimum.outer_width,
-                            (LONG)w->Height,0,(LONG)w->Height)!=FALSE;
     return WindowLimits(w,(LONG)minimum.outer_width,
                         (LONG)minimum.outer_height,0,0)!=FALSE;
 }
@@ -1013,6 +953,13 @@ static void update_numbers(DollyDemoView *v) {
     }
     v->displayed_errors=(ULONG)operation.errors;
 }
+static void ghost_area(struct RastPort *rp,LONG x,LONG y,LONG right,LONG bottom) {
+    static UWORD pattern[]={0xaaaa,0x5555};
+    SetDrMd(rp,JAM1);
+    SetAfPt(rp,pattern,1);
+    fill(rp,system_pen(BACKGROUNDPEN),x,y,right,bottom);
+    SetAfPt(rp,NULL,0);
+}
 static void draw_destination_frame(void) {
     DemoLayout *d=&main_view.l;
     struct RastPort *rp=main_view.window->RPort;
@@ -1024,13 +971,67 @@ static void draw_destination_frame(void) {
     LONG x=d->selector_x[2],y=d->endpoint_frame_y;
     LONG width=d->selector_w[2],height=d->selector_h;
     int inactive=main_controls_busy() ||
-                 (!main_view.mode_count[1] && !destination_button_available());
+                 (!destination_mode_mask() && !destination_button_available());
     SetDrMd(rp,JAM1);
     fill(rp,system_pen(BACKGROUNDPEN),x+2,y+2,x+width-3,y+height-3);
     DrawBevelBoxA(rp,x,y,width,height,tags);
-    SetAPen(rp,system_pen(inactive?SHADOWPEN:TEXTPEN));
+    SetAPen(rp,system_pen(TEXTPEN));
     Move(rp,x+4,y+(height-rp->TxHeight)/2+rp->TxBaseline);
     Text(rp,(STRPTR)main_view.target_label,strlen(main_view.target_label));
+    /* This frame is painted directly, so GadTools cannot ghost it. */
+    if(inactive)ghost_area(rp,x,y,x+width-1,y+height-1);
+}
+
+static void draw_main_start_label(void) {
+    DemoLayout *d=&main_view.l;
+    struct RastPort *rp=main_view.window->RPort;
+    const char *caption=main_view.action_label;
+    LONG x,y,width;
+    if(!main_view.start || !caption)return;
+    width=TextLength(rp,(STRPTR)caption,strlen(caption));
+    SetDrMd(rp,JAM1);
+    SetAPen(rp,system_pen(SHINEPEN));
+    x=d->selector_x[1]+(d->selector_w[1]-width)/2;
+    y=d->controls_y+(d->selector_h-rp->TxHeight)/2;
+    Move(rp,x,y+rp->TxBaseline);
+    Text(rp,(STRPTR)caption,strlen(caption));
+    if(main_view.start->Flags&GFLG_DISABLED)
+        ghost_area(rp,x,y,x+width-1,y+rp->TxHeight-1);
+}
+static void draw_main_progress(void) {
+    DemoLayout *d=&main_view.l;
+    struct Window *w=main_view.window;
+    struct RastPort *rp=w->RPort;
+    LONG right=d->details_x-MAIN_COLUMN_GAP-1;
+    LONG y=d->main_progress_y,h=d->selector_h;
+    LONG baseline=y+(h-rp->TxHeight)/2+rp->TxBaseline;
+    ULONG percent=progress_units(100);
+    struct TagItem tags[]={
+        {GT_VisualInfo,(ULONG)main_view.visual},
+        {GTBB_Recessed,TRUE},
+        {TAG_DONE,0}
+    };
+    char *end=main_view.percent_label;
+    LONG caption_width,fill_width;
+    if(main_view.gadgets_detached)return;
+    SetDrMd(rp,JAM1);
+    fill(rp,system_pen(BACKGROUNDPEN),d->left,y,right,y+h-1);
+    main_view.displayed_percent=percent;
+    label(w,d->left,baseline,"Progress:");
+    DrawBevelBoxA(rp,d->progress_x,y,right-d->progress_x+1,h,tags);
+    append_u32(&end,main_view.percent_label+sizeof(main_view.percent_label)-2,percent);
+    *end++='%';
+    *end='\0';
+    caption_width=TextLength(rp,(STRPTR)main_view.percent_label,
+                             end-main_view.percent_label);
+    fill_width=right-d->progress_x-d->progress_percent_w-13;
+    if(fill_width>0) {
+        LONG filled=(LONG)progress_units((ULONG)fill_width);
+        fill(rp,system_pen(FILLPEN),d->progress_x+2,y+2,
+             d->progress_x+1+filled,y+h-3);
+    }
+    label(w,right-caption_width-5,baseline,main_view.percent_label);
+    if(!operation_active())ghost_area(rp,d->left,y,right,y+h-1);
 }
 
 static void draw_main_static(void) {
@@ -1042,25 +1043,6 @@ static void draw_main_static(void) {
         label(main_view.window,d->selector_x[column],
               d->main_operation_y+main_view.window->RPort->TxBaseline,
               selector_titles[column]);
-    label(main_view.window,d->left,d->main_count_y+11,"Progress:");
-    /* Build label occupies only the gap between the progress well
-     * and Stop. Omit it when a minimum-width window cannot fit it;
-     * never paint text underneath an interactive gadget.
-     */
-    {
-        struct RastPort *rp=main_view.window->RPort;
-        LONG from=d->progress_x+d->progress_w+6;
-        LONG to=d->stop_x-6;
-        LONG tw=(LONG)TextLength(rp,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
-                                 (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
-        if(to-from>=tw) {
-            SetDrMd(rp,JAM1);
-            SetAPen(rp,system_pen(SHINEPEN));
-            Move(rp,from+(to-from-tw)/2,d->main_count_y+11);
-            Text(rp,(STRPTR)DOLLY_DEMO_BUILD_LABEL,
-                 (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
-        }
-    }
     tags[0].ti_Tag=GT_VisualInfo;
     tags[0].ti_Data=(ULONG)main_view.visual;
     tags[1].ti_Tag=GTBB_Recessed;
@@ -1068,9 +1050,9 @@ static void draw_main_static(void) {
     tags[2].ti_Tag=TAG_DONE;
     tags[2].ti_Data=0;
     DrawBevelBoxA(main_view.window->RPort,d->left,d->main_status_y-2,
-                  d->right-d->left+1,MAIN_STATUS_BEVEL_HEIGHT,tags);
+                  d->right-d->left+1,d->selector_h+4,tags);
     DrawBevelBoxA(main_view.window->RPort,d->left,d->main_desc_y-2,
-                  d->right-d->left+1,MAIN_STATUS_BEVEL_HEIGHT,tags);
+                  d->right-d->left+1,d->selector_h+4,tags);
     draw_destination_frame();
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
@@ -1186,6 +1168,10 @@ static void draw_full(DollyDemoView *v,int main_window) {
     else draw_sheep_static();
     RefreshGList(v->gadgets,v->window,NULL,-1);
     GT_RefreshWindow(v->window,NULL);
+    if(main_window) {
+        draw_main_progress();
+        draw_main_start_label();
+    }
 }
 static int show_sheep(void) {
     ULONG top=(ULONG)public_screen->BarHeight+1ul;
@@ -1238,15 +1224,12 @@ static void update_main_actions(void) {
     if(main_view.settings)
         GT_SetGadgetAttrs(main_view.settings,main_view.window,NULL,
                           GA_Disabled,(ULONG)!io_settings_available(),TAG_DONE);
-    if(main_view.placeholder)
-        GT_SetGadgetAttrs(main_view.placeholder,main_view.window,NULL,
-                          GA_Disabled,TRUE,TAG_DONE);
     if(main_view.stop)
         GT_SetGadgetAttrs(main_view.stop,main_view.window,NULL,
                           GA_Disabled,(ULONG)!active,TAG_DONE);
-    if(main_view.show)
-        GT_SetGadgetAttrs(main_view.show,main_view.window,NULL,
-                          GA_Disabled,(ULONG)!counter_available(),TAG_DONE);
+    if(main_view.details)
+        GT_SetGadgetAttrs(main_view.details,main_view.window,NULL,
+                          GA_Disabled,(ULONG)!active,TAG_DONE);
     if(main_view.start)
         GT_SetGadgetAttrs(main_view.start,main_view.window,NULL,
                           GA_Disabled,(ULONG)(!active && (source_picker.window || target_picker.window ||
@@ -1276,7 +1259,11 @@ static void update_main_actions(void) {
         } else if(selected_operation==DOLLY_DEMO_COPY)
             set_cycle_state(main_view.operation_options[0],copy_modes,copy_mode,busy);
     }
-    if(!main_view.gadgets_detached)draw_destination_frame();
+    if(!main_view.gadgets_detached) {
+        draw_destination_frame();
+        draw_main_progress();
+        draw_main_start_label();
+    }
 }
 /* Rebuild only after draining the window queues, whose IAddress fields
  * can still reference the current gadgets. */
@@ -1315,8 +1302,7 @@ static void progress_view_update(unsigned old,int cell_changed) {
     unsigned now=progress_units(GRID_TOTAL),cell;
     ULONG percent=progress_units(100);
     int running=operation.state==DOLLY_OP_RUNNING;
-    if(percent!=main_view.displayed_percent || !running)
-        update_numbers(&main_view);
+    if(running && percent!=main_view.displayed_percent)draw_main_progress();
     if(!sheep_view.window)return;
     if(old!=now || cell_changed || !running)
         for(cell=old;cell<=now && cell<GRID_TOTAL;++cell)
@@ -1381,7 +1367,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         }
         GT_ReplyIMsg(msg);
         if(main_window) {
-            if(cls==IDCMP_CLOSEWINDOW || id==MAIN_QUIT_ID) {
+            if(cls==IDCMP_CLOSEWINDOW) {
                 if(operation_active()) {
                     quit_blocked=1;
                     refresh_main_selection();
@@ -1488,7 +1474,6 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                               image.reader.total:0;
                     }
                     if(total)(void)dolly_operation_start(&operation,total);
-                    update_numbers(&main_view);
                     if(sheep_view.window) {
                         draw_full(&sheep_view,0);
                         update_numbers(&sheep_view);
@@ -1497,7 +1482,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 }
             } else if(id==MAIN_STOP_ID && operation_active()) {
                 ask_stop();
-            } else if(id==MAIN_SHOW_ID && counter_available() &&
+            } else if(id==MAIN_DETAILS_ID && operation_active() &&
                       !show_sheep())
                 puts("MAIN WARN: unable to show Sheep Counter");
         } else if(cls==IDCMP_CLOSEWINDOW || id==SHEEP_HIDE_ID)hide=1;
@@ -1541,15 +1526,16 @@ static int open_main_window(void) {
     ULONG max_height=(ULONG)public_screen->Height-top;
     struct RastPort measure=public_screen->RastPort;
     struct TextFont *font=dolly_amiga_font(0);
-    ULONG height=150u+(ULONG)main_selector_extra(font)+
-                 (ULONG)(selector_height(font)-MAIN_GADGET_HEIGHT);
+    DemoLayout layout={0};
+    ULONG height=(ULONG)place_main_rows(&layout,font)+
+                 top+public_screen->WBorBottom+5u;
     ULONG width;
     SetFont(&measure,font);
     width=(ULONG)main_selector_width(&measure)+32u;
     if(height>max_height)height=max_height;
     if(width<600u)width=600u;
     if(width>(ULONG)public_screen->Width-12u)width=(ULONG)public_screen->Width-12u;
-    if(!open_view(&main_view,1,"Dolly",12,top,width,height))return 0;
+    if(!open_view(&main_view,1,DOLLY_DEMO_BUILD_LABEL,12,top,width,height))return 0;
     settings_menu=CreateMenus(settings_items,TAG_DONE);
     if(settings_menu &&
        (!LayoutMenus(settings_menu,main_view.visual,TAG_DONE) ||

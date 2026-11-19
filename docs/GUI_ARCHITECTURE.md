@@ -1546,7 +1546,7 @@ the current text, including edits made without pressing Return.
 
 | Window | Font-sensitive layout |
 |---|---|
-| Main | Measure Operation, Destination and Progress labels before placing adjacent controls. Clip committed endpoint captions to the resulting field widths. |
+| Main | Size rows from the active font and align Settings, Start and Stop with the three selector columns. Measure Progress and the percentage field. Details is half a column wide and opens Sheep Counter during an operation. The progress row is ghosted when idle. |
 | Source and Destination | Measure the mode heading, selection and property columns and Query. Use a compact partition heading when the full caption does not fit its column. |
 | Sheep Counter | Measure footer button widths and the progress/header captions. Grid markers use the active interface font when the glyph fits the tile. |
 | Sheep Inventory | Measure footer buttons and clip status text using the window raster port. |
@@ -1555,7 +1555,7 @@ the current text, including edits made without pressing Return.
 | Destructive confirmation | Wrap the operation and warning by pixel width and size the dialog from the actual line count. Refuse confirmation if the warning cannot fit. |
 | System ASL and Intuition requesters | Let the system lay out standard file and message requesters. |
 
-The approved main-window row rhythm remains fixed. The picker and
+The main window keeps its measured height and resizes horizontally. The picker and
 Inventory retain fixed vertical regions, so exceptionally tall screen
 fonts still need a runtime layout pass. The 60-column Workbench mode
 and proportional fonts need visual verification on AmigaOS.
@@ -1572,7 +1572,7 @@ Source and Destination buttons sit below their Cycle gadgets, with
 the selected object shown in a recessed field underneath. Physical
 units use driver:unit and partitions use driver:unit:partition
 with the partition number starting at 1. File selections show their
-basename. An operation without a destination displays Not Required
+basename. An operation without a destination displays `<not required>`
 in the destination field.
 
 The operation description spans the width below the endpoint fields.
@@ -1605,3 +1605,16 @@ index and restores its label when the control becomes available.
 The destination field is visually inactive when both destination
 controls are disabled. The description uses the same recessed
 frame as the status strip.
+
+
+### Main-window test build
+
+The title shows **Dolly Alpha 3**. The close gadget exits when Dolly is
+idle. Settings, Start and Stop align with the selector columns. Start
+changes to Pause or Resume during an operation and uses the SHINEPEN
+for its label. Progress and its percentage share a recessed frame.
+The progress row stays visible and is ghosted when idle. Details
+is half the width of an action button and opens Sheep Counter during
+running or paused operations. An already open counter stays available
+after completion. Window height follows the active font and resizing
+is horizontal.
