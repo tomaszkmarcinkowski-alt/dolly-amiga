@@ -219,3 +219,11 @@ Every click on **Restore RDB** opens the shared ten-second confirmation.
 After Proceed, Inventory checks target eligibility and displays an explicit
 reason for any refusal. Eligible operations retain the final confirmation
 for the validated write plan, including its LBA range.
+
+
+### Header and partition list spacing
+
+The header LISTVIEW has five rows, including ATA IDENTIFY. Dolly
+measures it using the screen font and places the partition captions
+and both partition lists below it. On resize, the two lists grow
+together and the status row and buttons stay anchored at the bottom.

@@ -33,11 +33,24 @@
 #define INV_HEIGHT 246
 #define INV_MIN_HEIGHT 230
 #define INV_MARGIN 16
-#define INV_LIST_TOP 76
+#define INV_HEADER_TOP 5
 #define INV_BUTTON_WIDTH 136
 #define INV_STATUS_HEIGHT 16
 extern struct Library *AslBase;
 extern struct DosLibrary *DOSBase;
+
+static LONG header_height(const struct Screen *screen) {
+    LONG font_height=screen->Font->ta_YSize;
+    return 6+(LONG)DOLLY_INVENTORY_HEADER_ROWS*(font_height+2);
+}
+
+static LONG partition_caption_top(const struct Window *w) {
+    return (LONG)w->BorderTop+INV_HEADER_TOP+header_height(w->WScreen)+4;
+}
+
+static LONG partition_list_top(const struct Window *w) {
+    return partition_caption_top(w)+w->RPort->TxHeight+4;
+}
 
 static LONG list_width(const DollyNativeInventoryView *v) {
     const struct Window *w=v->window;
@@ -344,22 +357,22 @@ static void paint_status(DollyNativeInventoryView *v,struct DrawInfo *info) {
 static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
     struct DrawInfo *info;
     struct Window *w=v->window;
-    LONG top,left;
+    LONG caption,left;
     char line[88];
     if(!w)return;
     info=GetScreenDrawInfo(screen);
     if(!info)return;
-    top=(LONG)w->BorderTop;
+    caption=partition_caption_top(w)+w->RPort->TxBaseline;
     left=(LONG)w->BorderLeft+INV_MARGIN;
     sprintf(line,"%lu %sPartitions:",(unsigned long)v->count,
             v->map.format==DOLLY_NATIVE_PARTITION_MBR?"MBR ":
             v->map.format==DOLLY_NATIVE_PARTITION_RDB?"RDB ":"");
-    draw_text(w,info,left,top+60,details_x(v)-4,line);
+    draw_text(w,info,left,caption,details_x(v)-4,line);
     if(v->count)
-        draw_text(w,info,details_x(v),top+60,w->Width-w->BorderRight-INV_MARGIN,
+        draw_text(w,info,details_x(v),caption,w->Width-w->BorderRight-INV_MARGIN,
                   v->detail_count?"Partition details":"Select a partition");
     if(!v->count)
-        draw_text(w,info,left+4,top+78,w->Width-w->BorderRight-INV_MARGIN,
+        draw_text(w,info,left+4,partition_list_top(w)+w->RPort->TxBaseline,w->Width-w->BorderRight-INV_MARGIN,
                   "No partitions to display");
     paint_status(v,info);
     FreeScreenDrawInfo(screen,info);
@@ -403,11 +416,12 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     LONG left=(LONG)w->BorderLeft+INV_MARGIN;
     LONG right=(LONG)w->Width-w->BorderRight-INV_MARGIN;
     LONG bottom=client_bottom(w);
-    LONG list_top=(LONG)w->BorderTop+INV_LIST_TOP;
+    LONG list_top=partition_list_top(w);
     LONG list_height=status_top(w)-5-list_top;
     LONG button_top=bottom-18;
     LONG button_width=TextLength(w->RPort,(STRPTR)"Restore RDB",11)+16;
     LONG backup_width=TextLength(w->RPort,(STRPTR)"Backup MBR",10)+16;
+    if(list_height<w->RPort->TxHeight+6)return 0;
     if(button_width<backup_width)button_width=backup_width;
     if(button_width<INV_BUTTON_WIDTH)button_width=INV_BUTTON_WIDTH;
     if(button_width>(right-left-12)/3)button_width=(right-left-12)/3;
@@ -427,7 +441,8 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
-    last=create_list(last,v,screen,left,(LONG)w->BorderTop+5,right-left,57,
+    last=create_list(last,v,screen,left,(LONG)w->BorderTop+INV_HEADER_TOP,right-left,
+                     header_height(screen),
                      INV_HEADER_ID,&v->header_rows,~0u,DOLLY_INVENTORY_HEADER_ROWS);
     if(!last)return 0;
     if(v->count) {
@@ -652,7 +667,11 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     top=(LONG)screen->BarHeight+1;
     width=screen->Width<INV_WIDTH?screen->Width:INV_WIDTH;
     height=(LONG)screen->Height-top;
-    if(height>INV_HEIGHT)height=INV_HEIGHT;
+    {
+        LONG wanted=header_height(screen)+2*(LONG)screen->Font->ta_YSize+94;
+        if(wanted<INV_HEIGHT)wanted=INV_HEIGHT;
+        if(height>wanted)height=wanted;
+    }
     memset(v,0,sizeof(*v));
     init_list(&v->rows);
     strcpy(v->ata_identify,"Not queried");
@@ -746,6 +765,18 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                            IDCMP_MENUPICK,
                   TAG_DONE);
     if(!v->window){dolly_inventory_view_close(v);return 0;}
+    {
+        struct Window *w=v->window;
+        LONG available=(LONG)screen->Height-top;
+        LONG minimum=partition_list_top(w)+w->RPort->TxHeight+6+
+                     w->BorderBottom+1+18+4+INV_STATUS_HEIGHT+5;
+        if(minimum<INV_MIN_HEIGHT)minimum=INV_MIN_HEIGHT;
+        if(minimum>w->Height ||
+           !WindowLimits(w,INV_MIN_WIDTH,minimum,screen->Width,available)) {
+            dolly_inventory_view_close(v);
+            return 0;
+        }
+    }
     v->menu=CreateMenus(menu_items,TAG_DONE);
     if(!v->menu || !LayoutMenus(v->menu,v->visual,TAG_DONE) ||
        !SetMenuStrip(v->window,v->menu) || !rebuild_gadgets(v,1)) {
