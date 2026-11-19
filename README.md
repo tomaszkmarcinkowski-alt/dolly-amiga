@@ -8,6 +8,12 @@
 
 Dolly is a free, community-developed disk imaging, disk cloning, backup/restore and filesystem recovery project for classic Commodore Amiga computers.
 
+## Screenshot
+
+![Dolly Alpha 3 showing sector-by-sector copying from scsi.device Unit 0 to Unit 1, with Sheep Counter open](docs/screenshots/sector-copy.png)
+
+Sector-by-sector copying in an Alpha 3 development build. [Download the test build](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/warning-review-test-20261119)
+
 ## Goals
 - AmigaOS 2.04+, Motorola 68000 baseline, no FPU or MMU required.
 - CLI plus **built-in GadTools GUI** in the MVP; optional ReAction and MUI backends are **post-MVP**, separately delivered extensions.
