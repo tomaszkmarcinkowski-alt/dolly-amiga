@@ -34,6 +34,8 @@ extern struct DosLibrary *DOSBase;
 #define PICK_IMAGE_FORMAT 510u
 #define PICK_FILE_INFO 511u
 #define PICK_SELECTION_TEXT 512u
+#define PICK_UNIT_TEXT 520u
+#define PICK_PARTITION_NUMBER 521u
 #define PICK_DISK_INFO_TEXT 513u
 #define PICK_DISK_SIZE_TEXT 514u
 #define PICK_QUERY 515u
@@ -94,7 +96,7 @@ typedef struct PickerGeometry {
     WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
     WORD format_y;
     WORD format_x,format_w;
-    WORD value_x,value_w;
+    WORD value_x,value_w,unit_x,unit_w,unit_label_x,partition_w;
     WORD name_x,name_w,size_label_x,size_x,size_w;
 } PickerGeometry;
 static LONG picker_text_span(const struct Window *window,const char *text,LONG minimum) {
@@ -161,8 +163,12 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     /* A shared label column keeps the previews aligned in all
      * modes. The Size field is right-anchored and stays separate.
      */
-    g.value_x=(WORD)(left+picker_text_span(w,"Selected partition",160));
+    g.value_x=(WORD)(left+picker_text_span(w,"Selected device",140));
     g.value_w=(WORD)(right-g.value_x);
+    g.unit_w=(WORD)picker_text_span(w,"0000000000",58);
+    g.unit_x=(WORD)(right-g.query_w-4-g.unit_w);
+    g.unit_label_x=(WORD)(g.unit_x-picker_text_span(w,"Unit",38));
+    g.partition_w=(WORD)picker_text_span(w,"00",32);
     g.name_x=(WORD)(left+picker_text_span(w,"Device name",104));
     g.size_w=(WORD)picker_text_span(w,"999999 MiB",102);
     g.size_x=(WORD)(right-g.size_w);
@@ -192,11 +198,6 @@ static void populate_devices(DollyEndpointPicker *p) {
         ++p->device_count;
     }
 }
-static int selected_scsi(const DollyEndpointPicker *p) {
-    return p->has_device && p->device<p->device_count &&
-           strcasecmp(p->physical_names[p->device],"scsi.device")==0;
-}
-
 static void insert_unit(DollyEndpointPicker *p,ULONG value) {
     unsigned at=0;
     while(at<p->unit_count && p->physical_units[at]<value)++at;
@@ -207,31 +208,28 @@ static void insert_unit(DollyEndpointPicker *p,ULONG value) {
     ++p->unit_count;
 }
 
-static void populate_units(DollyEndpointPicker *p) {
+static void populate_units(DollyEndpointPicker *p,int probe) {
     unsigned i;
     init_list(&p->units);
     p->unit_count=0;
+    if(probe)p->probed_count=0;
     if(!p->has_device || p->device>=p->device_count)return;
     for(i=0;i<p->physical_catalog.count;++i) {
         const DollyPhysicalEntry *e=&p->physical_catalog.entries[i];
-        if(strcasecmp(e->driver,p->physical_names[p->device])==0)
+        if(e->unit_registered && !strcasecmp(e->driver,p->physical_names[p->device]))
             insert_unit(p,e->unit);
     }
-    if(selected_scsi(p) && p->has_manual_unit)
-        insert_unit(p,p->manual_unit);
+    if(probe)
+        p->probed_count=dolly_physical_probe_units(p->physical_names[p->device],p->probed_units);
+    for(i=0;i<p->probed_count;++i)insert_unit(p,p->probed_units[i]);
+    if(p->has_manual_unit)insert_unit(p,p->manual_unit);
     for(i=0;i<p->unit_count;++i) {
         sprintf(p->unit_names[i],"Unit %lu",(unsigned long)p->physical_units[i]);
         memset(&p->unit_nodes[i],0,sizeof(p->unit_nodes[i]));
         p->unit_nodes[i].ln_Name=p->unit_names[i];
         AddTail(&p->units,&p->unit_nodes[i]);
     }
-    if(selected_scsi(p)) {
-        struct Node *other=&p->unit_nodes[p->unit_count];
-        memset(other,0,sizeof(*other));
-        strcpy(p->unit_names[p->unit_count],"Other unit...");
-        other->ln_Name=p->unit_names[p->unit_count];
-        AddTail(&p->units,other);
-    }
+
 }
 /* Prepare the OTHER bank, never touching LISTVIEW-owned nodes.
  * Output labels are bounded by construction (max RDB label 31 bytes).
@@ -308,68 +306,22 @@ static struct Gadget *button(struct Gadget *last,DollyEndpointPicker *p,
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
-static int choose_manual_unit(DollyEndpointPicker *p,ULONG *unit) {
-    struct Window *window;
-    struct Gadget *gadgets=NULL,*last,*field;
-    struct NewGadget ng={0};
-    char initial[11],path[32],driver[DOLLY_PHYS_DRIVER_LEN];
-    int accepted=0,done=0;
-    APTR visual=GetVisualInfo(p->screen,TAG_DONE);
-    if(!visual)return 0;
-    snprintf(initial,sizeof(initial),"%lu",
-             (unsigned long)(physical_choice(p)?p->physical_units[p->unit]:0));
-    window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)p->screen,
-        WA_Title,(ULONG)"scsi.device - Unit number",WA_Width,320UL,WA_Height,85UL,
-        WA_CloseGadget,TRUE,WA_DragBar,TRUE,WA_Activate,TRUE,WA_SmartRefresh,TRUE,
-        WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW,TAG_DONE);
-    if(!window)goto out;
-    last=CreateContext(&gadgets);
-    if(!last)goto out;
-    ng.ng_VisualInfo=visual; ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=58; ng.ng_TopEdge=window->BorderTop+5;
-    ng.ng_Width=138; ng.ng_Height=16; ng.ng_GadgetText=(STRPTR)"Unit";
-    ng.ng_Flags=PLACETEXT_LEFT; ng.ng_GadgetID=1;
-    field=last=CreateGadget(STRING_KIND,last,&ng,GTST_String,(ULONG)initial,
-                          GTST_MaxChars,10UL,TAG_DONE);
-    if(!last)goto out;
-    ng.ng_Flags=0;ng.ng_TopEdge+=24;ng.ng_LeftEdge=12;ng.ng_Width=100;
-    ng.ng_GadgetText=(STRPTR)"Use unit";ng.ng_GadgetID=2;
-    last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
-    if(!last)goto out;
-    ng.ng_LeftEdge=202;ng.ng_GadgetText=(STRPTR)"Cancel";ng.ng_GadgetID=3;
-    last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
-    if(!last)goto out;
-    AddGList(window,gadgets,(ULONG)-1,-1,NULL);
-    RefreshGList(gadgets,window,NULL,-1);
-    GT_RefreshWindow(window,NULL);
-    ActivateGadget(field,window,NULL);
-    while(!done) {
-        struct IntuiMessage *msg;
-        WaitPort(window->UserPort);
-        while(!done && (msg=GT_GetIMsg(window->UserPort))!=NULL) {
-            ULONG cls=msg->Class;
-            UWORD id=cls==IDCMP_GADGETUP && msg->IAddress?
-                    ((struct Gadget *)msg->IAddress)->GadgetID:0;
-            if(cls==IDCMP_REFRESHWINDOW) {
-                GT_BeginRefresh(window);GT_EndRefresh(window,TRUE);
-            }
-            GT_ReplyIMsg(msg);
-            if(cls==IDCMP_CLOSEWINDOW || id==3)done=1;
-            else if(id==1 || id==2) {
-                const struct StringInfo *info=(const struct StringInfo *)field->SpecialInfo;
-                const char *tail;
-                snprintf(path,sizeof(path),"scsi.device / Unit %.10s",(const char *)info->Buffer);
-                tail=dolly_amiga_parse_unit(path,driver,sizeof(driver),unit);
-                if(tail && !*tail)done=accepted=1;
-                else DisplayBeep(p->screen);
-            }
-        }
+static int read_unit_field(const DollyEndpointPicker *p,ULONG *unit) {
+    const struct StringInfo *info;
+    const char *digit;
+    ULONG number=0;
+    if(!p->unit_text || !p->has_device)return 0;
+    info=(const struct StringInfo *)p->unit_text->SpecialInfo;
+    digit=(const char *)info->Buffer;
+    if(!*digit)return 0;
+    for(;*digit>='0' && *digit<='9';++digit) {
+        ULONG value=(ULONG)(*digit-'0');
+        if(number>(0xfffffffful-value)/10ul)return 0;
+        number=10ul*number+value;
     }
-out:
-    if(window)CloseWindow(window);
-    if(gadgets)FreeGadgets(gadgets);
-    FreeVisualInfo(visual);
-    return accepted;
+    if(*digit)return 0;
+    *unit=number;
+    return 1;
 }
 
 static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
@@ -410,84 +362,69 @@ static void capture_file_text(DollyEndpointPicker *p) {
     if(!dolly_endpoint_set_file(&p->pending_file,(const char *)info->Buffer))
         dolly_endpoint_clear(&p->pending_file);
 }
-/* Preview is provisional: the parent selection only changes after
- * Use selection. Show the current hierarchy as the user moves through
- * Device -> Unit -> Partition.
- */
-static void update_selection_preview(DollyEndpointPicker *p) {
-    char full[160];
-    ULONG length;
-    const char *dev=(p->has_device && p->device<p->device_count) ?
-        p->physical_names[p->device] : NULL;
-    const char *unit=(p->has_unit && p->unit<p->unit_count) ?
-        p->unit_names[p->unit] : NULL;
-    if(p->mode==DOLLY_MODE_LOGICAL) {
-        if(p->has_logical && p->logical<p->logical_count)
-            strcpy(full,p->dos_devices.names[p->logical]);
-        else if(!p->dos_devices.available)
-            strcpy(full,"AmigaDOS device list unavailable.");
-        else if(!p->logical_count)
-            strcpy(full,"No AmigaDOS devices found.");
-        else if(p->dos_devices.truncated)
-            strcpy(full,"Select device... (list limited to first 24)");
-        else strcpy(full,"Select logical device...");
-    } else if(!p->has_device) {
-        strcpy(full,"Select device...");
-    } else if(!p->has_unit) {
-        sprintf(full,"%s / select unit...",dev);
-    } else if(p->mode==DOLLY_MODE_PARTITION) {
-        if(p->has_partition && p->partition<p->partition_count)
-            sprintf(full,"%s / %s / %s",dev,unit,
-                    p->partition_map.parts[p->partition].label);
-        else if(p->partition_scanned && p->partition_count)
-            sprintf(full,"%s / %s / select partition...",dev,unit);
-        else if(p->query_attempted)
-            sprintf(full,"%s / %s / %s",dev,unit,
-                    p->partition_map.status);
-        else sprintf(full,"%s / %s / press Query",dev,unit);
-    } else {
-        sprintf(full,"%s / %s (whole unit)",dev,unit);
-    }
-    strncpy(p->selection_display,full,sizeof(p->selection_display)-1u);
-    p->selection_display[sizeof(p->selection_display)-1u]='\0';
-    if(!p->window)return;
-    length=(ULONG)strlen(p->selection_display);
-    while(length>3u &&
-          (LONG)TextLength(p->window->RPort,
-               (STRPTR)p->selection_display,length)>
-               (LONG)picker_geometry(p).value_w-
-               ((p->mode==DOLLY_MODE_PHYSICAL ||
-                 p->mode==DOLLY_MODE_PARTITION)?picker_geometry(p).query_w+20:16))
-        p->selection_display[--length]='\0';
-    if(length<(ULONG)strlen(full) && length>=3u) {
-        p->selection_display[length-3u]='.';
-        p->selection_display[length-2u]='.';
-        p->selection_display[length-1u]='.';
-    }
+static int physical_mode(const DollyEndpointPicker *p) {
+    return p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION;
 }
-static struct Gadget *selection_text(struct Gadget *last,
-                                     DollyEndpointPicker *p) {
-    struct NewGadget ng;
+static void update_selection_preview(DollyEndpointPicker *p) {
+    const char *name="";
+    if(p->mode==DOLLY_MODE_LOGICAL &&
+       p->has_logical && p->logical<p->logical_count)
+        name=p->dos_devices.names[p->logical];
+    if(physical_mode(p) && p->has_device && p->device<p->device_count)
+        name=p->physical_names[p->device];
+    strcpy(p->selection_display,name);
+    p->unit_display[0]='\0';
+    if(physical_choice(p))
+        snprintf(p->unit_display,sizeof(p->unit_display),"%lu",
+                 (unsigned long)p->physical_units[p->unit]);
+}
+static struct Gadget *selection_text(struct Gadget *last,DollyEndpointPicker *p,
+                                     int unit) {
+    struct NewGadget ng={0};
     PickerGeometry g=picker_geometry(p);
-    memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.preview_y;
-    ng.ng_Width=(WORD)(g.value_w-
-                 (p->mode==DOLLY_MODE_PHYSICAL ||
-                  p->mode==DOLLY_MODE_PARTITION ? g.query_w+4:0));
+    ng.ng_LeftEdge=unit?g.unit_x:g.value_x;
+    ng.ng_TopEdge=g.preview_y;
+    ng.ng_Width=unit?g.unit_w:
+                physical_mode(p)?g.unit_label_x-g.value_x-6:g.value_w;
     ng.ng_Height=16;
-    ng.ng_GadgetID=PICK_SELECTION_TEXT;
-    ng.ng_GadgetText=(STRPTR)"";
+    ng.ng_GadgetID=unit?PICK_UNIT_TEXT:PICK_SELECTION_TEXT;
+    if(unit)
+        return CreateGadget(STRING_KIND,last,&ng,
+                            GTST_String,(ULONG)p->unit_display,GTST_MaxChars,10UL,
+                            GA_Disabled,(ULONG)!p->has_device,TAG_DONE);
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->selection_display,
-                        GTTX_Border,TRUE,TAG_DONE);
+                        GTTX_Border,TRUE,GTTX_Clipped,TRUE,TAG_DONE);
+}
+static struct Gadget *partition_number(struct Gadget *last,DollyEndpointPicker *p) {
+    struct NewGadget ng={0};
+    PickerGeometry g=picker_geometry(p);
+    ng.ng_VisualInfo=p->visual;
+    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=g.value_x;
+    ng.ng_TopEdge=g.partition_info_y;
+    ng.ng_Width=g.partition_w;
+    ng.ng_Height=16;
+    ng.ng_GadgetID=PICK_PARTITION_NUMBER;
+    return CreateGadget(INTEGER_KIND,last,&ng,
+                        GTIN_Number,p->has_partition?(ULONG)p->partition+1:0UL,
+                        GTIN_MaxChars,2UL,
+                        GA_Disabled,(ULONG)!p->partition_count,TAG_DONE);
 }
 static void refresh_selection_preview(DollyEndpointPicker *p) {
     update_selection_preview(p);
-    if(p->selection_text && p->window)
+    if(p->selection_text)
         GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->selection_display,TAG_DONE);
+    if(p->unit_text)
+        GT_SetGadgetAttrs(p->unit_text,p->window,NULL,
+                          GTST_String,(ULONG)p->unit_display,TAG_DONE);
+    if(p->partition_number)
+        GT_SetGadgetAttrs(p->partition_number,p->window,NULL,
+                          GTIN_Number,p->has_partition?(ULONG)p->partition+1:0UL,
+                          GA_Disabled,(ULONG)!p->partition_count,TAG_DONE);
 }
 /* DOS and Exec supply candidates. A unit still needs verification. Only explicit Query opens the driver and probes
  * device geometry. A vendor name alone is not a verified disk size.
@@ -600,7 +537,7 @@ static void update_partition_details(DollyEndpointPicker *p) {
     while(n>3u &&
           (LONG)TextLength(p->window->RPort,
                            (STRPTR)p->partition_info_display,n)>
-          (LONG)picker_geometry(p).value_w-16)
+          (LONG)picker_geometry(p).value_w-picker_geometry(p).partition_w-22)
         p->partition_info_display[--n]='\0';
     if(n<(ULONG)strlen(text) && n>=3u) {
         p->partition_info_display[n-3u]='.';
@@ -615,9 +552,9 @@ static struct Gadget *partition_info_text(struct Gadget *last,
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=g.value_x;
+    ng.ng_LeftEdge=g.value_x+g.partition_w+6;
     ng.ng_TopEdge=g.partition_info_y;
-    ng.ng_Width=g.value_w;
+    ng.ng_Width=g.value_w-g.partition_w-6;
     ng.ng_Height=16;
     ng.ng_GadgetID=PICK_PARTITION_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
@@ -798,10 +735,11 @@ static void captions(DollyEndpointPicker *p) {
         }
     } else {
         Move(rp,g.left,(LONG)g.preview_y+12);
-        if(p->mode==DOLLY_MODE_PARTITION)
-            Text(rp,(STRPTR)"Selected partition",18);
-        else
-            Text(rp,(STRPTR)"Selected device",15);
+        Text(rp,(STRPTR)"Selected device",15);
+        if(physical_mode(p)) {
+            Move(rp,g.unit_label_x,(LONG)g.preview_y+12);
+            Text(rp,(STRPTR)"Unit",4);
+        }
         if(p->mode==DOLLY_MODE_PHYSICAL ||
            p->mode==DOLLY_MODE_PARTITION) {
             Move(rp,g.left,(LONG)g.disk_info_y+12);
@@ -815,7 +753,7 @@ static void captions(DollyEndpointPicker *p) {
         }
         if(p->mode==DOLLY_MODE_PARTITION) {
             Move(rp,g.left,(LONG)g.partition_info_y+12);
-            Text(rp,(STRPTR)"Partition info",14);
+            Text(rp,(STRPTR)"Partition",9);
         }
     }
     if(info)FreeScreenDrawInfo(p->screen,info);
@@ -825,14 +763,14 @@ static void change_enabled(DollyEndpointPicker *p) {
     if(p->unit_list)
         GT_SetGadgetAttrs(p->unit_list,p->window,NULL,
                           GA_Disabled,(ULONG)!p->has_device ||
-                                      (!p->unit_count && !selected_scsi(p)),TAG_DONE);
+                                      !p->unit_count,TAG_DONE);
     if(p->partition_list)
         GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                           GA_Disabled,(ULONG)!p->partition_count,
                           TAG_DONE);
     if(p->query_button)
         GT_SetGadgetAttrs(p->query_button,p->window,NULL,
-                          GA_Disabled,(ULONG)!physical_choice(p),
+                          GA_Disabled,(ULONG)!p->has_device,
                           TAG_DONE);
     if(p->choose_button) {
         int ready=(p->mode==DOLLY_MODE_PHYSICAL &&
@@ -842,8 +780,7 @@ static void change_enabled(DollyEndpointPicker *p) {
                   (p->mode==DOLLY_MODE_PARTITION &&
                    physical_choice(p) && p->queried &&
                    p->media_geometry.capacity_valid &&
-                   p->partition_scanned && p->has_partition &&
-                   p->partition<p->partition_count) ||
+                   p->partition_scanned && p->partition_count) ||
                   p->mode==DOLLY_MODE_FILE;
         GT_SetGadgetAttrs(p->choose_button,p->window,NULL,
                           GA_Disabled,(ULONG)!ready,TAG_DONE);
@@ -894,7 +831,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->partition_list=NULL;p->logical_list=NULL;
     p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
     p->format_cycle=NULL;p->file_info=NULL;
-    p->selection_text=NULL;
+    p->selection_text=NULL;p->unit_text=NULL;p->partition_number=NULL;
     p->disk_info_text=NULL;
     p->disk_size_text=NULL;
     p->query_button=NULL;
@@ -915,7 +852,7 @@ static int rebuild(DollyEndpointPicker *p) {
         p->device_list=last;
         column_geometry(p,columns,1u,&x,&w);
         last=list(last,p,PICK_UNIT,x,g.list_y,w,&p->units,
-                  !p->has_device || (!p->unit_count && !selected_scsi(p)));
+                  !p->has_device || !p->unit_count);
         if(!last)return 0;
         p->unit_list=last;
         if(columns==3u) {
@@ -934,14 +871,16 @@ static int rebuild(DollyEndpointPicker *p) {
         p->logical_list=last;
     }
     if(p->mode!=DOLLY_MODE_FILE) {
-        last=selection_text(last,p);
+        last=selection_text(last,p,0);
         if(!last)return 0;
         p->selection_text=last;
-        if(p->mode==DOLLY_MODE_PHYSICAL ||
-           p->mode==DOLLY_MODE_PARTITION) {
+        if(physical_mode(p)) {
+            last=selection_text(last,p,1);
+            if(!last)return 0;
+            p->unit_text=last;
             last=button(last,p,PICK_QUERY,
                         (WORD)(g.right-g.query_w),g.preview_y,
-                        g.query_w,"Query",!physical_choice(p));
+                        g.query_w,"Query",!p->has_device);
             if(!last)return 0;
             p->query_button=last;
         }
@@ -961,6 +900,9 @@ static int rebuild(DollyEndpointPicker *p) {
         p->geometry_info_text=last;
     }
     if(p->mode==DOLLY_MODE_PARTITION) {
+        last=partition_number(last,p);
+        if(!last)return 0;
+        p->partition_number=last;
         last=partition_info_text(last,p);
         if(!last)return 0;
         p->partition_info_text=last;
@@ -1057,7 +999,7 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     sync_mode_index(p);
     dolly_physical_catalog_snapshot(&p->physical_catalog);
     populate_devices(p);
-    populate_units(p);
+    populate_units(p,1);
     (void)populate_partitions(p);
     dolly_amiga_discover_dos_devices(&p->dos_devices);
     p->logical_count=p->dos_devices.count;
@@ -1071,11 +1013,9 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
             for(d=0;d<p->device_count;++d) {
                 if(strcasecmp(driver,p->physical_names[d]))continue;
                 p->device=d;p->has_device=1;
-                if(selected_scsi(p)) {
-                    p->manual_unit=actual;
-                    p->has_manual_unit=1;
-                }
-                populate_units(p);
+                p->manual_unit=actual;
+                p->has_manual_unit=1;
+                populate_units(p,1);
                 for(u=0;u<p->unit_count;++u)
                     if(p->physical_units[u]==actual) {
                         p->unit=u;p->has_unit=1;
@@ -1132,8 +1072,39 @@ void dolly_picker_close(DollyEndpointPicker *p) {
  * changed/result deliberately survive dolly_picker_close(), so the
  * main event loop can copy the endpoint after the chooser disappears.
  */
+static int capture_partition_number(DollyEndpointPicker *p) {
+    const struct StringInfo *info;
+    const char *digit;
+    unsigned number=0;
+    if(!p->partition_number || !p->partition_scanned || !p->partition_count)
+        return 0;
+    info=(const struct StringInfo *)p->partition_number->SpecialInfo;
+    digit=(const char *)info->Buffer;
+    for(;*digit>='0' && *digit<='9';++digit)
+        number=number*10u+(unsigned)(*digit-'0');
+    if(*digit || number==0 || number>p->partition_count) {
+        DisplayBeep(p->screen);
+        return 0;
+    }
+    p->partition=number-1u;
+    p->has_partition=1;
+    GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
+                      GTLV_Selected,(ULONG)p->partition,
+                      GTLV_MakeVisible,(ULONG)p->partition,TAG_DONE);
+    refresh_partition_details(p);
+    return 1;
+}
 static int commit_picker(DollyEndpointPicker *p) {
     int ok=0;
+    if(physical_mode(p)) {
+        ULONG unit;
+        if(!physical_choice(p) || !read_unit_field(p,&unit) ||
+           unit!=p->physical_units[p->unit]) {
+            DisplayBeep(p->screen);
+            return 0;
+        }
+    }
+    if(p->mode==DOLLY_MODE_PARTITION && !capture_partition_number(p))return 0;
     if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p) &&
        p->queried && p->media_geometry.capacity_valid) {
         ok=dolly_endpoint_set_unit(&p->result,p->device,p->unit);
@@ -1187,6 +1158,38 @@ static void release_picker_gadgets(DollyEndpointPicker *p) {
     p->file_text=NULL;
     p->gadgets_detached=1;
 }
+static void query_picker_unit(DollyEndpointPicker *p) {
+    p->query_attempted=1;
+    p->queried=(unsigned char)dolly_amiga_device_query(
+          p->physical_names[p->device],
+          p->physical_units[p->unit],
+          p->disk_info_display,sizeof(p->disk_info_display),
+          p->disk_size_display,sizeof(p->disk_size_display),
+          &p->media_geometry,0);
+    if(p->mode!=DOLLY_MODE_PARTITION)return;
+    p->has_partition=0;
+    p->partition_scanned=0;
+    p->partition_count=0;
+    if(p->queried && p->media_geometry.capacity_valid) {
+        p->partition_scanned=(unsigned char)
+            dolly_amiga_partition_scan(
+                p->physical_names[p->device],
+                p->physical_units[p->unit],
+                &p->media_geometry,
+                &p->partition_map);
+        if(p->partition_scanned)
+            p->partition_count=p->partition_map.count;
+    } else {
+        strcpy(p->partition_map.status,
+               "Capacity unavailable; no partition scan");
+    }
+    if(!populate_partitions(p)) {
+        p->partition_count=0;
+        p->partition_scanned=0;
+        strcpy(p->partition_map.status,"Too many partitions");
+        (void)populate_partitions(p);
+    }
+}
 /* Rebuild ONLY after draining and replying to all GadTools messages.
  * V39 GTLV_ShowSelected makes list gadgets retain extra selection state;
  * destroying/relinking an active LISTVIEW during its GADGETUP handler
@@ -1194,7 +1197,7 @@ static void release_picker_gadgets(DollyEndpointPicker *p) {
  */
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
-    /* 1 mode, 2 device, 3 unit, 4 partition Query, 5 manual unit. */
+    /* 1 mode, 2 device, 3 unit, 4 Query, 5 manual unit, 6 manual unit + Query. */
     unsigned deferred=0;
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
@@ -1235,22 +1238,14 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             capture_file_text(p);
             p->mode_index=code;
             p->mode=p->allowed_mode_ids[code];
-            p->has_device=0;p->has_unit=0;
+            p->has_device=0;p->has_unit=0;p->has_manual_unit=0;
             p->has_partition=0;p->has_logical=0;
             deferred=1;
         } else if(id==PICK_DEVICE && (unsigned)code<p->device_count) {
+            if(!p->has_device || p->device!=code)p->has_manual_unit=0;
             p->device=code;p->has_device=1;
             p->has_unit=0;p->has_partition=0;
             deferred=2;
-        } else if(id==PICK_UNIT && (unsigned)code==p->unit_count &&
-                  selected_scsi(p)) {
-            ULONG unit;
-            if(choose_manual_unit(p,&unit)) {
-                p->manual_unit=unit;
-                p->has_manual_unit=1;
-                deferred=5;
-            } else GT_SetGadgetAttrs(p->unit_list,p->window,NULL,
-                       GTLV_Selected,p->has_unit?(ULONG)p->unit:~0UL,TAG_DONE);
         } else if(id==PICK_UNIT &&
                   (unsigned)code<p->unit_count && p->has_device) {
             p->unit=code;p->has_unit=1;
@@ -1267,24 +1262,16 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);
-        } else if(id==PICK_QUERY &&
-                  (p->mode==DOLLY_MODE_PHYSICAL ||
-                   p->mode==DOLLY_MODE_PARTITION) &&
-                  physical_choice(p)) {
-            if(p->mode==DOLLY_MODE_PARTITION) {
-                /* Partition Query will change LISTVIEW labels: defer. */
-                deferred=4;
-            } else {
-                p->query_attempted=1;
-                p->queried=(unsigned char)dolly_amiga_device_query(
-                      p->physical_names[p->device],
-                      p->physical_units[p->unit],
-                      p->disk_info_display,sizeof(p->disk_info_display),
-                      p->disk_size_display,sizeof(p->disk_size_display),
-                      &p->media_geometry,0);
-                refresh_disk_info(p);
-                change_enabled(p);
-            }
+        } else if((id==PICK_QUERY || id==PICK_UNIT_TEXT) && physical_mode(p)) {
+            ULONG unit;
+            if(!read_unit_field(p,&unit))DisplayBeep(p->screen);
+            else if(!physical_choice(p) || unit!=p->physical_units[p->unit]) {
+                p->manual_unit=unit;
+                p->has_manual_unit=1;
+                deferred=id==PICK_QUERY?6:5;
+            } else if(id==PICK_QUERY)deferred=4;
+        } else if(id==PICK_PARTITION_NUMBER) {
+            (void)capture_partition_number(p);
         } else if(id==PICK_SELECT) {
             close=commit_picker(p);
         } else if(id==PICK_IMAGE_FORMAT && p->role && code<=DOLLY_IMAGE_IFF_COMPACT) {
@@ -1318,43 +1305,10 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
          * point. Detach BEFORE changing list nodes and label buffers.
          */
         if(deferred==4) {
-            /* GadTools requires detaching the LABELS themselves before
-             * changing List/Node/ln_Name. No RemoveGList/FreeGadgets or
-             * CreateGadget is needed after a Query. Keeping the current
-             * LISTVIEW_KIND intact also preserves V39 selection state.
-             */
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Labels,(ULONG)~0ul,TAG_DONE);
-            p->query_attempted=1;
-            p->queried=(unsigned char)dolly_amiga_device_query(
-                  p->physical_names[p->device],
-                  p->physical_units[p->unit],
-                  p->disk_info_display,sizeof(p->disk_info_display),
-                  p->disk_size_display,sizeof(p->disk_size_display),
-                  &p->media_geometry,0);
-            p->has_partition=0;
-            p->partition_scanned=0;
-            p->partition_count=0;
-            if(p->queried && p->media_geometry.capacity_valid) {
-                p->partition_scanned=(unsigned char)
-                    dolly_amiga_partition_scan(
-                        p->physical_names[p->device],
-                        p->physical_units[p->unit],
-                        &p->media_geometry,
-                        &p->partition_map);
-                if(p->partition_scanned)
-                    p->partition_count=p->partition_map.count;
-            } else {
-                strcpy(p->partition_map.status,
-                       "Capacity unavailable; no partition scan");
-            }
-            if(!populate_partitions(p)) {
-                p->partition_count=0;
-                p->partition_scanned=0;
-                strcpy(p->partition_map.status,"Too many partitions");
-                (void)populate_partitions(p);
-            }
+            query_picker_unit(p);
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Labels,(ULONG)&p->partition_lists[p->partition_bank],
@@ -1368,18 +1322,19 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         release_picker_gadgets(p);
         if(deferred==1 || deferred==2) {
             invalidate_query(p);
-            populate_units(p);
+            populate_units(p,1);
         } else if(deferred==3) {
             invalidate_query(p);
-        } else if(deferred==5) {
+        } else if(deferred==5 || deferred==6) {
             unsigned i;
             invalidate_query(p);
-            populate_units(p);
+            populate_units(p,0);
             for(i=0;i<p->unit_count;++i)
                 if(p->physical_units[i]==p->manual_unit) {
                     p->unit=i;p->has_unit=1;
                     break;
                 }
+            if(deferred==6)query_picker_unit(p);
         }
         if(!rebuild(p))
             dolly_picker_close(p);

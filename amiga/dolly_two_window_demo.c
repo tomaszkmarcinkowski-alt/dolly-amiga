@@ -695,22 +695,22 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         if(!last)return 0;
         v->description=last;
         three_width=(d->right-d->left+1-2*three_gap)/3;
-        last=make_button(last,v,MAIN_SHOW_ID,d->left,d->controls_y,
+        last=make_button(last,v,MAIN_SHOW_ID,d->left,d->controls_y+19,
                          three_width,"Sheep Counter");
         if(!last)return 0;
         v->show=last;
         last=make_button(last,v,MAIN_SETTINGS_ID,
-                         d->left+three_width+three_gap,d->controls_y,
+                         d->left+three_width+three_gap,d->controls_y+19,
                          three_width,"Settings");
         if(!last)return 0;
         v->settings=last;
         last=make_button(last,v,MAIN_PLACEHOLDER_ID,
-                         d->left+2*(three_width+three_gap),d->controls_y,
+                         d->left+2*(three_width+three_gap),d->controls_y+19,
                          three_width,"");
         if(!last)return 0;
         v->placeholder=last;
         last=make_button(last,v,MAIN_START_ID,d->left,
-                         d->controls_y+19,d->right-d->left+1,action_label(1));
+                         d->controls_y,d->right-d->left+1,action_label(1));
         if(!last)return 0;
         v->start=last;
         last=make_text(last,v,MAIN_COUNT_ID,d->progress_x,d->main_count_y,

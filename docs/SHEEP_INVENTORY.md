@@ -153,16 +153,22 @@ it under the selected name after the temporary `.part` file has been
 written and closed. An existing destination is refused. Partition data
 and a restore workflow are outside the scope of this export.
 
+The **Backup RDB** button stays visible and disabled when no valid RDB
+backup range is available, including on a disk without an RDB.
+
 For a supported primary MBR on a queried 512-byte device, **Backup MBR**
 uses the same ASL save flow. It exports the full LBA 0, including boot
 code, the primary partition entries and the MBR signature. Export is
 disabled for layouts with extended or nested RDB containers. Protective
-MBR (GPT) and hybrid layouts remain unsupported. The matching
-**Restore RDB** button is always enabled. Restore MBR is pending.
-Restore RDB requires a ROM driver, 512-byte sectors, a 16–128-sector
+MBR (GPT) and hybrid layouts remain unsupported. Restore MBR is pending.
+
+**Restore RDB** is always enabled and opens the destructive-operation
+requester before checking target eligibility. Writing requires a ROM
+scsi.device driver, 512-byte sectors, a 16–128-sector
 reserved prefix, and a target with no AmigaDOS registration and no
 other observed opens. The original and replacement must have the
-same RDB geometry, metadata locations and partition extents. The
+same RDB geometry, metadata locations, partition extents and DosTypes.
+Both snapshots must be free of a populated MBR at LBA 0. The
 first implementation accepts changes to the validated RDSK/PART
 records only, so filesystem driver segments and other sectors must
 match. It is intended for compatible metadata recovery, including
@@ -172,6 +178,7 @@ Select a backup and a separate path for the mandatory recovery copy.
 The shared Proceed/Cancel requester delays approval for ten seconds.
 Dolly saves the current metadata, rereads the original reserved area
 and aborts if it changed, then writes and reads back changed sectors.
+It also verifies the complete reserved area after the write sequence.
 The RDSK header, when changed, is verified last. This is a sequence
 of writes. If a failure leaves a partially updated or invalid RDB,
 keep the recovery file and use an independent recovery environment.

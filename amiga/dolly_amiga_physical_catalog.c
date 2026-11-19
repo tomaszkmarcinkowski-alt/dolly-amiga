@@ -2,6 +2,7 @@
 #include <exec/memory.h>
 #include <exec/execbase.h>
 #include <exec/resident.h>
+#include <devices/trackdisk.h>
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <dos/filehandler.h>
@@ -44,28 +45,66 @@ static int driver_name(char *out,BPTR b) {
     }
     return strcmp(out,"trackdisk.device")!=0;
 }
-static void add_scsi_candidate(DollyPhysicalCatalog *out) {
-    const struct Resident *resident;
+static int storage_driver_name(const char *name) {
+    static const char *const hints[]={"scsi","ide","ata","disk","uaehf"};
+    size_t n;
     unsigned i;
-    int present;
-    for(i=0;i<out->count;++i)
-        if(out->entries[i].unit==0 &&
-           strcasecmp(out->entries[i].driver,"scsi.device")==0)return;
-    resident=FindResident((STRPTR)"scsi.device");
-    present=resident && resident->rt_Type==NT_DEVICE;
-    if(!present) {
-        Forbid();
-        present=FindName(&SysBase->DeviceList,(STRPTR)"scsi.device")!=NULL;
-        Permit();
+    if(!name || !strcasecmp(name,"trackdisk.device"))return 0;
+    n=strlen(name);
+    if(n<8 || n>=DOLLY_PHYS_DRIVER_LEN || strcasecmp(name+n-7,".device"))
+        return 0;
+    /* Exec device nodes carry no generic block-device classification.
+     * DOS-registered disk drivers are collected separately. */
+    for(i=0;i<sizeof(hints)/sizeof(hints[0]);++i) {
+        const char *p;
+        size_t length=strlen(hints[i]);
+        for(p=name;*p;++p)
+            if(!strncasecmp(p,hints[i],length))return 1;
     }
-    if(!present)return;
+    return 0;
+}
+static void add_driver(DollyPhysicalCatalog *out,const char *name) {
+    unsigned i;
+    for(i=0;i<out->count;++i)
+        if(!strcasecmp(out->entries[i].driver,name))return;
     if(out->count==DOLLY_PHYS_MAX) {
         out->truncated=1;
         return;
     }
-    strcpy(out->entries[out->count].driver,"scsi.device");
-    out->entries[out->count++].unit=0;
+    strcpy(out->entries[out->count].driver,name);
+    ++out->count;
     out->available=1;
+}
+static void add_exec_candidates(DollyPhysicalCatalog *out) {
+    const struct Resident *resident;
+    const struct Node *node;
+    resident=FindResident((STRPTR)"scsi.device");
+    if(resident && resident->rt_Type==NT_DEVICE)add_driver(out,"scsi.device");
+    resident=FindResident((STRPTR)"uaehf.device");
+    if(resident && resident->rt_Type==NT_DEVICE)add_driver(out,"uaehf.device");
+    Forbid();
+    for(node=SysBase->DeviceList.lh_Head;node->ln_Succ;node=node->ln_Succ)
+        if(storage_driver_name(node->ln_Name))add_driver(out,node->ln_Name);
+    Permit();
+}
+
+unsigned dolly_physical_probe_units(const char *driver,ULONG units[DOLLY_UNIT_PROBE_COUNT]) {
+    struct MsgPort *port=CreateMsgPort();
+    struct IORequest *io;
+    ULONG unit;
+    unsigned count=0;
+    if(!port)return 0;
+    for(unit=0;unit<DOLLY_UNIT_PROBE_COUNT;++unit) {
+        io=CreateIORequest(port,sizeof(struct IOExtTD));
+        if(!io)break;
+        if(OpenDevice((STRPTR)driver,unit,io,0)==0) {
+            CloseDevice(io);
+            units[count++]=unit;
+        }
+        DeleteIORequest(io);
+    }
+    DeleteMsgPort(port);
+    return count;
 }
 void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
     const ULONG flags=LDF_DEVICES|LDF_READ;
@@ -75,7 +114,7 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
     if(!DOSBase)return;
     entry=LockDosList(flags);
     if(!entry) {
-        add_scsi_candidate(out);
+        add_exec_candidates(out);
         return;
     }
     out->available=1;
@@ -96,6 +135,7 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
             continue;
         if(!driver_name(found.driver,f->fssm_Device))continue;
         found.unit=f->fssm_Unit;
+        found.unit_registered=1;
         for(i=0;i<out->count;++i)
             if(out->entries[i].unit==found.unit &&
                strcmp(out->entries[i].driver,found.driver)==0)break;
@@ -105,7 +145,7 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
         else out->truncated=1;
     }
     UnLockDosList(flags);
-    add_scsi_candidate(out);
+    add_exec_candidates(out);
 }
 static int startup_extent(const struct DosList *entry,DollyPhysicalEntry *device,
                           uint64_t *start,uint64_t *length,ULONG *sector_bytes,

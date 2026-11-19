@@ -333,6 +333,12 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out,int inventory) {
     }
     return out->count>0;
 }
+static int has_mbr_entries(const UBYTE *sector) {
+    return sector[510]==0x55u && sector[511]==0xaau &&
+           (sector[450]!=0 || sector[466]!=0 ||
+            sector[482]!=0 || sector[498]!=0);
+}
+
 static int scan_device(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionMap *out,
           DollyNativePartitionFormat expected,BPTR backup_file,int inventory) {
@@ -369,9 +375,7 @@ static int scan_device(const char *driver,ULONG unit,
          */
         if(!load_sector(&r,0ul)) {
             strcpy(out->status,"Cannot verify RDB/MBR coexistence");
-        } else if(r.buffer[510]==0x55u && r.buffer[511]==0xaau &&
-                  (r.buffer[450]!=0 || r.buffer[466]!=0 ||
-                   r.buffer[482]!=0 || r.buffer[498]!=0)) {
+        } else if(has_mbr_entries(r.buffer)) {
             strcpy(out->status,"Hybrid RDB/MBR unsupported");
         } else ok=1;
     } else if(rs==0)ok=scan_mbr(&r,out,inventory);
@@ -435,13 +439,22 @@ static int restore_maps_match(const DollyNativePartitionMap *old,
     for(i=0;i<old->count;++i)
         if(old->parts[i].descriptor_block!=replacement->parts[i].descriptor_block ||
            old->parts[i].start_bytes!=replacement->parts[i].start_bytes ||
-           old->parts[i].length_bytes!=replacement->parts[i].length_bytes)return 0;
+           old->parts[i].length_bytes!=replacement->parts[i].length_bytes ||
+           old->parts[i].dos_type_present!=replacement->parts[i].dos_type_present ||
+           old->parts[i].dos_type!=replacement->parts[i].dos_type)return 0;
     return 1;
 }
 
 static int restore_unit_idle(const char *driver,ULONG unit,const struct IOStdReq *io) {
     return dolly_amiga_unit_registered(driver,unit)==0 && io->io_Device &&
            io->io_Device->dd_Library.lib_OpenCnt==1;
+}
+
+static int restore_sector_matches(Reader *reader,ULONG block,const UBYTE *expected) {
+    unsigned i;
+    /* A read that reports success without filling the DMA buffer must fail. */
+    for(i=0;i<BLK;++i)reader->buffer[i]=expected[i]^0xffu;
+    return load_sector(reader,block) && memcmp(reader->buffer,expected,BLK)==0;
 }
 
 const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
@@ -459,7 +472,8 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     int opened=0,changed=0;
     char unit_name[112],size_text[48],warning[160];
     const char *failure="Restore RDB requires an offline ROM scsi.device unit with 512 B sectors.";
-    if(!parent || !backup || !save_recovery || !geometry->capacity_valid ||
+    if(!parent || !driver || !geometry || !backup || !save_recovery ||
+       !geometry->capacity_valid ||
        geometry->block_bytes!=BLK || blocks<16 || blocks>DOLLY_RDB_RESTORE_MAX_BLOCKS ||
        blocks>geometry->block_count || strcmp(driver,"scsi.device")!=0 ||
        dolly_amiga_unit_registered(driver,unit)!=0 ||
@@ -491,12 +505,14 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
         if(!load_sector(&reader,i))goto out;
         memcpy(previous+i*BLK,reader.buffer,BLK);
     }
+    failure="Restore RDB cannot be used with a hybrid RDB/MBR.";
+    if(has_mbr_entries(previous) || has_mbr_entries(bytes))goto out;
     reader.snapshot_bytes=size;
     reader.snapshot=previous;
     failure="Current RDB is invalid or exceeds the backup area.";
     if(scan_rdb(&reader,old,0,16)!=1 || old->rdb_backup_blocks!=blocks)goto out;
     reader.snapshot=bytes;
-    failure="Backup RDB is invalid or partition extents differ.";
+    failure="Backup RDB is invalid, or partition extents or DosTypes differ.";
     if(scan_rdb(&reader,replacement,0,16)!=1 || !restore_maps_match(old,replacement))goto out;
     failure="Only existing RDSK/PART metadata may change in this build.";
     for(i=0;i<blocks;++i) {
@@ -532,7 +548,7 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     failure="Target changed or became busy. Restore stopped before writing.";
     if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
     for(i=0;i<blocks;++i)
-        if(!load_sector(&reader,i) || memcmp(reader.buffer,previous+i*BLK,BLK))goto out;
+        if(!restore_sector_matches(&reader,i,previous+i*BLK))goto out;
     if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
     /* Qualify UPDATE before the first modification. Readback is mandatory. */
     request->iotd_Req.io_Command=CMD_UPDATE;
@@ -546,17 +562,21 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     if(DoIO((struct IORequest *)request) || request->iotd_Req.io_Error)goto out;
     target=(DollyAmigaWriteTarget){&request->iotd_Req,reader.buffer,BLK,
         reader.total_bytes,0,size,BLK,BLK,0x00fffffe,2};
-    failure="RDB write or verification failed. Use the recovery copy.";
     for(pass=0;pass<2;++pass)
         for(i=0;i<blocks;++i) {
             if((pass==1)!=(i==header) || !memcmp(previous+i*BLK,bytes+i*BLK,BLK))
                 continue;
-            if(!restore_unit_idle(driver,unit,&request->iotd_Req) ||
-               dolly_amiga_write_batch(&target,(uint64_t)i*BLK,bytes+i*BLK,BLK,1)
+            failure="Target became busy during Restore RDB. Restore stopped.\n"
+                    "The RDB may be partially updated. Keep the recovery copy.";
+            if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+            failure="RDB write or verification failed. The RDB may be partially updated.\n"
+                    "Use the recovery copy from an independent recovery environment.";
+            if(dolly_amiga_write_batch(&target,(uint64_t)i*BLK,bytes+i*BLK,BLK,1)
                     !=DOLLY_WRITE_VERIFIED)goto out;
         }
+    failure="Final RDB verification failed. Keep the recovery copy.";
     for(i=0;i<blocks;++i)
-        if(!load_sector(&reader,i) || memcmp(reader.buffer,bytes+i*BLK,BLK))goto out;
+        if(!restore_sector_matches(&reader,i,bytes+i*BLK))goto out;
 success:
     failure=NULL;
 out:

@@ -432,12 +432,10 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     }
     {
         int mbr=v->map.format==DOLLY_NATIVE_PARTITION_MBR;
-        if(v->map.format!=DOLLY_NATIVE_PARTITION_NONE) {
-            last=create_button(last,v,screen,left,button_top,button_width,
-                               INV_BACKUP_ID,(STRPTR)(mbr?"Backup MBR":"Backup RDB"),
-                               (ULONG)!backup_available(v));
-            if(!last)return 0;
-        }
+        last=create_button(last,v,screen,left,button_top,button_width,
+                           INV_BACKUP_ID,(STRPTR)(mbr?"Backup MBR":"Backup RDB"),
+                           (ULONG)!backup_available(v));
+        if(!last)return 0;
         last=create_button(last,v,screen,(left+right-button_width)/2,
                            button_top,button_width,INV_RESTORE_ID,
                            (STRPTR)"Restore RDB",FALSE);

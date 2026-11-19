@@ -17,13 +17,14 @@ typedef struct DollyEndpointPicker {
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text,*query_button,*partition_info_text;
-    struct Gadget *geometry_info_text;
+    struct Gadget *geometry_info_text,*unit_text,*partition_number;
     struct List devices,units,logical_devices;
     /* Query builds an inactive bank and then swaps the LISTVIEW
      * pointer. Never modify the nodes/strings of its active bank.
      */
     struct List partition_lists[2];
-    struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX+2u];
+    struct Node device_nodes[DOLLY_PHYS_MAX];
+    struct Node unit_nodes[DOLLY_PHYS_MAX+DOLLY_UNIT_PROBE_COUNT+1u];
     struct Node partition_nodes[2][DOLLY_PART_MAX];
     char partition_list_labels[2][DOLLY_PART_MAX][48];
     unsigned partition_bank;
@@ -32,8 +33,10 @@ typedef struct DollyEndpointPicker {
     unsigned partition_count;
     unsigned char partition_scanned;
     char physical_names[DOLLY_PHYS_MAX][DOLLY_PHYS_DRIVER_LEN];
-    char unit_names[DOLLY_PHYS_MAX+2u][20];
-    ULONG physical_units[DOLLY_PHYS_MAX+1u];
+    char unit_names[DOLLY_PHYS_MAX+DOLLY_UNIT_PROBE_COUNT+1u][20];
+    ULONG physical_units[DOLLY_PHYS_MAX+DOLLY_UNIT_PROBE_COUNT+1u];
+    ULONG probed_units[DOLLY_UNIT_PROBE_COUNT];
+    unsigned probed_count;
     ULONG manual_unit;
     int has_manual_unit;
     unsigned device_count,unit_count;
@@ -45,7 +48,8 @@ typedef struct DollyEndpointPicker {
     DollyEndpoint result;
     DollyEndpoint pending_file;
     char file_details[160];
-    char selection_display[160];
+    char selection_display[DOLLY_PHYS_DRIVER_LEN];
+    char unit_display[11];
     char disk_info_display[160];
     char disk_size_display[40];
     char geometry_info_display[96];

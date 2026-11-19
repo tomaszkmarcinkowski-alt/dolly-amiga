@@ -116,19 +116,34 @@ The above documents inform design only; they do not constitute hardware validati
 
 A local reconstructed adapter/mock suite passed GCC, Clang and GCC ASan/UBSan, with short read and I/O-error injection. Native AmigaOS ABI and real device tests remain open.
 
-### Finding scsi.device without a mounted volume
+### Enumerating disk drivers and units
 
-The physical and partition pickers also list Unit 0 as a candidate if
-Exec knows `scsi.device` as a resident or loaded device and the unit
-was absent from the AmigaDOS startup list. This covers the case where
-no volume on the disk has been mounted. Select the driver and unit,
-then use **Query** to confirm that the driver can open the unit and
-report media geometry. The picker performs no automatic media probe.
+The picker combines disk startup tuples from the locked AmigaDOS
+device list with storage driver candidates from Exec. The Exec list
+contains driver names, and AmigaOS has no generic list of their unit
+numbers. For drivers with no DOS startup record, Dolly recognizes the
+standard resident names and looks for storage-related names in the
+loaded Exec list. An unloaded third-party driver is visible only if a
+DOS record references it.
 
-The unit list is sorted by numeric ID. **Other unit…** lets you enter
-any unsigned 32-bit unit number for `scsi.device`, including units
-without a mounted volume or RDB. The number is added to the current
-picker and selected. **Query** explicitly probes only that chosen unit.
+When a driver is selected, Dolly attempts OpenDevice for units 0–9
+and immediately closes successful opens. It merges those units with
+AmigaDOS registrations and sorts the list by numeric ID. The same
+rule applies to each driver and keeps disks without RDB discoverable.
+Dolly does this outside the DOS list lock. No disk I/O commands are
+issued by unit discovery. Query separately checks the selected unit
+and reads capacity and partition metadata as appropriate.
+
+The editable **Unit** field accepts any unsigned 32-bit unit number.
+Press Return to select it, or select **Query** directly. Partition
+mode has an integer **Partition** field. The first entry in the RDB
+PART chain is 1. After Query, selecting an item or entering its
+number updates the partition choice. A zero or a number outside the
+scanned list cannot be committed.
+
+References: [AmigaOS Exec Device I/O](https://wiki.amigaos.net/wiki/Exec_Device_I/O),
+[AmiPart device discovery](https://github.com/ChuckyGang/AmiPart/blob/main/src/devices.c),
+and [WinUAE hardfile driver](https://github.com/tonioni/WinUAE/blob/master/hardfile.cpp).
 
 Settings places the entry legend below the three I/O fields and above
 the checkboxes. The recessed help panel describes the control under
