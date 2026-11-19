@@ -41,7 +41,8 @@ void dolly_amiga_restore_preview(struct Window *parent,const DollyEndpoint *imag
     DollyRestoreAssessment failure={DOLLY_RESTORE_BLOCKED,DOLLY_RESTORE_SIZE_EQUAL,""};
     DollyBlockStatus status;
     const char *problem;
-    if(!dolly_surface_open(&disk,destination,parent,0)) {
+    if(destination->outside_range!=DOLLY_RANGE_STRICT ||
+       !dolly_surface_open(&disk,destination,parent,0)) {
         snprintf(failure.reason,sizeof(failure.reason),"Target: %s",
                  disk.failure?disk.failure:"Cannot read the destination.");
         dolly_amiga_confirm_restore_assessment(parent,&failure);
@@ -85,7 +86,8 @@ void dolly_amiga_copy_preview(struct Window *parent,const DollyEndpoint *source,
         strcpy(reason,"Copy preview currently supports device and partition extents.");
     else if(!dolly_surface_open(&src,source,parent,0))
         snprintf(reason,sizeof(reason),"Source: %s",src.failure?src.failure:"Cannot open source.");
-    else if(!dolly_surface_open(&dst,destination,parent,0))
+    else if(destination->outside_range!=DOLLY_RANGE_STRICT ||
+            !dolly_surface_open(&dst,destination,parent,0))
         snprintf(reason,sizeof(reason),"Destination: %s",dst.failure?dst.failure:"Cannot open destination.");
     else {
         uint64_t a=src.total*src.sector_bytes,b=dst.total*dst.sector_bytes;

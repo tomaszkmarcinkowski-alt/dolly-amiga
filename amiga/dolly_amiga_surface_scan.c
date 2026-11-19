@@ -35,6 +35,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     char name[112],size[40];
     ULONG logical_sector=0;
     uint64_t capacity,start=0,length=0;
+    DollyOutsideRange policy=DOLLY_RANGE_STRICT;
     uint32_t transfer,batch_limit;
     int uae_ide,complete_rdb=0;
     dolly_surface_close(scan);
@@ -100,9 +101,15 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             complete_rdb=part->is_rdb && hints.present==DOLLY_IO_ALL;
             start=part->start_bytes;
             length=part->length_bytes;
-            ok=!part->outside_media && strcmp(tail+3,part->label)==0 &&
+            ok=strcmp(tail+3,part->label)==0 &&
                start==endpoint->partition_start_bytes &&
                length==endpoint->partition_length_bytes;
+            if(ok && part->outside_media) {
+                policy=endpoint->outside_range;
+                ok=dolly_amiga_allow_outside_range() &&
+                   endpoint->confirmed_capacity_bytes==capacity &&
+                   (policy==DOLLY_RANGE_ZERO_FILL || policy==DOLLY_RANGE_AS_IS);
+            }
         }
         free(map);
         if(!ok) {
@@ -112,7 +119,8 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     }
     scan->failure="Invalid or unsupported scan extent.";
     if(!length || (logical_sector && logical_sector!=geometry.block_bytes) ||
-       start>capacity || length>capacity-start ||
+       start>UINT64_MAX-length ||
+       (policy==DOLLY_RANGE_STRICT && (start>capacity || length>capacity-start)) ||
        start%geometry.block_bytes || length%geometry.block_bytes)return 0;
     scan->sector_bytes=geometry.block_bytes;
     scan->first_lba=start/scan->sector_bytes;
@@ -165,7 +173,9 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     memset(&opts,0,sizeof(opts));
     opts.device_name=device.driver;
     opts.unit=device.unit;
-    opts.capacity_bytes=capacity;
+    scan->outside_range=policy;
+    opts.capacity_bytes=policy==DOLLY_RANGE_AS_IS && start+length>capacity?
+                        start+length:capacity;
     opts.physical_block_bytes=scan->sector_bytes;
     opts.max_transfer_bytes=transfer;
     opts.dma_address_mask=hints.mask;
@@ -175,7 +185,8 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     opts.require_24bit_dma=(uint8_t)((hints.buffer_memory&DOLLY_IO_MEM_24BIT)!=0);
     opts.report_dma_problem=report_dma;
     opts.report_user=scan;
-    opts.required_read_end=start+length;
+    opts.required_read_end=policy==DOLLY_RANGE_ZERO_FILL && start+length>capacity?
+                           capacity:start+length;
     opts.verified_uae_ide=(uint8_t)uae_ide;
     opts.bypass_legacy_scsi_limit=(uint8_t)dolly_amiga_legacy_override();
     scan->failure=NULL;
@@ -202,6 +213,23 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     return 1;
 }
 
+DollyBlockReadResult dolly_surface_read(DollySurfaceScan *scan,uint64_t offset,
+                                       void *buffer,size_t bytes) {
+    uint64_t capacity=scan->geometry.block_count*scan->sector_bytes;
+    size_t readable=bytes;
+    DollyBlockReadResult result={DOLLY_BLOCK_OK,0};
+    if(scan->outside_range!=DOLLY_RANGE_ZERO_FILL)
+        return dolly_block_read(scan->source,offset,buffer,bytes);
+    if(offset>=capacity)readable=0;
+    else if(bytes>capacity-offset)readable=(size_t)(capacity-offset);
+    if(readable) {
+        result=dolly_block_read(scan->source,offset,buffer,readable);
+        if(result.status!=DOLLY_BLOCK_OK || result.bytes_read!=readable)return result;
+    }
+    memset((unsigned char *)buffer+readable,0,bytes-readable);
+    return (DollyBlockReadResult){DOLLY_BLOCK_OK,bytes};
+}
+
 void dolly_surface_step(DollySurfaceScan *scan) {
     DollyBlockReadResult read;
     uint32_t batch,count;
@@ -212,6 +240,17 @@ void dolly_surface_step(DollySurfaceScan *scan) {
     if(!batch)batch=1;
     count=scan->fallback?1u:batch;
     if(count>scan->total-scan->processed)count=(uint32_t)(scan->total-scan->processed);
+    if(scan->outside_range==DOLLY_RANGE_ZERO_FILL) {
+        uint64_t driver_end=scan->geometry.block_count;
+        if(lba>=driver_end) {
+            dolly_surface_log_add(&scan->log,DOLLY_SURFACE_UNREADABLE,
+                                  lba,count,DOLLY_BLOCK_ERANGE);
+            scan->errors+=count;
+            scan->processed+=count;
+            return;
+        }
+        if(count>driver_end-lba)count=(uint32_t)(driver_end-lba);
+    }
     read=dolly_block_read(scan->source,lba*scan->sector_bytes,
                          scan->buffer,(size_t)count*scan->sector_bytes);
     if(read.status!=DOLLY_BLOCK_OK) {

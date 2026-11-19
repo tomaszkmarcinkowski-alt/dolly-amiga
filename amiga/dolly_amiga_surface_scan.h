@@ -15,6 +15,7 @@ typedef struct DollySurfaceScan {
     const char *failure;
     DollySurfaceLog log;
     DollyMediaGeometry geometry;
+    DollyOutsideRange outside_range;
     char ata_identify[88];
     DollyIoHints effective_io;
     DollyPhysicalEntry device;
@@ -29,6 +30,8 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
                        struct Window *parent,int configure);
 int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
                             const DollyMediaGeometry *geometry);
+DollyBlockReadResult dolly_surface_read(DollySurfaceScan *scan,uint64_t offset,
+                                       void *buffer,size_t bytes);
 void dolly_surface_step(DollySurfaceScan *scan);
 /* Close releases device resources and retains the completed log.
  * Clear scan->log when discarding the scan or shutting down. */

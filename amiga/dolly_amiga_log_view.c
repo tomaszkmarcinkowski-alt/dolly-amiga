@@ -72,6 +72,10 @@ static int write_log(BPTR file) {
     if(!write_line(file,summary))return 0;
     snprintf(summary,sizeof(summary),"ATA IDENTIFY: %s",scan->ata_identify);
     if(!write_line(file,summary))return 0;
+    if(scan->outside_range==DOLLY_RANGE_ZERO_FILL &&
+       !write_line(file,"Outside driver range: reported as unreadable, not scanned"))return 0;
+    if(scan->outside_range==DOLLY_RANGE_AS_IS &&
+       !write_line(file,"Outside driver range: attempted reads after timed approval"))return 0;
     dolly_surface_log_geometry(line,&scan->geometry);
     if(!write_line(file,line))return 0;
     dolly_surface_log_decimal(blocks,scan->geometry.block_count);

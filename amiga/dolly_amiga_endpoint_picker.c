@@ -4,6 +4,9 @@
  */
 #include "dolly_amiga_endpoint_picker.h"
 #include "dolly_amiga_device_query.h"
+#include "dolly_amiga_io_settings.h"
+#include "dolly_amiga_destructive.h"
+#include "dolly_surface_log.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <libraries/asl.h>
@@ -565,14 +568,37 @@ static void refresh_disk_info(DollyEndpointPicker *p) {
         GT_SetGadgetAttrs(p->geometry_info_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->geometry_info_display,TAG_DONE);
 }
+static void partition_gap(const DollyEndpointPicker *p,char sectors[21],char size[32]) {
+    const DollyNativePartition *part=&p->partition_map.parts[p->partition];
+    static const char *const units[]={"KiB","MiB","GiB"};
+    uint64_t bytes=part->start_bytes+part->length_bytes-
+                   p->media_geometry.block_count*p->media_geometry.block_bytes;
+    uint64_t scale=1024u;
+    unsigned unit=0,fraction;
+    char whole[21];
+    dolly_surface_log_decimal(sectors,bytes/p->media_geometry.block_bytes);
+    while(unit<2 && bytes>=scale*1024u) {scale*=1024u;++unit;}
+    dolly_surface_log_decimal(whole,bytes/scale);
+    fraction=(unsigned)((bytes%scale)*100u/scale);
+    if(!fraction)snprintf(size,32,"%s %s",whole,units[unit]);
+    else if(fraction%10u==0)
+        snprintf(size,32,"%s.%c %.3s",whole,'0'+(int)(fraction/10u),units[unit]);
+    else snprintf(size,32,"%s.%c%c %.3s",whole,
+                  '0'+(int)(fraction/10u),'0'+(int)(fraction%10u),units[unit]);
+}
 static void update_partition_details(DollyEndpointPicker *p) {
     const char *text;
+    char warning[128],sectors[21],size[32];
     ULONG n;
     if(p->mode!=DOLLY_MODE_PARTITION)return;
-    if(p->has_partition && p->partition<p->partition_count)
-        text=p->partition_map.parts[p->partition].outside_media?
-             "Outside driver capacity; cannot use partition":
-             p->partition_map.parts[p->partition].summary;
+    if(p->has_partition && p->partition<p->partition_count) {
+        if(p->partition_map.parts[p->partition].outside_media) {
+            partition_gap(p,sectors,size);
+            snprintf(warning,sizeof(warning),"Outside driver reported sector count by %s sectors (%s)",
+                     sectors,size);
+            text=warning;
+        } else text=p->partition_map.parts[p->partition].summary;
+    }
     else if(p->partition_map.rdb_capacity_mismatch)
         text=p->partition_map.status;
     else if(p->query_attempted && !p->partition_scanned)
@@ -584,6 +610,14 @@ static void update_partition_details(DollyEndpointPicker *p) {
             sizeof(p->partition_info_display)-1u);
     p->partition_info_display[sizeof(p->partition_info_display)-1u]='\0';
     if(!p->window)return;
+    if(text==warning) {
+        PickerGeometry g=picker_geometry(p);
+        if(TextLength(p->window->RPort,(STRPTR)warning,strlen(warning))>
+           g.value_w-g.partition_w-22) {
+            snprintf(warning,sizeof(warning),"Beyond driver limit: %s sectors (%s)",sectors,size);
+            strcpy(p->partition_info_display,warning);
+        }
+    }
     n=(ULONG)strlen(p->partition_info_display);
     while(n>3u &&
           (LONG)TextLength(p->window->RPort,
@@ -830,7 +864,9 @@ static void change_enabled(DollyEndpointPicker *p) {
                   (p->mode==DOLLY_MODE_PARTITION &&
                    physical_choice(p) && p->queried &&
                    p->media_geometry.capacity_valid &&
-                   p->partition_scanned && p->partition_count) ||
+                   p->partition_scanned && p->partition_count &&
+                   (!p->has_partition || !p->partition_map.parts[p->partition].outside_media ||
+                    (!p->role && dolly_amiga_allow_outside_range()))) ||
                   p->mode==DOLLY_MODE_FILE;
         GT_SetGadgetAttrs(p->choose_button,p->window,NULL,
                           GA_Disabled,(ULONG)!ready,TAG_DONE);
@@ -1146,6 +1182,7 @@ static int capture_partition_number(DollyEndpointPicker *p) {
 }
 static int commit_picker(DollyEndpointPicker *p) {
     int ok=0;
+    DollyOutsideRange policy=DOLLY_RANGE_STRICT;
     if(physical_mode(p)) {
         ULONG unit;
         const char *driver=read_device_field(p);
@@ -1160,8 +1197,25 @@ static int commit_picker(DollyEndpointPicker *p) {
     if(p->mode==DOLLY_MODE_PARTITION) {
         if(!capture_partition_number(p))return 0;
         if(p->partition_map.parts[p->partition].outside_media) {
-            DisplayBeep(p->screen);
-            return 0;
+            const DollyNativePartition *part=&p->partition_map.parts[p->partition];
+            char driver_last[21],part_last[21],sectors[21],size[32],reason[400];
+            if(p->role || !dolly_amiga_allow_outside_range()) {
+                change_enabled(p);
+                return 0;
+            }
+            partition_gap(p,sectors,size);
+            dolly_surface_log_decimal(driver_last,p->media_geometry.block_count-1u);
+            dolly_surface_log_decimal(part_last,(part->start_bytes+part->length_bytes)/
+                                      p->media_geometry.block_bytes-1u);
+            snprintf(reason,sizeof(reason),
+                "Partition %s extends beyond the driver-reported range.\n"
+                "Last driver LBA: %s. Last RDB partition LBA: %s.\n"
+                "Outside reported range: %s sectors (%s).\n"
+                "Fill gap with 0s substitutes zeros for the missing data.\n"
+                "Use as-is attempts a read and may fail or return incorrect data.",
+                part->label,driver_last,part_last,sectors,size);
+            policy=(DollyOutsideRange)dolly_amiga_confirm_outside_range(p->window,reason);
+            if(policy==DOLLY_RANGE_STRICT)return 0;
         }
     }
     if(p->mode==DOLLY_MODE_PHYSICAL && physical_choice(p) &&
@@ -1184,6 +1238,10 @@ static int commit_picker(DollyEndpointPicker *p) {
                     (unsigned long)p->physical_units[p->unit],part->label);
             p->result.partition_start_bytes=part->start_bytes;
             p->result.partition_length_bytes=part->length_bytes;
+            p->result.outside_range=policy;
+            if(policy!=DOLLY_RANGE_STRICT)
+                p->result.confirmed_capacity_bytes=p->media_geometry.block_count*
+                                                    p->media_geometry.block_bytes;
         }
     }
     else if(p->mode==DOLLY_MODE_LOGICAL && p->has_logical) {
@@ -1344,6 +1402,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             }
         } else if(id==PICK_PARTITION_NUMBER) {
             (void)capture_partition_number(p);
+            change_enabled(p);
         } else if(id==PICK_SELECT) {
             close=commit_picker(p);
         } else if(id==PICK_IMAGE_FORMAT && p->role && code<=DOLLY_IMAGE_IFF_COMPACT) {

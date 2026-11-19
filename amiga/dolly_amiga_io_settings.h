@@ -13,6 +13,8 @@ int dolly_amiga_verify_writes(void);
 void dolly_amiga_set_verify_writes(int enabled);
 int dolly_amiga_suppress_same_unit_warning(void);
 void dolly_amiga_set_suppress_same_unit_warning(int enabled);
+int dolly_amiga_allow_outside_range(void);
+void dolly_amiga_set_allow_outside_range(int enabled);
 int dolly_amiga_allow_restore_mismatch(void);
 void dolly_amiga_set_allow_restore_mismatch(int enabled);
 void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint);

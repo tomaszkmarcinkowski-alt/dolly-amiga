@@ -22,6 +22,11 @@ typedef enum DollyImageFormat {
     DOLLY_IMAGE_IFF_FAST=4,
     DOLLY_IMAGE_IFF_COMPACT=5
 } DollyImageFormat;
+typedef enum DollyOutsideRange {
+    DOLLY_RANGE_STRICT=0,
+    DOLLY_RANGE_ZERO_FILL=1,
+    DOLLY_RANGE_AS_IS=2
+} DollyOutsideRange;
 typedef struct DollyEndpoint {
     DollyEndpointKind kind;
     uint8_t device;
@@ -31,6 +36,8 @@ typedef struct DollyEndpoint {
     DollyImageFormat image_format; /* Selected output format; no writer yet. */
     char path[256];
     uint64_t partition_start_bytes,partition_length_bytes;
+    uint64_t confirmed_capacity_bytes;
+    DollyOutsideRange outside_range;
 } DollyEndpoint;
 typedef enum DollyDemoOperation {
     DOLLY_DEMO_SCAN=0,

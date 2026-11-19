@@ -154,7 +154,7 @@ void dolly_image_step(DollyAmigaImage *image) {
     if(!sectors)sectors=1;
     if(sectors>remaining)sectors=(uint32_t)remaining;
     bytes=(size_t)sectors*reader->sector_bytes;
-    result=dolly_block_read(reader->source,lba*reader->sector_bytes,
+    result=dolly_surface_read(reader,lba*reader->sector_bytes,
                             reader->buffer,bytes);
     if(result.status!=DOLLY_BLOCK_OK || result.bytes_read!=bytes) {
         char position[21];

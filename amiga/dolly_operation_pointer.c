@@ -162,7 +162,7 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
     size_t prefix;
     int ok,choice;
     if(!image || !image->failure || !image->file || !scan->source ||
-       !scan->total || scan->processed>scan->total ||
+       !scan->total || scan->processed>scan->total || scan->outside_range!=DOLLY_RANGE_STRICT ||
        EasyRequestArgs(parent,&request,NULL,NULL)!=1)return;
     choice=choose_path(parent,path);
     if(choice<=0) {

@@ -140,8 +140,8 @@ available. RDB partition bounds are checked against the resulting
 sector count. An out-of-bounds diagnostic reports the partition's
 last LBA and the disk sector count. Partition selection and Sheep
 Inventory show structurally valid entries even if some extend beyond
-the driver's reported capacity. Affected rows are marked with ! and
-cannot be used as endpoints. Other in-range entries remain usable.
+the driver's reported capacity. Affected rows are marked with ! and display the sector and byte
+difference. Other in-range entries remain usable.
 RDB backup and restore require a map within the reported capacity.
 
 In Physical device and Partition mode, **Device** and **Unit** are
@@ -174,3 +174,21 @@ the driver returns a complete IDENTIFY DEVICE response through
 SCSI ATA PASS-THROUGH(16). Query does not access IDE registers
 directly. A driver without passthrough reports Unavailable. ATA
 values are advisory and do not change the reported I/O bounds.
+
+
+### Source partitions outside the reported range
+
+Allow partitions outside range defaults to off and is stored in
+dolly.prefs schema v5. When enabled, selecting an out-of-range source
+requires a ten-second confirmation with both last LBAs and the size
+of the gap. Destination writes remain bounded by reported capacity.
+
+Fill gap with 0s preserves the full RDB length in Create Image. Dolly
+only reads the prefix within reported capacity and synthesizes zeros
+for the tail. Errors reading the prefix still abort image creation.
+Surface Scan marks that tail unreadable without issuing reads.
+Use as-is attempts reads over the full selected range using the usual
+driver addressing and error handling. Dolly rechecks the partition
+and reported capacity before opening the source. Operation Restore
+pointers are unavailable for these reads until their format can
+preserve the selected policy.
