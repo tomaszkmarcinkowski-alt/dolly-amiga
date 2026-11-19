@@ -662,10 +662,18 @@ The dated entries are historical. The [roadmap](ROADMAP.md) and [test matrix](TE
 
 ---
 
+### DJ-0065 · 2026-11-20 · Start Workbench · POTWIERDZONE I POPRAWIONE
+
+Alpha 3.2 introduced an array definition of `__stdiowin` while disabling the startup console. Alpha 3.3 inherited it. The [libnix command-line initializer](https://github.com/AmigaPorts/libnix/blob/1ee8fa1788ebfacf2878b8f0b1bfc1fc0c3dc585/sources/nix20/misc/__nocommandline.c) reads the symbol as a pointer on the Workbench path, so the bytes of `NIL:` are treated as a memory address before `main()`. The fix supplies a null pointer, which tells libnix to skip opening a console.
+
+FS-UAE on A600 with Kickstart and Workbench 2.05 opened the released Alpha 3.3 build from AmigaShell. With a controlled `WBStartup` message, the released build did not open its main window. Zeroing only the faulty symbol in a test copy reproduced the fix, and the freshly cross-compiled MC68000 build opened the main window through the same Workbench startup path. WinUAE and real hardware were outside this test.
+
+---
+
 ## Szablon nowego wpisu
 
 ```md
-### DJ-0065 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
+### DJ-0066 · YYYY-MM-DD · [kategoria] · [NOWE / HIPOTEZA / POTWIERDZONE / POPRAWIONE / SPROSTOWANE]
 **Temat:**
 **Objaw / kontekst:**
 **Wpływ / ryzyko:**

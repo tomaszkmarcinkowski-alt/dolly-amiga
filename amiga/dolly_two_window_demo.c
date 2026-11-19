@@ -36,8 +36,8 @@
 #include <stdio.h>
 #include <string.h>
 
-/* libnix opens this stream for Workbench launches before main(). */
-char __stdiowin[]="NIL:";
+/* libnix expects a pointer. NULL disables the Workbench console. */
+const char *__stdiowin=NULL;
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
