@@ -86,7 +86,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
         target->image_format!=DOLLY_IMAGE_IFF_DOLY &&
         target->image_format!=DOLLY_IMAGE_IFF_FAST &&
         target->image_format!=DOLLY_IMAGE_IFF_COMPACT))return 0;
-    if(!dolly_surface_open(&image->reader,source,parent,0)) {
+    if(!dolly_surface_open(&image->reader,source,parent,DOLLY_IO_SOURCE,0)) {
         image->failure=image->reader.failure;
         return 0;
     }

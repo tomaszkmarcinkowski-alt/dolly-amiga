@@ -26,8 +26,12 @@ typedef struct DollySurfaceScan {
 /* Initialize scan to zero before its first open. Each step issues at most
  * one bounded request. Caller drives steps from its event loop. */
 struct Window;
+typedef enum DollyIoRole {
+    DOLLY_IO_SOURCE,
+    DOLLY_IO_DESTINATION
+} DollyIoRole;
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
-                       struct Window *parent,int configure);
+                       struct Window *parent,DollyIoRole role,int configure);
 int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
                             const DollyMediaGeometry *geometry);
 DollyBlockReadResult dolly_surface_read(DollySurfaceScan *scan,uint64_t offset,

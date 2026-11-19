@@ -1,4 +1,5 @@
 #include "dolly_operation_pointer.h"
+#include "dolly_amiga_destructive.h"
 #include "dolly_dlrp.h"
 #include "dolly_checksum.h"
 #include <intuition/intuition.h>
@@ -23,10 +24,7 @@ static int checksum_sink(void *ctx,const void *data,size_t size) {
     return sink(&out->file,data,size) && dolly_checksum_update(&out->checksum,data,size);
 }
 static void notice(struct Window *parent,const char *message) {
-    struct EasyStruct request={sizeof(struct EasyStruct),0,
-        (STRPTR)"Dolly - Operation Restore File",(STRPTR)"%s",(STRPTR)"OK"};
-    ULONG args[]={(ULONG)message};
-    EasyRequestArgs(parent,&request,NULL,args);
+    dolly_amiga_role_request(parent,"Dolly - Operation Restore File",message,"OK",NULL,NULL);
 }
 static int choose_path(struct Window *parent,char path[256]) {
     struct FileRequester *request;

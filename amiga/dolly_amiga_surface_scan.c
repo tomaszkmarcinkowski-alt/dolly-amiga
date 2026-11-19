@@ -1,5 +1,6 @@
 #include "dolly_amiga_surface_scan.h"
 #include "dolly_amiga_io_settings.h"
+#include "dolly_amiga_destructive.h"
 #include <intuition/intuition.h>
 #include <proto/intuition.h>
 #include "dolly_amiga_device_query.h"
@@ -25,7 +26,7 @@ void dolly_surface_close(DollySurfaceScan *scan) {
 }
 
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
-                       struct Window *parent,int configure) {
+                       struct Window *parent,DollyIoRole role,int configure) {
     DollyPhysicalEntry device;
     DollyMediaGeometry geometry;
     DollyAmigaDeviceOptions opts;
@@ -41,7 +42,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     dolly_surface_close(scan);
     dolly_surface_log_clear(&scan->log);
     memset(scan,0,sizeof(*scan));
-    scan->failure="Source has no validated device range.";
+    scan->failure="No validated device range.";
     if(endpoint->kind==DOLLY_ENDPOINT_LOGICAL) {
         if(!dolly_logical_extent(endpoint->path,&device,&start,&length,&logical_sector,NULL))
             return 0;
@@ -56,7 +57,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
                                 size,sizeof(size),&geometry,1,
                                 scan->ata_identify,sizeof(scan->ata_identify)) ||
        !geometry.capacity_valid) {
-        scan->failure="Cannot verify source geometry.";
+        scan->failure="Cannot verify device geometry.";
         return 0;
     }
     uae_ide=strcmp(device.driver,"scsi.device")==0 &&
@@ -133,18 +134,18 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     start=scan->first_lba*scan->sector_bytes;
     length=scan->total*scan->sector_bytes;
     if(!complete_rdb) {
-        struct EasyStruct request={
-            sizeof(struct EasyStruct),0,(STRPTR)"Dolly - I/O settings",
-            (STRPTR)"This source has no complete RDB I/O settings.\n"
-            "Dolly will use conservative scsi.device defaults\n"
-            "for missing fields and apply your manual overrides.\n"
-            "Check Settings if your controller needs different values.",
-            (STRPTR)"Continue|Settings|Cancel"
-        };
+        char reason[310];
+        snprintf(reason,sizeof(reason),
+                "%s: %s / Unit %lu\n"
+                "RDB I/O settings are missing or incomplete (Mask, MaxTransfer, BufMemType).\n"
+                "Dolly will use conservative defaults for missing fields and apply your manual overrides.",
+                role==DOLLY_IO_DESTINATION?"Destination":"Source",
+                device.driver,(unsigned long)device.unit);
         DollyIoHints fallback={0x00fffffeu,DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_24BIT,
                                geometry.block_bytes>DOLLY_MEDIA_TRANSFER_BYTES?
                                geometry.block_bytes:DOLLY_MEDIA_TRANSFER_BYTES,DOLLY_IO_ALL};
-        LONG choice=EasyRequestArgs(parent,&request,NULL,NULL);
+        int choice=dolly_amiga_role_request(parent,"Dolly - I/O settings",reason,
+                                           "Continue","Settings","Cancel");
         if(choice!=1) {
             scan->failure=choice==2?"Review settings, then press Start.":"Operation cancelled.";
             if(choice==2 && parent)dolly_amiga_io_settings(parent->WScreen,endpoint);

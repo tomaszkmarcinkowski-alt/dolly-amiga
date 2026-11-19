@@ -5,4 +5,7 @@ struct Window;
 int dolly_amiga_confirm_destructive(struct Window *parent,const char *reason);
 /* 1 zero-fill, 2 use as-is, 0 cancel. */
 int dolly_amiga_confirm_outside_range(struct Window *parent,const char *reason);
+/* Positive 1-based choice, or 0 for closing or the last of multiple buttons. */
+int dolly_amiga_role_request(struct Window *parent,const char *title,const char *body,
+                            const char *first,const char *second,const char *third);
 #endif

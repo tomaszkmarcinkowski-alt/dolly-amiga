@@ -34,7 +34,6 @@ extern struct DosLibrary *DOSBase;
 #define PICK_CANCEL 507u
 #define PICK_LOGICAL 508u
 #define PICK_FILE_TEXT 509u
-#define PICK_IMAGE_FORMAT 510u
 #define PICK_FILE_INFO 511u
 #define PICK_SELECTION_TEXT 512u
 #define PICK_UNIT_TEXT 520u
@@ -46,10 +45,6 @@ extern struct DosLibrary *DOSBase;
 #define PICK_GEOMETRY_INFO_TEXT 517u
 #define PICK_ATA_INFO_TEXT 518u
 
-static STRPTR image_formats[]={
-    (STRPTR)"RAW",(STRPTR)"HDF",(STRPTR)"ADF",(STRPTR)"IFF DOLY",
-    (STRPTR)"IFF DOLY Fast",(STRPTR)"IFF DOLY Compact",NULL
-};
 static STRPTR mode_names[]={
     (STRPTR)"Physical device",
     (STRPTR)"Logical device",
@@ -97,9 +92,7 @@ typedef struct PickerGeometry {
     WORD list_y,list_h,action_y,preview_y,disk_info_y,partition_info_y;
     WORD geometry_info_y,size_y,ata_info_y;
     WORD browse_y,path_y,detail_y;
-    WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
-    WORD format_y;
-    WORD format_x,format_w;
+    WORD cycle_y,heading_y,list_label_y,file_label_y;
     WORD value_x,value_w,unit_x,unit_w,unit_label_x,partition_w;
     WORD name_w,geometry_w,size_label_x,size_x,size_w;
 } PickerGeometry;
@@ -148,8 +141,6 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.heading_y=(WORD)(36-lift);
     g.list_label_y=(WORD)(59-lift);
     g.file_label_y=(WORD)(99-lift);
-    g.format_label_y=(WORD)(143-lift);
-    g.format_y=(WORD)(130-lift);
     g.list_h=(WORD)height;
     g.action_y=(WORD)action;
     g.preview_y=(WORD)(p->mode==DOLLY_MODE_PHYSICAL ||
@@ -164,8 +155,6 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.browse_y=(WORD)list_top;
     g.path_y=(WORD)(105-lift);
     g.detail_y=(WORD)(132-lift);
-    g.format_x=(WORD)(left+picker_text_span(w,"Image format",139));
-    g.format_w=(WORD)(right-g.format_x);
     /* A shared label column keeps the previews aligned in all
      * modes. The Size field is right-anchored and stays separate.
      */
@@ -681,19 +670,6 @@ static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
                         GTTX_Text,(ULONG)p->file_details,
                         GTTX_Border,TRUE,TAG_DONE);
 }
-static struct Gadget *format_choice(struct Gadget *last,DollyEndpointPicker *p) {
-    struct NewGadget ng;
-    memset(&ng,0,sizeof(ng));
-    ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=picker_geometry(p).format_x;
-    ng.ng_TopEdge=picker_geometry(p).format_y;
-    ng.ng_Width=picker_geometry(p).format_w;ng.ng_Height=17;
-    ng.ng_GadgetID=PICK_IMAGE_FORMAT;ng.ng_GadgetText=(STRPTR)"";
-    return CreateGadget(CYCLE_KIND,last,&ng,
-                        GTCY_Labels,(ULONG)image_formats,
-                        GTCY_Active,(ULONG)p->output_format,TAG_DONE);
-}
 /* The extension is only a hint; never assert that bytes are valid. */
 static int suffix_is(const char *name,const char *ext) {
     size_t n=strlen(name),m=strlen(ext),i;
@@ -811,10 +787,7 @@ static void captions(DollyEndpointPicker *p) {
     if(p->mode==DOLLY_MODE_FILE) {
         Move(rp,g.left,(LONG)g.path_y+12);
         Text(rp,(STRPTR)"Selected file",13);
-        if(p->role) {
-            Move(rp,g.left,(LONG)g.format_y+12);
-            Text(rp,(STRPTR)"Image format",12);
-        } else {
+        if(!p->role) {
             Move(rp,g.left,(LONG)g.detail_y+12);
             Text(rp,(STRPTR)"File info",9);
         }
@@ -916,7 +889,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->device_list=NULL;p->unit_list=NULL;
     p->partition_list=NULL;p->logical_list=NULL;
     p->choose_button=NULL;p->mode_cycle=NULL;p->file_text=NULL;
-    p->format_cycle=NULL;p->file_info=NULL;
+    p->file_info=NULL;
     p->selection_text=NULL;p->unit_text=NULL;p->partition_number=NULL;
     p->disk_info_text=NULL;
     p->disk_size_text=NULL;
@@ -1002,11 +975,7 @@ static int rebuild(DollyEndpointPicker *p) {
         last=file_text(last,p);
         if(!last)return 0;
         p->file_text=last;
-        if(p->role) {
-            last=format_choice(last,p);
-            if(!last)return 0;
-            p->format_cycle=last;
-        } else {
+        if(!p->role) {
             last=details_text(last,p);
             if(!last)return 0;
             p->file_info=last;
@@ -1028,7 +997,7 @@ static int rebuild(DollyEndpointPicker *p) {
     captions(p);
     return 1;
 }
-static int pick_file(DollyEndpoint *result,unsigned destination) {
+int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination) {
     struct FileRequester *fr;
     char path[256];
     size_t dn,fn;
@@ -1036,7 +1005,7 @@ static int pick_file(DollyEndpoint *result,unsigned destination) {
     if(!AslBase)return 0;
     fr=(struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest,ASL_FuncFlags,(ULONG)(destination?FILF_SAVE:0),
-        TAG_DONE);
+        ASLFR_Window,(ULONG)parent,TAG_DONE);
     if(!fr)return 0;
     if(AslRequest(fr,NULL) && fr->fr_File) {
         /* ASL may return an empty drawer for a file in the current
@@ -1076,9 +1045,6 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
             p->pending_file=*initial;
         }
     }
-    if(initial && initial->kind==DOLLY_ENDPOINT_FILE &&
-       (unsigned)initial->image_format<=DOLLY_IMAGE_IFF_COMPACT)
-        p->output_format=initial->image_format;
     p->mode=(initial && initial->kind!=DOLLY_ENDPOINT_NONE &&
              dolly_mode_allowed(p->allowed_mask,
                                 dolly_endpoint_mode(initial))) ?
@@ -1254,7 +1220,6 @@ static int commit_picker(DollyEndpointPicker *p) {
         capture_file_text(p);
         if(p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
             p->result=p->pending_file;
-            if(p->role)p->result.image_format=p->output_format;
             ok=1;
         } else DisplayBeep(p->screen);
     }
@@ -1405,8 +1370,6 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             change_enabled(p);
         } else if(id==PICK_SELECT) {
             close=commit_picker(p);
-        } else if(id==PICK_IMAGE_FORMAT && p->role && code<=DOLLY_IMAGE_IFF_COMPACT) {
-            p->output_format=(DollyImageFormat)code;
         } else if(id==PICK_FILE_TEXT && p->mode==DOLLY_MODE_FILE) {
             capture_file_text(p);
             file_details(p);
@@ -1415,7 +1378,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                                   GTTX_Text,(ULONG)p->file_details,TAG_DONE);
         } else if(id==PICK_FILE && p->mode==DOLLY_MODE_FILE) {
             DollyEndpoint selected={0};
-            if(pick_file(&selected,p->role)) {
+            if(dolly_amiga_pick_file(p->window,&selected,p->role)) {
                 p->pending_file=selected;
                 file_details(p);
                 if(p->file_info)

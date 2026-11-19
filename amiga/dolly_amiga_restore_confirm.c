@@ -11,16 +11,12 @@
 
 int dolly_amiga_confirm_restore_assessment(struct Window *parent,
                                            const DollyRestoreAssessment *assessment) {
-    ULONG args[]={(ULONG)assessment->reason};
-    struct EasyStruct request={
-        sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Restore blocked",
-        (STRPTR)"%s",(STRPTR)"OK"
-    };
     if(assessment->decision==DOLLY_RESTORE_MATCH)return 1;
     if(!parent)return 0;
     if(assessment->decision==DOLLY_RESTORE_MISMATCH && dolly_amiga_allow_restore_mismatch())
         return dolly_amiga_confirm_destructive(parent,assessment->reason);
-    EasyRequestArgs(parent,&request,NULL,args);
+    dolly_amiga_role_request(parent,"Dolly - Restore blocked",assessment->reason,
+                            "OK",NULL,NULL);
     return 0;
 }
 
@@ -42,7 +38,7 @@ void dolly_amiga_restore_preview(struct Window *parent,const DollyEndpoint *imag
     DollyBlockStatus status;
     const char *problem;
     if(destination->outside_range!=DOLLY_RANGE_STRICT ||
-       !dolly_surface_open(&disk,destination,parent,0)) {
+       !dolly_surface_open(&disk,destination,parent,DOLLY_IO_DESTINATION,0)) {
         snprintf(failure.reason,sizeof(failure.reason),"Target: %s",
                  disk.failure?disk.failure:"Cannot read the destination.");
         dolly_amiga_confirm_restore_assessment(parent,&failure);
@@ -78,16 +74,13 @@ out:
 void dolly_amiga_copy_preview(struct Window *parent,const DollyEndpoint *source,
                               const DollyEndpoint *destination) {
     DollySurfaceScan src={0},dst={0};
-    char reason[180],source_bytes[21],target_bytes[21];
-    struct EasyStruct request={sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Copy",
-                               (STRPTR)"%s",(STRPTR)"OK"};
-    ULONG args[]={(ULONG)reason};
+    char reason[256],source_bytes[21],target_bytes[21];
     if(source->kind==DOLLY_ENDPOINT_FILE || destination->kind==DOLLY_ENDPOINT_FILE)
         strcpy(reason,"Copy preview currently supports device and partition extents.");
-    else if(!dolly_surface_open(&src,source,parent,0))
+    else if(!dolly_surface_open(&src,source,parent,DOLLY_IO_SOURCE,0))
         snprintf(reason,sizeof(reason),"Source: %s",src.failure?src.failure:"Cannot open source.");
     else if(destination->outside_range!=DOLLY_RANGE_STRICT ||
-            !dolly_surface_open(&dst,destination,parent,0))
+            !dolly_surface_open(&dst,destination,parent,DOLLY_IO_DESTINATION,0))
         snprintf(reason,sizeof(reason),"Destination: %s",dst.failure?dst.failure:"Cannot open destination.");
     else {
         uint64_t a=src.total*src.sector_bytes,b=dst.total*dst.sector_bytes;
@@ -109,14 +102,14 @@ void dolly_amiga_copy_preview(struct Window *parent,const DollyEndpoint *source,
             if(src.device.unit==dst.device.unit &&
                !strcasecmp(src.device.driver,dst.device.driver))
                 dolly_amiga_warn_same_unit(parent);
-            snprintf(reason,sizeof(reason),"Copy into %s / Unit %lu.\n"
+            snprintf(reason,sizeof(reason),"Copy into destination %s / Unit %lu.\n"
                 "Target bytes: %s. This build runs a read-only preview.",
                 dst.device.driver,(unsigned long)dst.device.unit,target_bytes);
             if(!dolly_amiga_confirm_destructive(parent,reason))goto out;
             strcpy(reason,"Copy preflight completed. Device writing is pending.");
         }
     }
-    EasyRequestArgs(parent,&request,NULL,args);
+    dolly_amiga_role_request(parent,"Dolly - Copy",reason,"OK",NULL,NULL);
 out:
     dolly_surface_close(&dst);
     dolly_surface_close(&src);

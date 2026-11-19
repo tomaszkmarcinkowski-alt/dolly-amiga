@@ -8,13 +8,9 @@
 
 void dolly_amiga_warn_same_unit(struct Window *parent) {
     if(parent && !dolly_amiga_suppress_same_unit_warning()) {
-        struct EasyStruct request={
-            sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Copy performance",
-            (STRPTR)"Source and destination are on the same device unit.\n"
-                    "Copying between them may be slower.",
-            (STRPTR)"OK"
-        };
-        EasyRequestArgs(parent,&request,NULL,NULL);
+        dolly_amiga_role_request(parent,"Dolly - Copy performance",
+            "Source and destination are on the same device unit.\n"
+            "Copying between them may be slower.","OK",NULL,NULL);
     }
 }
 

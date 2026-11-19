@@ -192,3 +192,9 @@ driver addressing and error handling. Dolly rechecks the partition
 and reported capacity before opening the source. Operation Restore
 pointers are unavailable for these reads until their format can
 preserve the selected policy.
+
+
+Copy preflight reports incomplete RDB I/O parameters separately for
+the source and destination, with the driver and unit in each requester.
+Dolly's transfer requesters render the source and destination roles in
+bold, including in timed confirmations.

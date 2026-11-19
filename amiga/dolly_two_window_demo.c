@@ -8,6 +8,7 @@
 #include "dolly_endpoint.h"
 #include "dolly_amiga_endpoint_picker.h"
 #include "dolly_amiga_device_query.h"
+#include "dolly_amiga_destructive.h"
 #include "dolly_amiga_inventory_view.h"
 #include "dolly_amiga_surface_scan.h"
 #include "dolly_amiga_log_view.h"
@@ -62,6 +63,9 @@ static const char hide_label[]="Hide";
 #define MAIN_OPERATION_ID 210u
 #define MAIN_SOURCE_MODE_ID 220u
 #define MAIN_TARGET_MODE_ID 221u
+#define MAIN_IMAGE_FORMAT_ID 222u
+#define MAIN_COMPRESSION_ID 223u
+#define MAIN_COPY_MODE_ID 224u
 #define MAIN_STATUS_ID 211u
 #define MAIN_SOURCE_ID 212u
 #define MAIN_TARGET_ID 213u
@@ -98,7 +102,7 @@ typedef struct DollyDemoView {
     struct Gadget *start, *hide, *log, *pause, *count, *errors, *percent;
     const char *action_label;
     struct Gadget *device,*target_button,*source_text,*target_text;
-    struct Gadget *description,*selectors[3],*status;
+    struct Gadget *description,*selectors[3],*operation_options[2],*status;
     STRPTR mode_labels[2][5];
     DollyEndpointMode mode_ids[2][4];
     unsigned mode_count[2],mode_active[2];
@@ -151,6 +155,20 @@ static const char *demo_descriptions[]={
     "Create an image file from a selected source.",
     "Disk Vet: filesystem first aid (planned)."
 };
+static STRPTR image_types[]={(STRPTR)"RAW image",(STRPTR)"IFF DOLY",NULL};
+static STRPTR compression_types[]={
+    (STRPTR)"Not compressed",(STRPTR)"Fast",(STRPTR)"Compact",NULL
+};
+static STRPTR copy_modes[]={
+    (STRPTR)"Sector-to-sector",(STRPTR)"Smart Copy",(STRPTR)"Clone and resize",NULL
+};
+static unsigned image_type,compression_type,copy_mode;
+static DollyImageFormat selected_image_format(void) {
+    static const DollyImageFormat formats[]={
+        DOLLY_IMAGE_IFF_DOLY,DOLLY_IMAGE_IFF_FAST,DOLLY_IMAGE_IFF_COMPACT
+    };
+    return image_type?formats[compression_type]:DOLLY_IMAGE_RAW;
+}
 static UWORD selected_operation=0;
 static unsigned berserk_mode=0; /* Future explicit opt-in; NORMAL only for now. */
 static unsigned source_mode_mask(void) {
@@ -210,7 +228,8 @@ static LONG main_selector_width(struct RastPort *rp) {
     LONG width=0;
     unsigned i;
     static const char *const extra_labels[]={
-        "Select a source","Not Required","Sheep Counter","Destination..."
+        "Select a source","Not Required","Sheep Counter","Destination...",
+        "Sector-to-sector","Clone and resize","Not compressed"
     };
     for(i=0;i<sizeof(extra_labels)/sizeof(extra_labels[0]);++i) {
         LONG label=TextLength(rp,(STRPTR)extra_labels[i],strlen(extra_labels[i]));
@@ -267,59 +286,8 @@ static void clip_main(char *value,LONG width) {
     while(len && (LONG)TextLength(rp,(STRPTR)value,len)>width)
         value[--len]='\0';
 }
-/* Image format is metadata of the selected output endpoint, not a
- * filename extension guess. Keep "(FORMAT)" visible when a long path
- * needs clipping, and do not modify the committed path itself.
- */
-static const char *image_format_label(DollyImageFormat format) {
-    switch(format) {
-    case DOLLY_IMAGE_RAW:return "RAW";
-    case DOLLY_IMAGE_HDF:return "HDF";
-    case DOLLY_IMAGE_ADF:return "ADF";
-    case DOLLY_IMAGE_IFF_DOLY:return "IFF DOLY";
-    case DOLLY_IMAGE_IFF_FAST:return "IFF DOLY Fast";
-    case DOLLY_IMAGE_IFF_COMPACT:return "IFF DOLY Compact";
-    default:return "Unknown";
-    }
-}
-static void format_destination_image(char *dst,size_t cap,
-                                     const DollyEndpoint *endpoint,
-                                     LONG max_pixels) {
-    const char *name=endpoint_basename(endpoint->path);
-    const char *fmt=image_format_label(endpoint->image_format);
-    size_t name_len=strlen(name),fmt_len=strlen(fmt);
-    size_t tail_len=fmt_len+3u; /* space, (, ) */
-    struct RastPort *rp=main_view.window?main_view.window->RPort:NULL;
-    if(!cap || cap<=tail_len)return;
-    if(name_len>cap-1u-tail_len)name_len=cap-1u-tail_len;
-    while(name_len) {
-        memcpy(dst,name,name_len);
-        dst[name_len]=' ';
-        dst[name_len+1u]='(';
-        memcpy(dst+name_len+2u,fmt,fmt_len);
-        dst[name_len+2u+fmt_len]=')';
-        dst[name_len+tail_len]='\0';
-        if(!rp || (LONG)TextLength(rp,(STRPTR)dst,
-                                   (ULONG)strlen(dst))<=max_pixels)
-            return;
-        --name_len;
-    }
-    /* Even when the filename is exceptionally long, preserve format. */
-    dst[0]=' ';
-    dst[1]='(';
-    memcpy(dst+2,fmt,fmt_len);
-    dst[2u+fmt_len]=')';
-    dst[tail_len]='\0';
-}
-static int image_format_supported(void) {
-    return selected_target.image_format==DOLLY_IMAGE_RAW ||
-           selected_target.image_format==DOLLY_IMAGE_HDF ||
-           selected_target.image_format==DOLLY_IMAGE_IFF_DOLY ||
-           selected_target.image_format==DOLLY_IMAGE_IFF_FAST ||
-           selected_target.image_format==DOLLY_IMAGE_IFF_COMPACT;
-}
 static int can_start_operation(void) {
-    return (selected_operation!=DOLLY_DEMO_CREATE_IMAGE || image_format_supported()) &&
+    return (selected_operation!=DOLLY_DEMO_COPY || copy_mode==0) &&
            dolly_demo_can_start((DollyDemoOperation)selected_operation,
                                 &selected_source,&selected_target);
 }
@@ -343,6 +311,8 @@ static void update_main_status(void) {
     int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
                                 &selected_source,&selected_target);
     text_copy(main_view.desc_label,sizeof(main_view.desc_label),
+              selected_operation==DOLLY_DEMO_COPY && copy_mode?
+              (copy_mode==1?"Smart Copy is planned.":"Clone and resize is planned."):
               demo_descriptions[selected_operation]);
     if(quit_blocked && operation_active())
         text_copy(main_view.status_label,sizeof(main_view.status_label),
@@ -401,9 +371,9 @@ static void update_main_status(void) {
                                     dolly_endpoint_mode(&selected_target)))
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Destination incompatible. Choose again.");
-    else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && !image_format_supported())
+    else if(selected_operation==DOLLY_DEMO_COPY && copy_mode)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  "Choose RAW, HDF or IFF DOLY. ADF is planned.");
+                  "Selected copy mode is not available in this build.");
     else if(!can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Check source/destination identity or overlap.");
@@ -418,20 +388,10 @@ static void update_main_status(void) {
     if(need)
         format_endpoint(main_view.target_label,sizeof(main_view.target_label),&selected_target);
     else text_copy(main_view.target_label,sizeof(main_view.target_label),"Not Required");
-    if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
-       selected_target.kind==DOLLY_ENDPOINT_FILE) {
-        LONG pixel_width=main_view.window ?
-                         main_view.l.selector_w[2]-8 : 9999;
-        format_destination_image(main_view.target_label,
-                                 sizeof(main_view.target_label),
-                                 &selected_target,pixel_width);
-    }
     if(main_view.window) {
         DemoLayout *d=&main_view.l;
         clip_main(main_view.source_label,d->selector_w[1]-8);
-        if(!(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
-             selected_target.kind==DOLLY_ENDPOINT_FILE))
-            clip_main(main_view.target_label,d->selector_w[2]-8);
+        clip_main(main_view.target_label,d->selector_w[2]-8);
         clip_main(main_view.desc_label,d->right-d->left);
         clip_main(main_view.status_label,d->right-d->left-8);
     }
@@ -689,19 +649,20 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
                         GTTX_Clipped,TRUE,TAG_DONE);
 }
 static struct Gadget *make_selector(struct Gadget *last,DollyDemoView *v,
-                                    UWORD id,unsigned column,STRPTR *choices,UWORD active) {
+                                    UWORD id,unsigned column,LONG y,STRPTR *choices,
+                                    unsigned active,int disabled) {
     struct NewGadget ng={0};
     LONG x=v->l.selector_x[column];
     ng.ng_VisualInfo=v->visual;
     ng.ng_TextAttr=public_screen->Font;
     ng.ng_LeftEdge=(WORD)x;
-    ng.ng_TopEdge=(WORD)v->l.selector_y;
+    ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)v->l.selector_w[column];
     ng.ng_Height=(WORD)v->l.selector_h;
     ng.ng_GadgetID=id;
     return CreateGadget(CYCLE_KIND,last,&ng,
                         GTCY_Labels,(ULONG)choices,GTCY_Active,(ULONG)active,
-                        GA_Disabled,(ULONG)(column && !v->mode_count[column-1u]),
+                        GA_Disabled,(ULONG)disabled,
                         TAG_DONE);
 }
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
@@ -724,6 +685,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->source_text=NULL;v->target_text=NULL;
         v->description=NULL;v->status=NULL;
         memset(v->selectors,0,sizeof(v->selectors));
+        memset(v->operation_options,0,sizeof(v->operation_options));
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
@@ -747,8 +709,8 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                        d->selector_w[2],v->target_label,TRUE);
         if(!last)return 0;
         v->target_text=last;
-        last=make_selector(last,v,MAIN_OPERATION_ID,0,
-                           demo_operations,selected_operation);
+        last=make_selector(last,v,MAIN_OPERATION_ID,0,d->selector_y,
+                           demo_operations,selected_operation,0);
         if(!last)return 0;
         v->selectors[0]=last;
         for(role=0;role<2u;++role) {
@@ -757,10 +719,25 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                 choices=role && !dolly_demo_needs_target((DollyDemoOperation)selected_operation)?
                         no_destination_choices:awaiting_source_choices;
             last=make_selector(last,v,role?MAIN_TARGET_MODE_ID:MAIN_SOURCE_MODE_ID,
-                               role+1u,choices,
-                               (UWORD)v->mode_active[role]);
+                               role+1u,d->selector_y,choices,
+                               v->mode_active[role],!v->mode_count[role]);
             if(!last)return 0;
             v->selectors[role+1u]=last;
+        }
+        if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
+            last=make_selector(last,v,MAIN_IMAGE_FORMAT_ID,0,d->endpoint_button_y,
+                               image_types,image_type,0);
+            if(!last)return 0;
+            v->operation_options[0]=last;
+            last=make_selector(last,v,MAIN_COMPRESSION_ID,0,d->endpoint_frame_y,
+                               compression_types,compression_type,!image_type);
+            if(!last)return 0;
+            v->operation_options[1]=last;
+        } else if(selected_operation==DOLLY_DEMO_COPY) {
+            last=make_selector(last,v,MAIN_COPY_MODE_ID,0,d->endpoint_button_y,
+                               copy_modes,copy_mode,0);
+            if(!last)return 0;
+            v->operation_options[0]=last;
         }
         last=make_text(last,v,MAIN_DESC_ID,d->left,d->main_desc_y,
                        d->right-d->left+1,v->desc_label,FALSE);
@@ -1218,12 +1195,15 @@ static void update_main_actions(void) {
                           GA_Disabled,(ULONG)(active || !destination_mode_mask() ||
                           source_picker.window || target_picker.window),TAG_DONE);
     {
+        int busy=active || source_picker.window || target_picker.window;
         unsigned i;
         for(i=0;i<3u;++i)if(main_view.selectors[i])
             GT_SetGadgetAttrs(main_view.selectors[i],main_view.window,NULL,
-                              GA_Disabled,(ULONG)(active || source_picker.window ||
-                                                 target_picker.window ||
+                              GA_Disabled,(ULONG)(busy ||
                                                  (i && !main_view.mode_count[i-1u])),TAG_DONE);
+        for(i=0;i<2u;++i)if(main_view.operation_options[i])
+            GT_SetGadgetAttrs(main_view.operation_options[i],main_view.window,NULL,
+                              GA_Disabled,(ULONG)(busy || (i && !image_type)),TAG_DONE);
     }
 }
 /* Rebuild only after draining the window queues, whose IAddress fields
@@ -1287,18 +1267,16 @@ static void toggle_pause(void) {
     refresh_main_selection();
 }
 static void ask_stop(void) {
-    struct EasyStruct request={
-        sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Operation in progress",
-        (STRPTR)"%s\nSource: %s\nDestination: %s",
-        (STRPTR)"Abort|Resume"
-    };
-    ULONG args[]={(ULONG)(scan_result?"Surface Scan":image_result?"Create Image":"Copy"),
-                  (ULONG)(selected_source.path[0]?selected_source.path:main_view.source_label),
-                  (ULONG)(scan_result?"-":selected_target.path[0]?selected_target.path:main_view.target_label)};
+    char reason[580];
+    snprintf(reason,sizeof(reason),"%s\nSource: \"%s\"\nDestination: \"%s\"",
+             scan_result?"Surface Scan":image_result?"Create Image":"Copy",
+             selected_source.path[0]?selected_source.path:main_view.source_label,
+             scan_result?"-":selected_target.path[0]?selected_target.path:main_view.target_label);
     if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
     quit_blocked=0;
     refresh_main_selection();
-    if(EasyRequestArgs(main_view.window,&request,NULL,args)==1) {
+    if(dolly_amiga_role_request(main_view.window,"Dolly - Operation in progress",
+                               reason,"Abort","Resume",NULL)==1) {
         if(image.file)dolly_image_cancel(&image);
         else dolly_surface_close(&surface);
         (void)dolly_operation_cancel(&operation);
@@ -1350,10 +1328,14 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             } else if(id==MAIN_TARGET_ID && !operation_active() && !relayout &&
                       !source_picker.window && !target_picker.window &&
                       destination_mode_mask()!=0u) {
-                dolly_picker_close(&source_picker);
-                if(!dolly_picker_open(&target_picker,public_screen,1,
-                                      &selected_target,
-                                      medium_modes[1],DOLLY_MODE_BIT(medium_modes[1])))
+                if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
+                    if(dolly_amiga_pick_file(v->window,&selected_target,1)) {
+                        selected_target.image_format=selected_image_format();
+                        refresh_main_selection();
+                    }
+                } else if(!dolly_picker_open(&target_picker,public_screen,1,
+                                             &selected_target,
+                                             medium_modes[1],DOLLY_MODE_BIT(medium_modes[1])))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
             } else if(cls==IDCMP_GADGETUP &&
@@ -1366,6 +1348,8 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                             (ULONG)(column?v->mode_active[column-1u]:selected_operation),TAG_DONE);
                 } else if(!relayout && id==MAIN_OPERATION_ID && code<6u) {
                     selected_operation=code;
+                    if(selected_operation==DOLLY_DEMO_CREATE_IMAGE)
+                        selected_target.image_format=selected_image_format();
                     if(selected_source.kind!=DOLLY_ENDPOINT_NONE &&
                        dolly_mode_allowed(source_mode_mask(),dolly_endpoint_mode(&selected_source)))
                         medium_modes[0]=dolly_endpoint_mode(&selected_source);
@@ -1384,6 +1368,20 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                         relayout=1;
                     }
                 }
+            } else if(!operation_active() && !relayout &&
+                      !source_picker.window && !target_picker.window &&
+                      selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+                      ((id==MAIN_IMAGE_FORMAT_ID && code<2u) ||
+                       (id==MAIN_COMPRESSION_ID && image_type && code<3u))) {
+                if(id==MAIN_IMAGE_FORMAT_ID)image_type=code;
+                else compression_type=code;
+                selected_target.image_format=selected_image_format();
+                refresh_main_selection();
+            } else if(id==MAIN_COPY_MODE_ID && code<3u && !operation_active() && !relayout &&
+                      !source_picker.window && !target_picker.window &&
+                      selected_operation==DOLLY_DEMO_COPY) {
+                copy_mode=code;
+                refresh_main_selection();
             } else if(id==MAIN_START_ID && operation_active())toggle_pause();
             else if(id==MAIN_START_ID &&
                       operation.state!=DOLLY_OP_RUNNING &&
@@ -1407,7 +1405,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     if(scan_result) {
                         dolly_amiga_log_view_close();
                         dolly_operation_init(&operation);
-                        total=dolly_surface_open(&surface,&selected_source,main_view.window,1)?surface.total:0;
+                        total=dolly_surface_open(&surface,&selected_source,main_view.window,DOLLY_IO_SOURCE,1)?surface.total:0;
                     } else if(image_result) {
                         dolly_amiga_log_view_close();
                         dolly_operation_init(&operation);

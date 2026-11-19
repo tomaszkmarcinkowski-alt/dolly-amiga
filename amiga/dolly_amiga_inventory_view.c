@@ -588,17 +588,14 @@ static int save_rdb_recovery(void *context,const void *data,ULONG bytes) {
     return ok;
 }
 static void show_restore_failure(DollyNativeInventoryView *v,const char *reason) {
-    struct EasyStruct request={sizeof(struct EasyStruct),0,
-        (STRPTR)"Dolly - Restore RDB",(STRPTR)"%s",(STRPTR)"OK"};
-    ULONG args[]={(ULONG)reason};
-    char first_line[112];
+    char first_line[sizeof(v->status)];
     size_t len=strcspn(reason,"\n");
     if(len>=sizeof(first_line))len=sizeof(first_line)-1;
     memcpy(first_line,reason,len);
     first_line[len]=0;
     set_status(v,first_line);
     if(strcmp(reason,"Restore RDB cancelled.")!=0)
-        EasyRequestArgs(v->window,&request,NULL,args);
+        dolly_amiga_role_request(v->window,"Dolly - Restore RDB",reason,"OK",NULL,NULL);
 }
 static void restore_partition_table(DollyNativeInventoryView *v) {
     char input[256],recovery[256],warning[128];

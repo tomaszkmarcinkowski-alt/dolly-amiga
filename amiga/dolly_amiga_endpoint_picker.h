@@ -15,7 +15,7 @@ typedef struct DollyEndpointPicker {
     struct Gadget *gadgets;
     struct Gadget *mode_cycle,*device_list,*unit_list,*partition_list;
     struct Gadget *logical_list,*choose_button,*file_text;
-    struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
+    struct Gadget *file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text,*partition_info_text;
     struct Gadget *geometry_info_text,*ata_info_text,*unit_text,*partition_number;
     struct List devices,units,logical_devices;
@@ -55,7 +55,6 @@ typedef struct DollyEndpointPicker {
     char ata_identify[88];
     char geometry_info_display[96];
     char partition_info_display[160];
-    DollyImageFormat output_format;
     unsigned device,unit,partition,logical;
     DollyEndpointMode mode;
     /* Cycle labels are filtered per operation/role. Cycle indexes
@@ -76,6 +75,7 @@ int dolly_picker_open(DollyEndpointPicker *picker,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
                       DollyEndpointMode preferred_mode,
                       unsigned allowed_mask);
+int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination);
 void dolly_picker_pump(DollyEndpointPicker *picker);
 void dolly_picker_close(DollyEndpointPicker *picker);
 #endif

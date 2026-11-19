@@ -1578,3 +1578,14 @@ The operation description spans the width below the endpoint fields.
 The window retains horizontal resizing. The Cycle gadgets and the
 three buttons below Start share the same column edges and height.
 Minimum column widths and the control height follow the screen font.
+
+
+For Create Image, Destination opens the ASL save requester directly.
+The frame shows the selected filename. Two Cycle gadgets in the
+Operation column select RAW image or IFF DOLY, then the IFF compression
+mode. RAW disables the compression gadget. Changing either option
+updates the selected output format without requiring a new filename.
+
+For Copy, a Cycle in the same column selects Sector-to-sector, Smart
+Copy or Clone and resize. Sector-to-sector uses the existing preflight.
+The two planned modes disable Start.
