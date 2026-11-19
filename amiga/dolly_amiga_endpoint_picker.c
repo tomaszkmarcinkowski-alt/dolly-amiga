@@ -87,7 +87,7 @@ static void sync_mode_index(DollyEndpointPicker *p) {
  */
 typedef struct PickerGeometry {
     WORD left,right,full_width;
-    WORD mode_x,mode_w;
+    WORD mode_x,mode_w,query_w;
     WORD list_y,list_h,action_y,preview_y,disk_info_y,partition_info_y;
     WORD geometry_info_y;
     WORD browse_y,path_y,detail_y;
@@ -97,6 +97,10 @@ typedef struct PickerGeometry {
     WORD value_x,value_w;
     WORD name_x,name_w,size_label_x,size_x,size_w;
 } PickerGeometry;
+static LONG picker_text_span(const struct Window *window,const char *text,LONG minimum) {
+    LONG width=TextLength(window->RPort,(STRPTR)text,(ULONG)strlen(text))+10;
+    return width>minimum?width:minimum;
+}
 static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     PickerGeometry g;
     const struct Window *w=p->window;
@@ -128,8 +132,10 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     /* Both role-specific captions are longer than the former
      * "Select type:"; reserve space before the CYCLE gadget.
      */
-    g.mode_x=250;
-    g.mode_w=(WORD)(right-250);
+    g.mode_x=(WORD)(left+picker_text_span(w,p->role?
+                  "Select Destination Medium":"Select Source Medium",230));
+    g.mode_w=(WORD)(right-g.mode_x);
+    g.query_w=(WORD)picker_text_span(w,"Query",80);
     g.list_y=(WORD)list_top;
     g.cycle_y=(WORD)(24-lift);
     g.heading_y=(WORD)(36-lift);
@@ -150,17 +156,17 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     g.browse_y=(WORD)list_top;
     g.path_y=(WORD)(105-lift);
     g.detail_y=(WORD)(132-lift);
-    g.format_x=159;
-    g.format_w=(WORD)(right-159);
+    g.format_x=(WORD)(left+picker_text_span(w,"Image format",139));
+    g.format_w=(WORD)(right-g.format_x);
     /* A shared label column keeps the previews aligned in all
      * modes. The Size field is right-anchored and stays separate.
      */
-    g.value_x=180;
-    g.value_w=(WORD)(right-180);
-    g.name_x=124;
-    g.size_w=102;
+    g.value_x=(WORD)(left+picker_text_span(w,"Selected partition",160));
+    g.value_w=(WORD)(right-g.value_x);
+    g.name_x=(WORD)(left+picker_text_span(w,"Device name",104));
+    g.size_w=(WORD)picker_text_span(w,"999999 MiB",102);
     g.size_x=(WORD)(right-g.size_w);
-    g.size_label_x=(WORD)(g.size_x-46);
+    g.size_label_x=(WORD)(g.size_x-picker_text_span(w,"Size",46));
     g.name_w=(WORD)(g.size_label_x-8-g.name_x);
     return g;
 }
@@ -451,7 +457,7 @@ static void update_selection_preview(DollyEndpointPicker *p) {
                (STRPTR)p->selection_display,length)>
                (LONG)picker_geometry(p).value_w-
                ((p->mode==DOLLY_MODE_PHYSICAL ||
-                 p->mode==DOLLY_MODE_PARTITION)?100:16))
+                 p->mode==DOLLY_MODE_PARTITION)?picker_geometry(p).query_w+20:16))
         p->selection_display[--length]='\0';
     if(length<(ULONG)strlen(full) && length>=3u) {
         p->selection_display[length-3u]='.';
@@ -469,7 +475,7 @@ static struct Gadget *selection_text(struct Gadget *last,
     ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.preview_y;
     ng.ng_Width=(WORD)(g.value_w-
                  (p->mode==DOLLY_MODE_PHYSICAL ||
-                  p->mode==DOLLY_MODE_PARTITION ? 84:0));
+                  p->mode==DOLLY_MODE_PARTITION ? g.query_w+4:0));
     ng.ng_Height=16;
     ng.ng_GadgetID=PICK_SELECTION_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
@@ -769,7 +775,9 @@ static void captions(DollyEndpointPicker *p) {
         if(columns==3u) {
             column_geometry(p,columns,2u,&x,&w);
             Move(rp,x,g.list_label_y);
-            Text(rp,(STRPTR)"Partition (RDB/MBR)",19);
+            if(TextLength(rp,(STRPTR)"Partition (RDB/MBR)",19)<=w-4)
+                Text(rp,(STRPTR)"Partition (RDB/MBR)",19);
+            else Text(rp,(STRPTR)"Partition",9);
         }
     } else if(p->mode==DOLLY_MODE_LOGICAL) {
         Move(rp,20,g.list_label_y);
@@ -932,8 +940,8 @@ static int rebuild(DollyEndpointPicker *p) {
         if(p->mode==DOLLY_MODE_PHYSICAL ||
            p->mode==DOLLY_MODE_PARTITION) {
             last=button(last,p,PICK_QUERY,
-                        (WORD)(g.right-80),g.preview_y,
-                        80,"Query",!physical_choice(p));
+                        (WORD)(g.right-g.query_w),g.preview_y,
+                        g.query_w,"Query",!physical_choice(p));
             if(!last)return 0;
             p->query_button=last;
         }

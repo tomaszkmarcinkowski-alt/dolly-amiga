@@ -10,6 +10,8 @@
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/gadtools.h>
+#include <proto/graphics.h>
+#include <graphics/text.h>
 #include <proto/intuition.h>
 #include <stdio.h>
 #include <string.h>
@@ -197,7 +199,7 @@ int dolly_amiga_log_view_open(struct Screen *screen,const DollySurfaceScan *scan
                               const char *outcome) {
     struct NewGadget ng={0};
     struct Gadget *last;
-    WORD left,top,width,height;
+    WORD left,top,width,height,row,button_width;
     if(view.window) {
         WindowToFront(view.window);
         ActivateWindow(view.window);
@@ -228,30 +230,34 @@ int dolly_amiga_log_view_open(struct Screen *screen,const DollySurfaceScan *scan
     ng.ng_LeftEdge=left;
     ng.ng_TopEdge=top;
     ng.ng_Width=width;
-    ng.ng_Height=height-38;
+    row=(WORD)(screen->RastPort.Font->tf_YSize+6);
+    button_width=(WORD)(TextLength(view.window->RPort,(STRPTR)"Previous",8)+20);
+    if(button_width<76)button_width=76;
+    if(4*button_width+18>width)goto fail;
+    ng.ng_Height=height-2*row-8;
     ng.ng_GadgetID=LOG_LIST;
     last=CreateGadget(LISTVIEW_KIND,last,&ng,GTLV_Labels,(ULONG)&view.rows,TAG_DONE);
     if(!last)goto fail;
     view.list=last;
-    ng.ng_TopEdge=top+height-34;
-    ng.ng_Height=14;
+    ng.ng_TopEdge=top+height-2*row-4;
+    ng.ng_Height=row;
     ng.ng_GadgetID=0;
     last=CreateGadget(TEXT_KIND,last,&ng,GTTX_Text,(ULONG)view.status_text,
                       GTTX_Border,TRUE,TAG_DONE);
     if(!last)goto fail;
     view.status=last;
-    ng.ng_TopEdge=top+height-16;
-    ng.ng_Height=16;
-    ng.ng_Width=96;
+    ng.ng_TopEdge=top+height-row;
+    ng.ng_Height=row;
+    ng.ng_Width=button_width;
     last=button(last,&ng,left,LOG_PREVIOUS,"Previous",1);
     if(!last)goto fail;
     view.previous=last;
-    last=button(last,&ng,left+102,LOG_NEXT,"Next",1);
+    last=button(last,&ng,left+button_width+6,LOG_NEXT,"Next",1);
     if(!last)goto fail;
     view.next=last;
-    last=button(last,&ng,left+204,LOG_SAVE,"Save Log",!AslBase);
+    last=button(last,&ng,left+2*(button_width+6),LOG_SAVE,"Save Log",!AslBase);
     if(!last)goto fail;
-    last=button(last,&ng,left+width-96,LOG_CLOSE,"Close",0);
+    last=button(last,&ng,left+width-button_width,LOG_CLOSE,"Close",0);
     if(!last)goto fail;
     AddGList(view.window,view.gadgets,(ULONG)-1,-1,NULL);
     RefreshGList(view.gadgets,view.window,NULL,-1);

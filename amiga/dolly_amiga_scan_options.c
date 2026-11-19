@@ -5,7 +5,10 @@
 #include <libraries/gadtools.h>
 #include <proto/exec.h>
 #include <proto/gadtools.h>
+#include <proto/graphics.h>
+#include <graphics/text.h>
 #include <proto/intuition.h>
+#include <string.h>
 
 int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
                             const DollyMediaGeometry *geometry) {
@@ -21,51 +24,68 @@ int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
                       scan->first_lba+scan->total-1u,255};
     int done=0,accepted=0;
     unsigned i;
+    LONG row,field_x,field_w,content,left,y,hint_width;
+    static const char hint[]="LBA or C/H/S (S starts at 1). Retries: 0-255.";
     if(!parent)return 0;
     screen=parent->WScreen;
+    row=screen->RastPort.Font->tf_YSize+7;
+    field_x=0;
+    for(i=0;i<3;++i) {
+        LONG width=TextLength(&screen->RastPort,(STRPTR)labels[i],strlen(labels[i]));
+        if(width>field_x)field_x=width;
+    }
+    field_x+=24;
+    field_w=TextLength(&screen->RastPort,(STRPTR)"00000000000000000000",20)+18;
+    hint_width=TextLength(&screen->RastPort,(STRPTR)hint,sizeof(hint)-1)+24;
+    content=field_x+field_w+77;
+    if(content<hint_width)content=hint_width;
     visual=GetVisualInfo(screen,TAG_DONE);
     if(!visual)return 0;
     dolly_surface_log_decimal(defaults[0],lower[0]);
     dolly_surface_log_decimal(defaults[1],upper[1]);
     dolly_surface_log_decimal(defaults[2],scan->max_retries);
     window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,
-         WA_Title,(ULONG)"Surface Scan - Parameters",WA_Width,525UL,WA_Height,143UL,
+         WA_Title,(ULONG)"Surface Scan - Parameters",WA_InnerWidth,(ULONG)content,WA_InnerHeight,(ULONG)(5*row+28),
          WA_Activate,TRUE,WA_CloseGadget,TRUE,WA_DragBar,TRUE,WA_SmartRefresh,TRUE,
          WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW,TAG_DONE);
     if(!window)goto out;
     last=CreateContext(&list);
     if(!last)goto out;
-    ng.ng_VisualInfo=visual;ng.ng_TextAttr=screen->Font;ng.ng_Height=15;
+    ng.ng_VisualInfo=visual;ng.ng_TextAttr=screen->Font;ng.ng_Height=(WORD)row;
+    left=window->BorderLeft;
+    y=window->BorderTop+6;
     for(i=0;i<3;++i) {
         unsigned button;
-        ng.ng_LeftEdge=112;ng.ng_Width=235;
-        ng.ng_TopEdge=(WORD)(window->BorderTop+6+20*i);
+        ng.ng_LeftEdge=(WORD)(left+field_x);ng.ng_Width=(WORD)field_w;
+        ng.ng_TopEdge=(WORD)(y+(row+3)*i);
         ng.ng_GadgetText=(STRPTR)labels[i];ng.ng_Flags=PLACETEXT_LEFT;
         ng.ng_GadgetID=(UWORD)(i+1u);
         fields[i]=last=CreateGadget(STRING_KIND,last,&ng,
                   GTST_String,(ULONG)defaults[i],GTST_MaxChars,34UL,TAG_DONE);
         if(!last)goto out;
-        ng.ng_Flags=0;ng.ng_LeftEdge=355;ng.ng_Width=34;
+        ng.ng_Flags=0;ng.ng_LeftEdge=(WORD)(left+field_x+field_w+5);ng.ng_Width=28;
         for(button=0;button<2;++button) {
             ng.ng_GadgetID=(UWORD)(20+2*i+button);
             ng.ng_GadgetText=(STRPTR)(button?"+":"-");
             last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
             if(!last)goto out;
-            ng.ng_LeftEdge+=40;
+            ng.ng_LeftEdge+=33;
         }
     }
-    ng.ng_LeftEdge=12;ng.ng_Width=494;ng.ng_TopEdge=window->BorderTop+68;
+    ng.ng_LeftEdge=(WORD)(left+12);ng.ng_Width=(WORD)(content-24);
+    ng.ng_TopEdge=(WORD)(y+3*(row+3)+2);
     ng.ng_GadgetText=NULL;
     ng.ng_GadgetID=0;
     status=last=CreateGadget(TEXT_KIND,last,&ng,
-       GTTX_Text,(ULONG)"Inclusive LBA or C/H/S (sector starts at 1). Retries 0-255.",TAG_DONE);
+       GTTX_Text,(ULONG)hint,TAG_DONE);
     if(!last)goto out;
-    ng.ng_TopEdge+=21;ng.ng_Width=100;
+    ng.ng_TopEdge+=(WORD)(row+5);
+    ng.ng_Width=(WORD)(TextLength(&screen->RastPort,(STRPTR)"Cancel",6)+20);
     for(i=0;i<2;++i) {
         ng.ng_GadgetID=(UWORD)(10+i);ng.ng_GadgetText=(STRPTR)(i?"Cancel":"Start");
         last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
         if(!last)goto out;
-        ng.ng_LeftEdge+=110;
+        ng.ng_LeftEdge+=ng.ng_Width+8;
     }
     AddGList(window,list,(ULONG)-1,-1,NULL);
     RefreshGList(list,window,NULL,-1);

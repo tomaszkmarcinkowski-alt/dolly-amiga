@@ -158,8 +158,7 @@ uses the same ASL save flow. It exports the full LBA 0, including boot
 code, the primary partition entries and the MBR signature. Export is
 disabled for layouts with extended or nested RDB containers. Protective
 MBR (GPT) and hybrid layouts remain unsupported. The matching
-**Restore RDB** button is available for a verified `scsi.device` RDB
-with a supported backup span. **Restore MBR** remains disabled.
+**Restore RDB** button is always enabled. Restore MBR is pending.
 Restore RDB requires a ROM driver, 512-byte sectors, a 16–128-sector
 reserved prefix, and a target with no AmigaDOS registration and no
 other observed opens. The original and replacement must have the
@@ -209,7 +208,7 @@ application-owned text, Intuition mouse tracking, hit testing against
 the screen font and selection highlighting. The same Copy action
 could export the resulting range through clipboard.device.
 
-When Inventory cannot identify the partition table, it displays a
-disabled Restore RDB button. The status line reports the result of the
-table scan. Restore onto an empty or unrecognized layout is outside
-the current implementation.
+Every click on **Restore RDB** opens the shared ten-second confirmation.
+After Proceed, Inventory checks target eligibility and displays an explicit
+reason for any refusal. Eligible operations retain the final confirmation
+for the validated write plan, including its LBA range.

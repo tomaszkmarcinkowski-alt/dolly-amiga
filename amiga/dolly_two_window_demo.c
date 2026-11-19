@@ -80,6 +80,7 @@ typedef struct DemoLayout {
     LONG main_device_y, main_target_y, main_operation_y;
     LONG main_desc_y, main_status_y, main_count_y;
     LONG progress_x, progress_w, stop_x, quit_x, stop_quit_w;
+    LONG operation_x, detail_x;
     LONG pad_x, pad_y;
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h, gap_x, gap_y;
@@ -354,18 +355,18 @@ static void update_main_status(void) {
     if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
        selected_target.kind==DOLLY_ENDPOINT_FILE) {
         LONG pixel_width=main_view.window ?
-                         main_view.l.right-main_view.l.left-120 : 9999;
+                         main_view.l.right-main_view.l.detail_x : 9999;
         format_destination_image(main_view.target_label,
                                  sizeof(main_view.target_label),
                                  &selected_target,pixel_width);
     }
     if(main_view.window) {
         DemoLayout *d=&main_view.l;
-        clip_main(main_view.source_label,d->right-d->left-120);
+        clip_main(main_view.source_label,d->right-d->detail_x);
         if(!(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
              selected_target.kind==DOLLY_ENDPOINT_FILE))
-            clip_main(main_view.target_label,d->right-d->left-120);
-        clip_main(main_view.desc_label,d->right-d->left-88);
+            clip_main(main_view.target_label,d->right-d->detail_x);
+        clip_main(main_view.desc_label,d->right-d->operation_x);
         clip_main(main_view.status_label,d->right-d->left-8);
     }
 }
@@ -516,7 +517,12 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
         /* Fixed compact percent well, Stop/Quit aligned to the right.
          * Keep enough room even at the 320px minimum client width.
          */
-        d.progress_x=d.left+86;
+        LONG heading=TextLength(w->RPort,(STRPTR)"Operation:",10)+8;
+        LONG endpoint=TextLength(w->RPort,(STRPTR)"Destination...",14)+8;
+        LONG progress=TextLength(w->RPort,(STRPTR)"Progress:",9)+10;
+        d.operation_x=d.left+(heading>88?heading:88);
+        d.detail_x=d.left+(endpoint>120?endpoint:120);
+        d.progress_x=d.left+(progress>86?progress:86);
         d.progress_w=66;
         /* Keep 320px client layouts viable: shorten both buttons
          * together instead of raising the minimum width.
@@ -658,13 +664,13 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
     if(main_window) {
-        LONG detail_x=d->left+120;
+        LONG detail_x=d->detail_x;
         LONG detail_w=d->right-detail_x+1;
-        LONG operation_x=d->left+88;
+        LONG operation_x=d->operation_x;
         LONG three_width,three_gap=6;
         update_main_status();
         last=make_button(last,v,MAIN_SOURCE_ID,d->left,d->main_device_y,
-                         114,"Source...");
+                         detail_x-d->left-6,"Source...");
         if(!last)return 0;
         v->device=last;
         last=make_text(last,v,MAIN_SOURCE_TEXT_ID,detail_x,d->main_device_y,
@@ -672,7 +678,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         if(!last)return 0;
         v->source_text=last;
         last=make_button(last,v,MAIN_TARGET_ID,d->left,d->main_target_y,
-                         114,"Destination...");
+                         detail_x-d->left-6,"Destination...");
         if(!last)return 0;
         v->target_button=last;
         last=make_text(last,v,MAIN_TARGET_TEXT_ID,detail_x,d->main_target_y,
@@ -815,11 +821,14 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         {
             static const char heading[]="Operation:";
             static const char choice[]="Restore a file image to a destination.";
+            ULONG progress=(ULONG)TextLength(rp,(STRPTR)"Progress:",9)+10u;
             ULONG a=(ULONG)TextLength(rp,(STRPTR)heading,
                                        (ULONG)strlen(heading));
             ULONG b=(ULONG)TextLength(rp,(STRPTR)choice,
                                        (ULONG)strlen(choice));
-            m.heading_width=a>b+88ul?a:b+88ul;
+            ULONG offset=a+8u>88u?a+8u:88u;
+            m.heading_width=b+offset;
+            if(progress>86u)m.main_build_label_width+=progress-86u;
         }
         m.show_button_text_width=(ULONG)TextLength(rp,
                 (STRPTR)"Sheep Counter",13);

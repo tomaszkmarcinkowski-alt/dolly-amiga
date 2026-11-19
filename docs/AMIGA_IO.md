@@ -129,3 +129,9 @@ The unit list is sorted by numeric ID. **Other unit…** lets you enter
 any unsigned 32-bit unit number for `scsi.device`, including units
 without a mounted volume or RDB. The number is added to the current
 picker and selected. **Query** explicitly probes only that chosen unit.
+
+Settings places the entry legend below the three I/O fields and above
+the checkboxes. The recessed help panel describes the control under
+the pointer. Save errors are also shown there.
+The Settings window measures labels, help text and gadget rows using
+the screen font to size its client area.

@@ -1540,3 +1540,21 @@ Review existing windows before applying this pattern to them.
 In Restore and Create Image, the file picker uses a GadTools string
 field for the full path. Browse fills the field. Use selection commits
 the current text, including edits made without pressing Return.
+
+### Font sensitivity audit
+
+| Window | Font-sensitive layout |
+|---|---|
+| Main | Measure Operation, Destination and Progress labels before placing adjacent controls. Clip committed endpoint captions to the resulting field widths. |
+| Source and Destination | Measure the mode heading, selection and property columns and Query. Use a compact partition heading when the full caption does not fit its column. |
+| Sheep Counter | Measure footer button widths and the progress/header captions. Grid markers use the deliberate Topaz 8 marker font. |
+| Sheep Inventory | Measure footer buttons and clip status text using the window raster port. |
+| Settings | Size the client area from measured labels, help messages and row height. Use the actual gadget placement for hover help. |
+| Surface Scan parameters and log | Measure form labels, editable fields, and footer buttons. Use the font height for control rows. |
+| Destructive confirmation | Wrap the operation and warning by pixel width and size the dialog from the actual line count. Refuse confirmation if the warning cannot fit. |
+| System ASL and Intuition requesters | Let the system lay out standard file and message requesters. |
+
+The approved main-window row rhythm remains fixed. The picker and
+Inventory retain fixed vertical regions, so exceptionally tall screen
+fonts still need a runtime layout pass. The 60-column Workbench mode
+and proportional fonts need visual verification on AmigaOS.

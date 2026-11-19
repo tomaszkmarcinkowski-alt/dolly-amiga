@@ -5,6 +5,7 @@
 #include "dolly_amiga_inventory_view.h"
 #include "dolly_amiga_device_query.h"
 #include "dolly_amiga_clipboard.h"
+#include "dolly_amiga_destructive.h"
 #include "dolly_amiga_physical_catalog.h"
 #include <exec/types.h>
 #include <dos/dosextens.h>
@@ -140,10 +141,10 @@ static struct Gadget *create_list(struct Gadget *previous,
                         TAG_DONE);
 }
 static void draw_text(struct Window *w,struct DrawInfo *info,
-                      LONG x,LONG y,const char *s) {
+                      LONG x,LONG y,LONG right,const char *s) {
     struct RastPort *rp=w->RPort;
     ULONG length=(ULONG)strlen(s);
-    LONG width=(LONG)w->Width-(LONG)w->BorderRight-x-4;
+    LONG width=right-x;
     while(length && TextLength(rp,(STRPTR)s,length)>width)
         --length;
     if(!length)return;
@@ -329,7 +330,7 @@ static void paint_status(DollyNativeInventoryView *v,struct DrawInfo *info) {
     SetAPen(w->RPort,info->dri_Pens[BACKGROUNDPEN]);
     RectFill(w->RPort,left,y,right-1,y+INV_STATUS_HEIGHT-1);
     DrawBevelBoxA(w->RPort,left,y,right-left,INV_STATUS_HEIGHT,tags);
-    draw_text(w,info,left+6,y+11,v->status);
+    draw_text(w,info,left+6,y+11,right-6,v->status);
 }
 static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
     struct DrawInfo *info;
@@ -344,12 +345,13 @@ static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
     sprintf(line,"%lu %sPartitions:",(unsigned long)v->count,
             v->map.format==DOLLY_NATIVE_PARTITION_MBR?"MBR ":
             v->map.format==DOLLY_NATIVE_PARTITION_RDB?"RDB ":"");
-    draw_text(w,info,left,top+60,line);
+    draw_text(w,info,left,top+60,details_x(v)-4,line);
     if(v->count)
-        draw_text(w,info,details_x(v),top+60,
+        draw_text(w,info,details_x(v),top+60,w->Width-w->BorderRight-INV_MARGIN,
                   v->detail_count?"Partition details":"Select a partition");
     if(!v->count)
-        draw_text(w,info,left+4,top+78,"No partitions to display");
+        draw_text(w,info,left+4,top+78,w->Width-w->BorderRight-INV_MARGIN,
+                  "No partitions to display");
     paint_status(v,info);
     FreeScreenDrawInfo(screen,info);
 }
@@ -395,6 +397,11 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     LONG list_top=(LONG)w->BorderTop+INV_LIST_TOP;
     LONG list_height=status_top(w)-5-list_top;
     LONG button_top=bottom-18;
+    LONG button_width=TextLength(w->RPort,(STRPTR)"Restore RDB",11)+16;
+    LONG backup_width=TextLength(w->RPort,(STRPTR)"Backup MBR",10)+16;
+    if(button_width<backup_width)button_width=backup_width;
+    if(button_width<INV_BUTTON_WIDTH)button_width=INV_BUTTON_WIDTH;
+    if(button_width>(right-left-12)/3)button_width=(right-left-12)/3;
     if(v->gadgets) {
         RemoveGList(w,v->gadgets,-1);
         FreeGadgets(v->gadgets);
@@ -426,17 +433,17 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     {
         int mbr=v->map.format==DOLLY_NATIVE_PARTITION_MBR;
         if(v->map.format!=DOLLY_NATIVE_PARTITION_NONE) {
-            last=create_button(last,v,screen,left,button_top,INV_BUTTON_WIDTH,
+            last=create_button(last,v,screen,left,button_top,button_width,
                                INV_BACKUP_ID,(STRPTR)(mbr?"Backup MBR":"Backup RDB"),
                                (ULONG)!backup_available(v));
             if(!last)return 0;
         }
-        last=create_button(last,v,screen,(left+right-INV_BUTTON_WIDTH)/2,
-                           button_top,INV_BUTTON_WIDTH,INV_RESTORE_ID,
-                           (STRPTR)(mbr?"Restore MBR":"Restore RDB"),!restore_available(v));
+        last=create_button(last,v,screen,(left+right-button_width)/2,
+                           button_top,button_width,INV_RESTORE_ID,
+                           (STRPTR)"Restore RDB",FALSE);
         if(!last)return 0;
     }
-    last=create_button(last,v,screen,right-INV_BUTTON_WIDTH,button_top,INV_BUTTON_WIDTH,
+    last=create_button(last,v,screen,right-button_width,button_top,button_width,
                        INV_CLOSE_ID,(STRPTR)"Close",FALSE);
     if(!last)return 0;
     info=GetScreenDrawInfo(screen);
@@ -572,10 +579,27 @@ static void show_restore_failure(DollyNativeInventoryView *v,const char *reason)
         EasyRequestArgs(v->window,&request,NULL,args);
 }
 static void restore_partition_table(DollyNativeInventoryView *v) {
-    char input[256],recovery[256];
+    char input[256],recovery[256],warning[128];
     BPTR file;
     const char *reason;
-    if(!restore_available(v))return;
+    if(v->driver[0])
+        snprintf(warning,sizeof(warning),"Restore RDB on %s / Unit %lu.",
+                 v->driver,(unsigned long)v->unit);
+    else snprintf(warning,sizeof(warning),"Restore RDB on the selected device.");
+    if(!dolly_amiga_confirm_destructive(v->window,warning))return;
+    if(!restore_available(v)) {
+        reason=!AslBase?"The ASL file requester is unavailable.":
+               !v->verified?"Cannot verify the target device and geometry.":
+               v->map.format==DOLLY_NATIVE_PARTITION_MBR?
+                   "The target contains MBR. Restore RDB requires an existing RDB.":
+               v->map.format!=DOLLY_NATIVE_PARTITION_RDB?
+                   "No compatible RDB was found on the target.":
+               strcmp(v->driver,"scsi.device")!=0?
+                   "Restore RDB requires ROM scsi.device.":
+                   "The target's reserved RDB area is outside the supported range.";
+        show_restore_failure(v,reason);
+        return;
+    }
     if(dolly_amiga_unit_registered(v->driver,v->unit)!=0) {
         show_restore_failure(v,"Restore RDB requires an offline target.\nNo AmigaDOS device registration may refer to it.");
         return;
@@ -739,7 +763,7 @@ void dolly_inventory_view_pump(DollyNativeInventoryView *v) {
             dolly_inventory_view_close(v);return;
         }
         if(!relayout && id==INV_BACKUP_ID)backup_partition_table(v);
-        if(!relayout && id==INV_RESTORE_ID)restore_partition_table(v);
+        if(id==INV_RESTORE_ID)restore_partition_table(v);
         if(id==INV_HEADER_ID && (unsigned)code<DOLLY_INVENTORY_HEADER_ROWS) {
             row=v->header_text[code];
         } else if(id==INV_PART_ID && (unsigned)code<v->count) {

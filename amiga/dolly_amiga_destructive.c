@@ -5,6 +5,8 @@
 #include <libraries/gadtools.h>
 #include <proto/exec.h>
 #include <proto/gadtools.h>
+#include <proto/graphics.h>
+#include <graphics/text.h>
 #include <proto/intuition.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +16,27 @@ static void start_second(struct timerequest *timer) {
     timer->tr_time.tv_secs=1;
     timer->tr_time.tv_micro=0;
     SendIO(&timer->tr_node);
+}
+
+static int wrap_lines(struct RastPort *rp,const char *text,LONG width,
+                      char lines[][97],unsigned *count) {
+    while(*text) {
+        size_t limit=strcspn(text,"\n"),n=limit<96?limit:96,word;
+        if(*count>=10)return 0;
+        while(n && TextLength(rp,(STRPTR)text,n)>width)--n;
+        if(!n && limit)return 0;
+        if(n<limit) {
+            word=n;
+            while(word && text[word]!=' ')--word;
+            if(word)n=word;
+        }
+        memcpy(lines[*count],text,n);
+        lines[(*count)++][n]=0;
+        text+=n;
+        while(*text==' ')++text;
+        if(*text=='\n')++text;
+    }
+    return 1;
 }
 
 int dolly_amiga_confirm_destructive(struct Window *parent,const char *reason) {
@@ -29,10 +52,20 @@ int dolly_amiga_confirm_destructive(struct Window *parent,const char *reason) {
     struct Screen *screen;
     APTR visual=NULL;
     int opened=0,pending=0,done=0,confirmed=0;
-    unsigned seconds=10,i;
-    char lines[3][65]={{0}},label[40];
+    unsigned seconds=10,i,line_count=0;
+    LONG row,width,button_width,left;
+    char lines[10][97],label[40];
     if(!parent || !reason || !*reason)return 0;
     screen=parent->WScreen;
+    width=(LONG)screen->Width-24;
+    if(width>580)width=580;
+    if(width<220)return 0;
+    row=screen->RastPort.Font->tf_YSize+4;
+    button_width=TextLength(&screen->RastPort,(STRPTR)"Proceed",7)+20;
+    if(!wrap_lines(&screen->RastPort,reason,width,&lines[0],&line_count))return 0;
+    for(i=0;i<2;++i)
+        if(!wrap_lines(&screen->RastPort,warnings[i],width,&lines[0],&line_count))return 0;
+    if((LONG)(line_count+2u)*row+30>screen->Height-screen->BarHeight)return 0;
     port=CreateMsgPort();
     if(!port)return 0;
     timer=(struct timerequest *)CreateIORequest(port,sizeof(*timer));
@@ -41,8 +74,9 @@ int dolly_amiga_confirm_destructive(struct Window *parent,const char *reason) {
     visual=GetVisualInfo(screen,TAG_DONE);
     if(!visual)goto out;
     window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,
-        WA_Title,(ULONG)"Confirm destructive operation",WA_Width,604UL,WA_Height,135UL,
-        WA_Left,(ULONG)(parent->LeftEdge>30?30:parent->LeftEdge),
+        WA_Title,(ULONG)"Confirm destructive operation",WA_InnerWidth,(ULONG)(width+12),
+        WA_InnerHeight,(ULONG)((line_count+2u)*row+16),
+        WA_Left,4UL,
         WA_Top,(ULONG)(screen->BarHeight+3),
         WA_Activate,TRUE,WA_CloseGadget,TRUE,WA_DragBar,TRUE,WA_SmartRefresh,TRUE,
         WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|IDCMP_RAWKEY|IDCMP_REFRESHWINDOW,
@@ -51,36 +85,23 @@ int dolly_amiga_confirm_destructive(struct Window *parent,const char *reason) {
     last=CreateContext(&gadgets);
     if(!last)goto out;
     ng.ng_VisualInfo=visual;ng.ng_TextAttr=screen->Font;
-    ng.ng_LeftEdge=12;ng.ng_Width=580;ng.ng_Height=12;
+    left=window->BorderLeft+6;
+    ng.ng_LeftEdge=(WORD)left;ng.ng_Width=(WORD)width;ng.ng_Height=(WORD)row;
     ng.ng_TopEdge=window->BorderTop+4;
-    for(i=0;i<3 && *reason;++i) {
-        size_t length=strcspn(reason,"\n");
-        if(length>64) {
-            length=64;
-            while(length>40 && reason[length]!=' ')--length;
-            if(length==40)length=64;
-        }
-        memcpy(lines[i],reason,length);
-        reason+=length;
-        if(*reason=='\n' || *reason==' ')++reason;
+    for(i=0;i<line_count;++i) {
         last=CreateGadget(TEXT_KIND,last,&ng,GTTX_Text,(ULONG)lines[i],TAG_DONE);
         if(!last)goto out;
-        ng.ng_TopEdge+=12;
-    }
-    for(i=0;i<2;++i) {
-        last=CreateGadget(TEXT_KIND,last,&ng,GTTX_Text,(ULONG)warnings[i],TAG_DONE);
-        if(!last)goto out;
-        ng.ng_TopEdge+=12;
+        ng.ng_TopEdge+=(WORD)row;
     }
     ng.ng_TopEdge+=3;
     strcpy(label,"Proceed available in 10 s");
     clock=last=CreateGadget(TEXT_KIND,last,&ng,GTTX_Text,(ULONG)label,TAG_DONE);
     if(!last)goto out;
-    ng.ng_TopEdge+=14;ng.ng_Height=15;ng.ng_Width=120;
+    ng.ng_TopEdge+=(WORD)(row+2);ng.ng_Width=(WORD)button_width;
     ng.ng_GadgetID=1;ng.ng_GadgetText=(STRPTR)"Proceed";
     proceed=last=CreateGadget(BUTTON_KIND,last,&ng,GA_Disabled,TRUE,TAG_DONE);
     if(!last)goto out;
-    ng.ng_LeftEdge=460;ng.ng_GadgetID=2;ng.ng_GadgetText=(STRPTR)"Cancel";
+    ng.ng_LeftEdge=(WORD)(left+width-button_width);ng.ng_GadgetID=2;ng.ng_GadgetText=(STRPTR)"Cancel";
     last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
     if(!last)goto out;
     AddGList(window,gadgets,(ULONG)-1,-1,NULL);
