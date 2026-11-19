@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 #include "dolly_amiga_io_settings.h"
 #include <proto/dos.h>
 #include <proto/exec.h>
@@ -8,7 +9,9 @@
 
 struct Library *IconBase;
 
-#define PREFS_VERSION 5u
+#define PREFS_VERSION 6u
+#define PREFS_FONT_PAYLOAD (DOLLY_FONT_NAME_BYTES+8u)
+#define PREFS_FONT_CHUNK (8u+PREFS_FONT_PAYLOAD)
 #define PREFS_ALLOW_OUTSIDE_RANGE 16u
 #define PREFS_ALLOW_RESTORE_MISMATCH 8u
 #define PREFS_LEGACY_LIMIT 1u
@@ -79,7 +82,7 @@ static int select_path(int argc,char **argv) {
 }
 
 const char *dolly_amiga_prefs_load(int argc,char **argv) {
-    unsigned char header[42],record[PREFS_RECORD],extra;
+    unsigned char header[42],record[PREFS_RECORD],font[PREFS_FONT_CHUNK],extra;
     uint32_t bytes,flags;
     BPTR f;
     const char *error="Dolly could not read the preferences. Defaults will be used.";
@@ -97,7 +100,7 @@ const char *dolly_amiga_prefs_load(int argc,char **argv) {
     }
     if(Read(f,header+26,16)!=16 || memcmp(header+26,"DOIO",4) ||
        (bytes=get32(header+30))<8 || bytes>8u+PREFS_RECORD*DOLLY_PREFS_MAX ||
-       (bytes-8)%PREFS_RECORD || get32(header+4)!=26u+bytes ||
+       (bytes-8)%PREFS_RECORD || get32(header+4)!=26u+bytes+PREFS_FONT_CHUNK ||
        get32(header+38)!=(bytes-8)/PREFS_RECORD)goto finish;
     flags=get32(header+34);
     if(flags&~(PREFS_LEGACY_LIMIT|PREFS_VERIFY_WRITES|PREFS_SUPPRESS_SAME_UNIT_WARNING|PREFS_ALLOW_RESTORE_MISMATCH|PREFS_ALLOW_OUTSIDE_RANGE))goto finish;
@@ -120,7 +123,16 @@ const char *dolly_amiga_prefs_load(int argc,char **argv) {
            !dolly_amiga_io_store(&device,hints))goto finish;
         bytes-=PREFS_RECORD;
     }
-    if(Read(f,&extra,1)!=0)goto finish;
+    if(Read(f,font,sizeof(font))!=(LONG)sizeof(font) ||
+       memcmp(font,"DFNT",4) || get32(font+4)!=PREFS_FONT_PAYLOAD ||
+       !memchr(font+8,0,DOLLY_FONT_NAME_BYTES) ||
+       get32(font+8+DOLLY_FONT_NAME_BYTES)>65535u ||
+       get32(font+12+DOLLY_FONT_NAME_BYTES)>255u ||
+       (!!font[8] != !!get32(font+8+DOLLY_FONT_NAME_BYTES)) ||
+       Read(f,&extra,1)!=0)goto finish;
+    memcpy(dolly_amiga_font_choice.name,font+8,DOLLY_FONT_NAME_BYTES);
+    dolly_amiga_font_choice.size=(UWORD)get32(font+8+DOLLY_FONT_NAME_BYTES);
+    dolly_amiga_font_choice.style=(UBYTE)get32(font+12+DOLLY_FONT_NAME_BYTES);
     dolly_amiga_set_legacy_override((flags&PREFS_LEGACY_LIMIT)!=0);
     dolly_amiga_set_verify_writes((flags&PREFS_VERIFY_WRITES)!=0);
     dolly_amiga_set_suppress_same_unit_warning((flags&PREFS_SUPPRESS_SAME_UNIT_WARNING)!=0);
@@ -134,7 +146,7 @@ finish:
 }
 
 int dolly_amiga_prefs_save(void) {
-    unsigned char header[42]={0},record[PREFS_RECORD];
+    unsigned char header[42]={0},record[PREFS_RECORD],font[PREFS_FONT_CHUNK]={0};
     char drawer[sizeof(prefs_path)+12];
     char temp[sizeof(drawer)+5],backup[sizeof(drawer)+5];
     DollyPhysicalEntry device;
@@ -145,7 +157,7 @@ int dolly_amiga_prefs_save(void) {
     int ok,existing;
     for(i=0;dolly_amiga_io_entry(i,&device,&hints);++i)++count;
     bytes=8u+count*PREFS_RECORD;
-    memcpy(header,"FORM",4);put32(header+4,26u+bytes);
+    memcpy(header,"FORM",4);put32(header+4,26u+bytes+PREFS_FONT_CHUNK);
     memcpy(header+8,"PREFPRHD",8);put32(header+16,6);
     header[20]=PREFS_VERSION;
     memcpy(header+26,"DOIO",4);put32(header+30,bytes);
@@ -179,6 +191,12 @@ int dolly_amiga_prefs_save(void) {
         put32(record+DOLLY_PHYS_DRIVER_LEN+16,hints.max_transfer);
         ok=Write(f,record,sizeof(record))==(LONG)sizeof(record);
     }
+    memcpy(font,"DFNT",4);
+    put32(font+4,PREFS_FONT_PAYLOAD);
+    memcpy(font+8,dolly_amiga_font_choice.name,strlen(dolly_amiga_font_choice.name));
+    put32(font+8+DOLLY_FONT_NAME_BYTES,dolly_amiga_font_choice.size);
+    put32(font+12+DOLLY_FONT_NAME_BYTES,dolly_amiga_font_choice.style);
+    if(ok)ok=Write(f,font,sizeof(font))==(LONG)sizeof(font);
     if(!Close(f))ok=0;
     if(ok) {
         lock=Lock(prefs_path,ACCESS_READ);

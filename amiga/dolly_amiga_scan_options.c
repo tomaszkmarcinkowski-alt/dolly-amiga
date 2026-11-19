@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 #include "dolly_amiga_surface_scan.h"
 #include "dolly_scan_range.h"
 #include <intuition/intuition.h>
@@ -28,15 +29,17 @@ int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
     static const char hint[]="LBA or C/H/S (S starts at 1). Retries: 0-255.";
     if(!parent)return 0;
     screen=parent->WScreen;
-    row=screen->RastPort.Font->tf_YSize+7;
+    struct RastPort measure=screen->RastPort;
+    SetFont(&measure,dolly_amiga_font(0));
+    row=dolly_amiga_font(0)->tf_YSize+7;
     field_x=0;
     for(i=0;i<3;++i) {
-        LONG width=TextLength(&screen->RastPort,(STRPTR)labels[i],strlen(labels[i]));
+        LONG width=TextLength(&measure,(STRPTR)labels[i],strlen(labels[i]));
         if(width>field_x)field_x=width;
     }
     field_x+=24;
-    field_w=TextLength(&screen->RastPort,(STRPTR)"00000000000000000000",20)+18;
-    hint_width=TextLength(&screen->RastPort,(STRPTR)hint,sizeof(hint)-1)+24;
+    field_w=TextLength(&measure,(STRPTR)"00000000000000000000",20)+18;
+    hint_width=TextLength(&measure,(STRPTR)hint,sizeof(hint)-1)+24;
     content=field_x+field_w+77;
     if(content<hint_width)content=hint_width;
     visual=GetVisualInfo(screen,TAG_DONE);
@@ -51,7 +54,8 @@ int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
     if(!window)goto out;
     last=CreateContext(&list);
     if(!last)goto out;
-    ng.ng_VisualInfo=visual;ng.ng_TextAttr=screen->Font;ng.ng_Height=(WORD)row;
+    dolly_amiga_window_font(window,0);
+    ng.ng_VisualInfo=visual;ng.ng_TextAttr=dolly_amiga_text_attr(0);ng.ng_Height=(WORD)row;
     left=window->BorderLeft;
     y=window->BorderTop+6;
     for(i=0;i<3;++i) {
@@ -80,7 +84,7 @@ int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
        GTTX_Text,(ULONG)hint,TAG_DONE);
     if(!last)goto out;
     ng.ng_TopEdge+=(WORD)(row+5);
-    ng.ng_Width=(WORD)(TextLength(&screen->RastPort,(STRPTR)"Cancel",6)+20);
+    ng.ng_Width=(WORD)(TextLength(&measure,(STRPTR)"Cancel",6)+20);
     for(i=0;i<2;++i) {
         ng.ng_GadgetID=(UWORD)(10+i);ng.ng_GadgetText=(STRPTR)(i?"Cancel":"Start");
         last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);

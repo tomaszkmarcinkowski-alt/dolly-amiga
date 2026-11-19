@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 #include "dolly_amiga_log_view.h"
 #include "dolly_amiga_clipboard.h"
 #include <dos/dos.h>
@@ -232,11 +233,12 @@ int dolly_amiga_log_view_open(struct Screen *screen,const DollySurfaceScan *scan
     if(!last)goto fail;
     init_rows();
     ng.ng_VisualInfo=view.visual;
-    ng.ng_TextAttr=screen->Font;
+    dolly_amiga_window_font(view.window,1);
+    ng.ng_TextAttr=dolly_amiga_text_attr(1);
     ng.ng_LeftEdge=left;
     ng.ng_TopEdge=top;
     ng.ng_Width=width;
-    row=(WORD)(screen->RastPort.Font->tf_YSize+6);
+    row=(WORD)(dolly_amiga_font(1)->tf_YSize+6);
     button_width=(WORD)(TextLength(view.window->RPort,(STRPTR)"Previous",8)+20);
     if(button_width<76)button_width=76;
     if(4*button_width+18>width)goto fail;

@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 #include "dolly_amiga_io_settings.h"
 #include "dolly_amiga_device_query.h"
 #include <exec/types.h>
@@ -145,7 +146,9 @@ typedef struct SettingsHelpArea {
 } SettingsHelpArea;
 
 static LONG text_width(struct Screen *screen,const char *text) {
-    return TextLength(&screen->RastPort,(STRPTR)text,(ULONG)strlen(text));
+    struct RastPort rp=screen->RastPort;
+    SetFont(&rp,dolly_amiga_font(0));
+    return TextLength(&rp,(STRPTR)text,(ULONG)strlen(text));
 }
 static LONG widest(struct Screen *screen,const char *const *items,unsigned count) {
     unsigned i;
@@ -164,9 +167,14 @@ static const char *settings_help(const SettingsHelpArea *areas,WORD x,WORD y) {
     return NULL;
 }
 
+static void format_font(char *label,size_t size,const DollyFontChoice *font) {
+    if(font->name[0])snprintf(label,size,"%s / %u",font->name,(unsigned)font->size);
+    else snprintf(label,size,"Screen font");
+}
+
 void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint) {
     static const unsigned bits[]={DOLLY_IO_MASK,DOLLY_IO_BUF_MEM,DOLLY_IO_MAX_TRANSFER};
-    struct Gadget *gadgets=NULL,*last,*fields[3],*status;
+    struct Gadget *gadgets=NULL,*last,*fields[3],*status,*font_display;
     struct Window *window=NULL;
     struct NewGadget ng={0};
     DollyPhysicalEntry device={0};
@@ -179,7 +187,10 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     const char *legend;
     APTR visual;
     unsigned i;
-    char title[94],initial[3][11];
+    char title[94],initial[3][11],font_label[DOLLY_FONT_NAME_BYTES+20];
+    DollyFontChoice font=dolly_amiga_font_choice;
+    static const char *const font_buttons[]={"Choose font...", "Screen font"};
+    LONG font_button_width=widest(screen,font_buttons,2)+18;
     uint32_t values[3];
     int done=0,has_device=0,legacy=legacy_override;
     int allow_mismatch=allow_restore_mismatch,outside_range=allow_outside_range;
@@ -198,7 +209,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                  (unsigned long)device.unit);
     else strcpy(title,"Dolly Settings");
     legend=has_device?"Blank = Auto. Decimal or 0x hex.":"Select a source to edit its I/O parameters.";
-    row_height=screen->RastPort.Font->tf_YSize+5;
+    row_height=dolly_amiga_font(0)->tf_YSize+5;
     label_width=widest(screen,field_labels,3);
     field_width=text_width(screen,"0x00000000")+14;
     button_width=widest(screen,button_labels,3)+18;
@@ -208,8 +219,12 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     if(content_width<check_width)content_width=check_width;
     if(content_width<label_width+12+field_width)content_width=label_width+12+field_width;
     if(content_width<3*button_width+12)content_width=3*button_width+12;
+    if(content_width<2*font_button_width+12+text_width(screen,"Screen font"))
+        content_width=2*font_button_width+12+text_width(screen,"Screen font");
+    format_font(font_label,sizeof(font_label),&font);
+    if(content_width>(LONG)screen->Width-36)content_width=(LONG)screen->Width-36;
     client_width=content_width+12;
-    client_height=11*row_height+10*3+8;
+    client_height=12*row_height+11*3+8;
     visual=GetVisualInfo(screen,TAG_DONE);
     if(!visual)return;
     window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,WA_Title,(ULONG)title,
@@ -220,7 +235,8 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     last=CreateContext(&gadgets);
     if(!last)goto cleanup;
     ng.ng_VisualInfo=visual;
-    ng.ng_TextAttr=screen->Font;
+    dolly_amiga_window_font(window,0);
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     left=window->BorderLeft+6;
     y=window->BorderTop+4;
     field_x=left+label_width+12;
@@ -258,8 +274,23 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
     }
     ng.ng_TopEdge=(WORD)y;ng.ng_Width=(WORD)content_width;
     ng.ng_GadgetText=NULL;ng.ng_Flags=0;ng.ng_GadgetID=0;
+    for(i=0;i<2;++i) {
+        ng.ng_LeftEdge=(WORD)(left+(LONG)i*(font_button_width+6));
+        ng.ng_Width=(WORD)font_button_width;
+        ng.ng_GadgetText=(STRPTR)font_buttons[i];ng.ng_GadgetID=(UWORD)(30+i);
+        last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
+        if(!last)goto cleanup;
+    }
+    ng.ng_LeftEdge=(WORD)(left+2*(font_button_width+6));
+    ng.ng_Width=(WORD)(content_width-2*(font_button_width+6));
+    ng.ng_GadgetText=NULL;ng.ng_GadgetID=0;
+    font_display=last=CreateGadget(TEXT_KIND,last,&ng,GTTX_Text,(ULONG)font_label,
+        GTTX_Clipped,TRUE,TAG_DONE);
+    if(!last)goto cleanup;
+    y+=row_height+3;
+    ng.ng_LeftEdge=(WORD)left;ng.ng_TopEdge=(WORD)y;ng.ng_Width=(WORD)content_width;
     status=last=CreateGadget(TEXT_KIND,last,&ng,
-        GTTX_Text,(ULONG)help_default,GTTX_Border,TRUE,TAG_DONE);
+        GTTX_Text,(ULONG)help_default,GTTX_Border,TRUE,GTTX_Clipped,TRUE,TAG_DONE);
     if(!last)goto cleanup;
     y+=row_height+3;
     ng.ng_TopEdge=(WORD)y;ng.ng_Width=(WORD)button_width;
@@ -302,6 +333,13 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
             else if(id==22)suppress_warning=code!=0;
             else if(id==23)allow_mismatch=code!=0;
             else if(id==24)outside_range=code!=0;
+            else if(id==30 || id==31) {
+                if(id==31)memset(&font,0,sizeof(font));
+                if(id==31 || dolly_amiga_choose_font(window,&font)) {
+                    format_font(font_label,sizeof(font_label),&font);
+                    GT_SetGadgetAttrs(font_display,window,NULL,GTTX_Text,(ULONG)font_label,TAG_DONE);
+                }
+            }
             else if(id==11) {
                 for(i=0;i<3;++i)
                     GT_SetGadgetAttrs(fields[i],window,NULL,GTST_String,(ULONG)"",TAG_DONE);
@@ -318,6 +356,7 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                 }
                 if(valid && dolly_io_hints_valid(next) &&
                    (!has_device || existing || dolly_amiga_io_store(&device,next))) {
+                    DollyFontChoice previous_font=dolly_amiga_font_choice;
                     int previous=legacy_override,previous_verify=verify_writes;
                     int previous_warning=suppress_same_unit_warning;
                     int previous_mismatch=allow_restore_mismatch;
@@ -328,11 +367,13 @@ void dolly_amiga_io_settings(struct Screen *screen,const DollyEndpoint *endpoint
                     suppress_same_unit_warning=suppress_warning;
                     allow_restore_mismatch=allow_mismatch;
                     allow_outside_range=outside_range;
+                    dolly_amiga_font_choice=font;
                     if(dolly_amiga_prefs_save()) {
                         if(existing && !next.present)dolly_amiga_io_store(&device,next);
                         done=1;
                     }
                     else {
+                        dolly_amiga_font_choice=previous_font;
                         legacy_override=previous;
                         verify_writes=previous_verify;
                         suppress_same_unit_warning=previous_warning;

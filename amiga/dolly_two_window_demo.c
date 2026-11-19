@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 /* M1.12: responsive, two-window GadTools OperationSession demo.
  * MC68000 / AmigaOS 2.04: system pens, live window borders, aspect margins,
  * recessed 24x8 grid and incremental (not full-screen) progress painting.
@@ -129,7 +130,6 @@ static struct NewMenu settings_items[]={
     {NM_END,NULL,NULL,0,0,NULL}
 };
 static struct DrawInfo *screen_info;
-static struct TextFont *marker_font;
 static DollyOperationSession operation;
 static DollySurfaceScan surface;
 static unsigned char scan_result,image_result;
@@ -617,7 +617,7 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=v->visual;
-    ng.ng_TextAttr=public_screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
@@ -644,7 +644,7 @@ static struct Gadget *make_number(struct Gadget *last,DollyDemoView *v,
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=v->visual;
-    ng.ng_TextAttr=public_screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
@@ -660,7 +660,7 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=v->visual;
-    ng.ng_TextAttr=public_screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
@@ -679,7 +679,7 @@ static struct Gadget *make_selector(struct Gadget *last,DollyDemoView *v,
     struct NewGadget ng={0};
     LONG x=v->l.selector_x[column];
     ng.ng_VisualInfo=v->visual;
-    ng.ng_TextAttr=public_screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)v->l.selector_w[column];
@@ -983,6 +983,7 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
                  (main_window?IDCMP_MENUPICK:0),
         TAG_DONE);
     if(!v->window)return 0;
+    dolly_amiga_window_font(v->window,0);
     if(!set_content_minimum(v,main_window)) {
         puts("WINDOW FAIL: measured minimum does not fit");
         return 0;
@@ -1074,20 +1075,18 @@ static void draw_main_static(void) {
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
                         LONG width,LONG height,char marker,ULONG pen) {
-    struct TextFont *saved=rp->Font;
+    const struct TextFont *font=rp->Font;
     UBYTE mode=rp->DrawMode;
     LONG glyph_width;
-    if(!marker_font)return;
-    SetFont(rp,marker_font);
     glyph_width=(LONG)TextLength(rp,(STRPTR)&marker,1);
+    if(glyph_width>width || font->tf_YSize>height)return;
     SetDrMd(rp,JAM1);
     SetAPen(rp,system_pen(pen));
     Move(rp,x+(width-glyph_width)/2,
-         y+(height-(LONG)marker_font->tf_YSize)/2+
-           (LONG)marker_font->tf_Baseline);
+         y+(height-(LONG)font->tf_YSize)/2+
+           (LONG)font->tf_Baseline);
     Text(rp,(STRPTR)&marker,1);
     SetDrMd(rp,mode);
-    if(saved)SetFont(rp,saved);
 }
 static void draw_cell(unsigned idx,unsigned completed,int running) {
     DemoLayout *d=&sheep_view.l;
@@ -1537,12 +1536,57 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
     if(redraw && !v->gadgets_detached)draw_full(v,main_window);
     if(relayout && main_window)update_main_actions();
 }
+static int open_main_window(void) {
+    ULONG top=(ULONG)public_screen->BarHeight+1ul;
+    ULONG max_height=(ULONG)public_screen->Height-top;
+    struct RastPort measure=public_screen->RastPort;
+    struct TextFont *font=dolly_amiga_font(0);
+    ULONG height=150u+(ULONG)main_selector_extra(font)+
+                 (ULONG)(selector_height(font)-MAIN_GADGET_HEIGHT);
+    ULONG width;
+    SetFont(&measure,font);
+    width=(ULONG)main_selector_width(&measure)+32u;
+    if(height>max_height)height=max_height;
+    if(width<600u)width=600u;
+    if(width>(ULONG)public_screen->Width-12u)width=(ULONG)public_screen->Width-12u;
+    if(!open_view(&main_view,1,"Dolly",12,top,width,height))return 0;
+    settings_menu=CreateMenus(settings_items,TAG_DONE);
+    if(settings_menu &&
+       (!LayoutMenus(settings_menu,main_view.visual,TAG_DONE) ||
+        !SetMenuStrip(main_view.window,settings_menu))) {
+        FreeMenus(settings_menu);
+        settings_menu=NULL;
+    }
+    draw_full(&main_view,1);
+    refresh_main_selection();
+    return 1;
+}
+static void close_main_window(void) {
+    if(settings_menu) {
+        ClearMenuStrip(main_view.window);
+        FreeMenus(settings_menu);
+        settings_menu=NULL;
+    }
+    destroy_view(&main_view);
+}
+static int open_main_with_fallback(void) {
+    if(open_main_window())return 1;
+    close_main_window();
+    if(!dolly_amiga_fonts_use_topaz() || !open_main_window())return 0;
+    {
+        struct EasyStruct request={
+            sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Font",
+            (STRPTR)"The selected font does not fit this screen. Dolly will use Topaz 8.",
+            (STRPTR)"OK"
+        };
+        EasyRequestArgs(main_view.window,&request,NULL,NULL);
+    }
+    return 1;
+}
 int main(int argc,char **argv) {
     unsigned frames=0;
     int quit=0,rc=10;
-    static struct TextAttr marker_attr={
-        (STRPTR)"topaz.font",8,FS_NORMAL,FPF_ROMFONT
-    };
+    const char *prefs_error;
     dolly_operation_init(&operation);
     puts("Dolly: entered main");
     /* Open the main UI idle. Starting a synthetic operation is explicit. */
@@ -1553,8 +1597,6 @@ int main(int argc,char **argv) {
     AslBase=OpenLibrary("asl.library",36); /* Optional file selector. */
     /* libnix startup already owns DOSBase; no extra OpenLibrary. */
     if(!GfxBase || !GadToolsBase)goto cleanup;
-    marker_font=OpenFont(&marker_attr);
-    if(!marker_font)goto cleanup;
     public_screen=LockPubScreen(NULL);
     if(!public_screen)goto cleanup;
     if((ULONG)public_screen->Width<640ul ||
@@ -1562,35 +1604,16 @@ int main(int argc,char **argv) {
     screen_info=GetScreenDrawInfo(public_screen);
     if(!screen_info)goto cleanup;
     puts("Dolly: public screen ready");
+    prefs_error=dolly_amiga_prefs_load(argc,argv);
+    if(!dolly_amiga_fonts_init(public_screen) || !open_main_with_fallback())
+        goto cleanup;
     {
-        ULONG top=(ULONG)public_screen->BarHeight+1ul;
-        ULONG max_height=(ULONG)public_screen->Height-top;
-        const struct TextFont *font=public_screen->RastPort.Font;
-        ULONG height=150u+(ULONG)main_selector_extra(font)+
-                     (ULONG)(selector_height(font)-MAIN_GADGET_HEIGHT);
-        ULONG width=(ULONG)main_selector_width(&public_screen->RastPort)+32u;
-        if(height>max_height)height=max_height;
-        if(width<600u)width=600u;
-        if(width>(ULONG)public_screen->Width-12u)width=(ULONG)public_screen->Width-12u;
-        if(!open_view(&main_view,1,"Dolly",12,top,width,height))goto cleanup;
-    }
-    settings_menu=CreateMenus(settings_items,TAG_DONE);
-    if(settings_menu &&
-       (!LayoutMenus(settings_menu,main_view.visual,TAG_DONE) ||
-        !SetMenuStrip(main_view.window,settings_menu))) {
-        FreeMenus(settings_menu);
-        settings_menu=NULL;
-    }
-    draw_full(&main_view,1);
-    refresh_main_selection();
-    {
-        const char *error=dolly_amiga_prefs_load(argc,argv);
-        if(error) {
+        if(prefs_error) {
             struct EasyStruct request={
                 sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Preferences",
                 (STRPTR)"%s",(STRPTR)"OK"
             };
-            ULONG args[]={(ULONG)error};
+            ULONG args[]={(ULONG)prefs_error};
             EasyRequestArgs(main_view.window,&request,NULL,args);
         }
     }
@@ -1676,6 +1699,18 @@ int main(int argc,char **argv) {
                 refresh_main_selection();
             }
         }
+        if(!quit && dolly_amiga_fonts_changed()) {
+            int counter_open=sheep_view.window!=NULL;
+            hide_sheep();
+            close_main_window();
+            dolly_amiga_fonts_apply();
+            if(!open_main_with_fallback())goto cleanup;
+            if(counter_open)show_sheep();
+            dolly_picker_refresh_font(&source_picker);
+            dolly_picker_refresh_font(&target_picker);
+            dolly_inventory_view_refresh_font(&inventory_view);
+            dolly_amiga_fonts_release_previous();
+        }
         if(!quit)sync_action_labels();
     }
     printf("Session blocks=%lu/%lu state=%u visible=%u\n",
@@ -1693,17 +1728,13 @@ cleanup:
     dolly_picker_close(&source_picker);
     dolly_picker_close(&target_picker);
     hide_sheep();
-    if(settings_menu) {
-        ClearMenuStrip(main_view.window);
-        FreeMenus(settings_menu);
-    }
     dolly_amiga_io_settings_clear();
-    destroy_view(&main_view);
+    close_main_window();
+    dolly_amiga_fonts_close();
     if(screen_info && public_screen)
         FreeScreenDrawInfo(public_screen,screen_info);
     if(public_screen)UnlockPubScreen(NULL,public_screen);
-    if(marker_font)CloseFont(marker_font);
-     if(AslBase)CloseLibrary(AslBase);
+    if(AslBase)CloseLibrary(AslBase);
     if(GadToolsBase)CloseLibrary(GadToolsBase);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);
     if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);

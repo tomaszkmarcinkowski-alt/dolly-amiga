@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 #include "dolly_amiga_destructive.h"
 #include <devices/timer.h>
 #include <intuition/intuition.h>
@@ -124,6 +125,7 @@ static int run_request(struct Window *parent,const char *title,const char *body,
     if(width>580)width=580;
     if(width<220)return 0;
     measure=screen->RastPort;
+    SetFont(&measure,dolly_amiga_font(0));
     row=measure.Font->tf_YSize+4;
     for(i=0;i<count;++i) {
         LONG needed=TextLength(&measure,(STRPTR)buttons[i],strlen(buttons[i]))+20;
@@ -156,7 +158,8 @@ static int run_request(struct Window *parent,const char *title,const char *body,
     if(!window)goto out;
     last=CreateContext(&gadgets);
     if(!last)goto out;
-    ng.ng_VisualInfo=visual;ng.ng_TextAttr=screen->Font;
+    dolly_amiga_window_font(window,0);
+    ng.ng_VisualInfo=visual;ng.ng_TextAttr=dolly_amiga_text_attr(0);
     left=window->BorderLeft+6;
     ng.ng_LeftEdge=(WORD)left;ng.ng_Width=(WORD)width;ng.ng_Height=(WORD)row;
     ng.ng_TopEdge=(WORD)(window->BorderTop+7+(LONG)line_count*row);

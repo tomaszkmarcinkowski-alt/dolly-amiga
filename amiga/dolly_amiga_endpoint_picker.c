@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 /* Native AmigaOS 2.04 endpoint picker, synthetic device tree.
  * Mode-first workflow: Physical device, Logical device, Partition, File.
  * No OpenDevice(), block reads or writes.
@@ -315,7 +316,7 @@ static struct Gadget *button(struct Gadget *last,DollyEndpointPicker *p,
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=x;ng.ng_TopEdge=y;
     ng.ng_Width=w;ng.ng_Height=16;
     ng.ng_GadgetID=id;ng.ng_GadgetText=(STRPTR)name;
@@ -368,7 +369,7 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
     if(id==PICK_LOGICAL && p->has_logical)selected=(ULONG)p->logical;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=x;ng.ng_TopEdge=y;
     ng.ng_Width=w;
     ng.ng_Height=picker_geometry(p).list_h;
@@ -415,7 +416,7 @@ static struct Gadget *selection_text(struct Gadget *last,DollyEndpointPicker *p,
     struct NewGadget ng={0};
     PickerGeometry g=picker_geometry(p);
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=unit?g.unit_x:g.value_x;
     ng.ng_TopEdge=g.preview_y;
     ng.ng_Width=unit?g.unit_w:
@@ -438,7 +439,7 @@ static struct Gadget *partition_number(struct Gadget *last,DollyEndpointPicker *
     struct NewGadget ng={0};
     PickerGeometry g=picker_geometry(p);
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.value_x;
     ng.ng_TopEdge=g.partition_info_y;
     ng.ng_Width=g.partition_w;
@@ -501,7 +502,7 @@ static struct Gadget *disk_info_text(struct Gadget *last,
     PickerGeometry g=picker_geometry(p);
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.disk_info_y;
     ng.ng_Width=g.name_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_DISK_INFO_TEXT;
@@ -516,7 +517,7 @@ static struct Gadget *disk_size_text(struct Gadget *last,
     PickerGeometry g=picker_geometry(p);
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.size_x;ng.ng_TopEdge=g.size_y;
     ng.ng_Width=g.size_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_DISK_SIZE_TEXT;
@@ -531,7 +532,7 @@ static struct Gadget *geometry_info_text(struct Gadget *last,
     PickerGeometry g=picker_geometry(p);
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=ata?g.ata_info_y:g.geometry_info_y;
     ng.ng_Width=ata?g.value_w:g.geometry_w;ng.ng_Height=16;
     ng.ng_GadgetID=ata?PICK_ATA_INFO_TEXT:PICK_GEOMETRY_INFO_TEXT;
@@ -625,7 +626,7 @@ static struct Gadget *partition_info_text(struct Gadget *last,
     PickerGeometry g=picker_geometry(p);
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=g.value_x+g.partition_w+6;
     ng.ng_TopEdge=g.partition_info_y;
     ng.ng_Width=g.value_w-g.partition_w-6;
@@ -647,7 +648,7 @@ static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=picker_geometry(p).value_x;
     ng.ng_TopEdge=picker_geometry(p).path_y;
     ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=17;
@@ -661,7 +662,7 @@ static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=picker_geometry(p).value_x;
     ng.ng_TopEdge=picker_geometry(p).detail_y;
     ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=16;
@@ -726,7 +727,7 @@ static struct Gadget *cycle(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
-    ng.ng_TextAttr=p->screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=picker_geometry(p).mode_x;
     ng.ng_TopEdge=picker_geometry(p).cycle_y;
     ng.ng_Width=picker_geometry(p).mode_w;ng.ng_Height=17;
@@ -1132,8 +1133,15 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                    IDCMP_NEWSIZE|IDCMP_SIZEVERIFY,
           TAG_DONE);
     if(!p->window)return 0;
+    dolly_amiga_window_font(p->window,0);
     return rebuild(p);
 }
+void dolly_picker_refresh_font(DollyEndpointPicker *p) {
+    if(!p->window)return;
+    dolly_amiga_window_font(p->window,0);
+    if(!rebuild(p))dolly_picker_close(p);
+}
+
 void dolly_picker_close(DollyEndpointPicker *p) {
     if(!p)return;
     if(p->window){CloseWindow(p->window);p->window=NULL;}

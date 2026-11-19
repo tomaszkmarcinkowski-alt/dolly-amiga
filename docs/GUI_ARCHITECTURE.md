@@ -48,11 +48,12 @@ claiming this UI milestone complete.
 
 Mandatory **640x256, topaz.font/8** baseline for every built-in GadTools window and warning, considering outer dimensions (title, gadgets, borders, buttons). Prefer practical 640x200 compatibility. Existing `dolly_gui_layout` is a *portable geometry preflight*, not a real pixel-precise GadTools renderer.
 
-Font selection priority:
-
-1. Explicitly enabled **Dolly custom font**, if available and its measured content fits.
-2. Actual current **system Screen Font**, when the user has not selected a custom font or custom font does not fit.
-3. **topaz.font/8 fallback** if the screen or custom font would clip a view; use a compact, paginated layout if needed.
+Dolly uses **Screen Font** for its interface. Settings offers **Choose font...**
+to open the ASL font selector and **Screen font** to clear the override.
+**Save** stores the choice and rebuilds the open Dolly windows. The Surface
+Scan Log uses the AmigaOS **System Default Font**, which can be configured
+to a proportional font in Workbench. Dolly falls back to **topaz.font/8**
+when a requested font is unavailable or the main layout cannot fit it.
 
 The actual font of a public screen's title/menu is owned by Intuition and **cannot be changed by Dolly**. Use `Screen.Font` / `GetScreenDrawInfo(...)->dri_Font` as appropriate and real glyph measurements (e.g. `TextLength`, `TextExtent`) rather than assuming that a proportional font has fixed-width cells. The portable layout receives conservative measured cell/line metrics plus exact measured title and border dimensions. The renderer must **clip all text**, truncate/scroll/paginate lengthy diagnostics and reserve a permanently reachable button row. If even compact Topaz/8 cannot fit, do **not** open an inaccessible window; provide a safe alternative (CLI or short explanation on a usable screen).
 
@@ -1547,7 +1548,7 @@ the current text, including edits made without pressing Return.
 |---|---|
 | Main | Measure Operation, Destination and Progress labels before placing adjacent controls. Clip committed endpoint captions to the resulting field widths. |
 | Source and Destination | Measure the mode heading, selection and property columns and Query. Use a compact partition heading when the full caption does not fit its column. |
-| Sheep Counter | Measure footer button widths and the progress/header captions. Grid markers use the deliberate Topaz 8 marker font. |
+| Sheep Counter | Measure footer button widths and the progress/header captions. Grid markers use the active interface font when the glyph fits the tile. |
 | Sheep Inventory | Measure footer buttons and clip status text using the window raster port. |
 | Settings | Size the client area from measured labels, help messages and row height. Use the actual gadget placement for hover help. |
 | Surface Scan parameters and log | Measure form labels, editable fields, and footer buttons. Use the font height for control rows. |

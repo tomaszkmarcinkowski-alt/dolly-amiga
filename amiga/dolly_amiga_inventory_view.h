@@ -50,4 +50,5 @@ int dolly_inventory_view_open(DollyNativeInventoryView *view,
                                const DollyEndpoint *source);
 void dolly_inventory_view_pump(DollyNativeInventoryView *view);
 void dolly_inventory_view_close(DollyNativeInventoryView *view);
+void dolly_inventory_view_refresh_font(DollyNativeInventoryView *v);
 #endif

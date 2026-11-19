@@ -1,3 +1,4 @@
+#include "dolly_amiga_fonts.h"
 /* Sheep Inventory: device snapshot and explicit RDB backup/restore.
  * Only the selected device/unit from the established picker is queried.
  * Registered AmigaDOS entries do not guarantee usable media.
@@ -39,13 +40,12 @@
 extern struct Library *AslBase;
 extern struct DosLibrary *DOSBase;
 
-static LONG header_height(const struct Screen *screen) {
-    LONG font_height=screen->Font->ta_YSize;
+static LONG header_height(LONG font_height) {
     return 6+(LONG)DOLLY_INVENTORY_HEADER_ROWS*(font_height+2);
 }
 
 static LONG partition_caption_top(const struct Window *w) {
-    return (LONG)w->BorderTop+INV_HEADER_TOP+header_height(w->WScreen)+4;
+    return (LONG)w->BorderTop+INV_HEADER_TOP+header_height(w->RPort->TxHeight)+4;
 }
 
 static LONG partition_list_top(const struct Window *w) {
@@ -65,8 +65,18 @@ static LONG details_x(const DollyNativeInventoryView *v) {
 static LONG client_bottom(const struct Window *w) {
     return (LONG)w->Height-w->BorderBottom-1;
 }
+static LONG footer_height(const struct Window *w,LONG minimum) {
+    LONG height=(LONG)w->RPort->TxHeight+6;
+    return height>minimum?height:minimum;
+}
 static LONG status_top(const struct Window *w) {
-    return client_bottom(w)-18-4-INV_STATUS_HEIGHT;
+    return client_bottom(w)-footer_height(w,18)-4-footer_height(w,INV_STATUS_HEIGHT);
+}
+static LONG minimum_height(const struct Window *w) {
+    LONG minimum=partition_list_top(w)+w->RPort->TxHeight+6+
+                 w->BorderBottom+1+footer_height(w,18)+4+
+                 footer_height(w,INV_STATUS_HEIGHT)+5;
+    return minimum>INV_MIN_HEIGHT?minimum:INV_MIN_HEIGHT;
 }
 static void format_chs_number(char *text,ULONG value) {
     if(value)sprintf(text,"%lu",(unsigned long)value);
@@ -121,29 +131,28 @@ static void add_row(DollyNativeInventoryView *v,const char *description) {
 }
 static struct Gadget *create_button(struct Gadget *previous,
                                     DollyNativeInventoryView *v,
-                                    struct Screen *screen,LONG x,LONG y,
+                                   LONG x,LONG y,
                                     LONG width,UWORD id,STRPTR label,
                                     ULONG disabled) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=v->visual;
-    ng.ng_TextAttr=screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=(WORD)x;ng.ng_TopEdge=(WORD)y;
-    ng.ng_Width=(WORD)width;ng.ng_Height=16;
+    ng.ng_Width=(WORD)width;ng.ng_Height=(WORD)footer_height(v->window,16);
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=label;
     return CreateGadget(BUTTON_KIND,previous,&ng,GA_Disabled,disabled,TAG_DONE);
 }
 static struct Gadget *create_list(struct Gadget *previous,
                                   DollyNativeInventoryView *v,
-                                  struct Screen *screen,
                                   LONG x,LONG y,LONG w,LONG h,
                                   UWORD id,struct List *rows,
                                   unsigned selection,unsigned count) {
     struct NewGadget ng;
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=v->visual;
-    ng.ng_TextAttr=screen->Font;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
     ng.ng_LeftEdge=(WORD)x;ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)w;ng.ng_Height=(WORD)h;
     ng.ng_GadgetID=id;
@@ -350,8 +359,8 @@ static void paint_status(DollyNativeInventoryView *v,struct DrawInfo *info) {
     };
     SetDrMd(w->RPort,JAM1);
     SetAPen(w->RPort,info->dri_Pens[BACKGROUNDPEN]);
-    RectFill(w->RPort,left,y,right-1,y+INV_STATUS_HEIGHT-1);
-    DrawBevelBoxA(w->RPort,left,y,right-left,INV_STATUS_HEIGHT,tags);
+    RectFill(w->RPort,left,y,right-1,y+footer_height(w,INV_STATUS_HEIGHT)-1);
+    DrawBevelBoxA(w->RPort,left,y,right-left,footer_height(w,INV_STATUS_HEIGHT),tags);
     draw_text(w,info,left+6,y+11,right-6,v->status);
 }
 static void paint(DollyNativeInventoryView *v,struct Screen *screen) {
@@ -418,7 +427,7 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     LONG bottom=client_bottom(w);
     LONG list_top=partition_list_top(w);
     LONG list_height=status_top(w)-5-list_top;
-    LONG button_top=bottom-18;
+    LONG button_top=bottom-footer_height(w,18);
     LONG button_width=TextLength(w->RPort,(STRPTR)"Restore RDB",11)+16;
     LONG backup_width=TextLength(w->RPort,(STRPTR)"Backup MBR",10)+16;
     if(list_height<w->RPort->TxHeight+6)return 0;
@@ -441,31 +450,31 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
-    last=create_list(last,v,screen,left,(LONG)w->BorderTop+INV_HEADER_TOP,right-left,
-                     header_height(screen),
+    last=create_list(last,v,left,(LONG)w->BorderTop+INV_HEADER_TOP,right-left,
+                     header_height(w->RPort->TxHeight),
                      INV_HEADER_ID,&v->header_rows,~0u,DOLLY_INVENTORY_HEADER_ROWS);
     if(!last)return 0;
     if(v->count) {
         LONG x=details_x(v);
-        last=create_list(last,v,screen,left,list_top,list_width(v),list_height,
+        last=create_list(last,v,left,list_top,list_width(v),list_height,
                          INV_PART_ID,&v->rows,v->selected_partition,v->count);
         if(!last)return 0;
-        last=create_list(last,v,screen,x,list_top,right-x,list_height,
+        last=create_list(last,v,x,list_top,right-x,list_height,
                          INV_DETAIL_ID,&v->details,v->selected_detail,v->detail_count);
         if(!last)return 0;
     }
     {
         int mbr=v->map.format==DOLLY_NATIVE_PARTITION_MBR;
-        last=create_button(last,v,screen,left,button_top,button_width,
+        last=create_button(last,v,left,button_top,button_width,
                            INV_BACKUP_ID,(STRPTR)(mbr?"Backup MBR":"Backup RDB"),
                            (ULONG)!backup_available(v));
         if(!last)return 0;
-        last=create_button(last,v,screen,(left+right-button_width)/2,
+        last=create_button(last,v,(left+right-button_width)/2,
                            button_top,button_width,INV_RESTORE_ID,
                            (STRPTR)"Restore RDB",FALSE);
         if(!last)return 0;
     }
-    last=create_button(last,v,screen,right-button_width,button_top,button_width,
+    last=create_button(last,v,right-button_width,button_top,button_width,
                        INV_CLOSE_ID,(STRPTR)"Close",FALSE);
     if(!last)return 0;
     info=GetScreenDrawInfo(screen);
@@ -665,7 +674,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     width=screen->Width<INV_WIDTH?screen->Width:INV_WIDTH;
     height=(LONG)screen->Height-top;
     {
-        LONG wanted=header_height(screen)+2*(LONG)screen->Font->ta_YSize+94;
+        LONG font_height=dolly_amiga_font(0)->tf_YSize;
+        LONG wanted=header_height(font_height)+2*font_height+94;
         if(wanted<INV_HEIGHT)wanted=INV_HEIGHT;
         if(height>wanted)height=wanted;
     }
@@ -762,12 +772,11 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                            IDCMP_MENUPICK,
                   TAG_DONE);
     if(!v->window){dolly_inventory_view_close(v);return 0;}
+    dolly_amiga_window_font(v->window,0);
     {
         struct Window *w=v->window;
         LONG available=(LONG)screen->Height-top;
-        LONG minimum=partition_list_top(w)+w->RPort->TxHeight+6+
-                     w->BorderBottom+1+18+4+INV_STATUS_HEIGHT+5;
-        if(minimum<INV_MIN_HEIGHT)minimum=INV_MIN_HEIGHT;
+        LONG minimum=minimum_height(w);
         if(minimum>w->Height ||
            !WindowLimits(w,INV_MIN_WIDTH,minimum,screen->Width,available)) {
             dolly_inventory_view_close(v);
@@ -826,4 +835,21 @@ void dolly_inventory_view_pump(DollyNativeInventoryView *v) {
     }
     if((relayout || details_changed) && !rebuild_gadgets(v,details_changed))
         dolly_inventory_view_close(v);
+}
+
+void dolly_inventory_view_refresh_font(DollyNativeInventoryView *v) {
+    struct Window *w=v->window;
+    LONG minimum,available;
+    if(!w)return;
+    dolly_amiga_window_font(w,0);
+    minimum=minimum_height(w);
+    available=(LONG)w->WScreen->Height-w->TopEdge;
+    if(minimum>available ||
+       !WindowLimits(w,INV_MIN_WIDTH,minimum,w->WScreen->Width,available)) {
+        dolly_inventory_view_close(v);
+        return;
+    }
+    if(w->Height<minimum)
+        SizeWindow(w,0,minimum-w->Height); /* IDCMP_NEWSIZE rebuilds the lists. */
+    else if(!rebuild_gadgets(v,0))dolly_inventory_view_close(v);
 }

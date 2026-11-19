@@ -138,7 +138,7 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_scan_options.c src/dolly_scan_range.c
       amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
       amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
-      amiga/dolly_amiga_io_settings.c amiga/dolly_amiga_prefs.c
+      amiga/dolly_amiga_io_settings.c amiga/dolly_amiga_prefs.c amiga/dolly_amiga_fonts.c
       amiga/dolly_amiga_transfer_guard.c amiga/dolly_amiga_restore_confirm.c
       amiga/dolly_amiga_destructive.c amiga/dolly_operation_pointer.c src/dolly_dlrp.c
       amiga/dolly_amiga_restore_source.c

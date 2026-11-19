@@ -73,15 +73,17 @@ or an unsupported schema version displays a system requester and
 ignores the entire file.
 
 The file is an Amiga IFF `FORM PREF` with a six-byte `PRHD` chunk
-and Dolly's `DOIO` chunk. The first byte of PRHD is the schema version,
-currently 4. DOIO contains a 32-bit global flags field (bit 0 enables
+and Dolly's `DOIO` and `DFNT` chunks. The first byte of PRHD is the schema
+version, currently 6. DOIO contains a 32-bit global flags field (bit 0 enables
 the legacy-limit override, bit 1 enables write verification, bit 2 hides
 the same-device speed warning, bit 3 allows the Restore compatibility
-override), a 32-bit
+override, bit 4 allows source partitions outside driver capacity), a 32-bit
 record count, and up to 64 fixed records. Each record contains a
 60-byte NUL-terminated driver name followed by five 32-bit fields:
 unit, presence flags, Mask, BufMemType and MaxTransfer. IFF integers
-are big-endian. Increment the PRHD version on every structural change.
+are big-endian. DFNT stores a 64-byte NUL-terminated font name, followed by
+32-bit height and style fields. An empty name and zero height select Screen Font.
+Increment the PRHD version on every structural change.
 
 ## Test coverage
 
