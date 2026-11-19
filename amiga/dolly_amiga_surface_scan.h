@@ -4,6 +4,7 @@
 #include "dolly_endpoint.h"
 #include "dolly_surface_log.h"
 #include "dolly_amiga_physical_catalog.h"
+#include "dolly_amiga_warnings.h"
 #define DOLLY_MEDIA_TRANSFER_BYTES 16384u
 
 typedef struct DollySurfaceScan {
@@ -12,6 +13,7 @@ typedef struct DollySurfaceScan {
     uint64_t first_lba,total,processed;
     uint32_t sector_bytes,transfer_bytes,fallback,errors,retries;
     unsigned retry_pending,max_retries;
+    unsigned has_rdb;
     const char *failure;
     DollySurfaceLog log;
     DollyMediaGeometry geometry;
@@ -31,7 +33,7 @@ typedef enum DollyIoRole {
     DOLLY_IO_DESTINATION
 } DollyIoRole;
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
-                       struct Window *parent,DollyIoRole role,int configure);
+                       struct Window *parent,DollyIoRole role,int configure,DollyWarnings *warnings);
 int dolly_amiga_scan_options(DollySurfaceScan *scan,struct Window *parent,
                             const DollyMediaGeometry *geometry);
 DollyBlockReadResult dolly_surface_read(DollySurfaceScan *scan,uint64_t offset,

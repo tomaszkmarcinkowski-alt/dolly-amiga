@@ -32,7 +32,7 @@ typedef struct DollyNativePartitionMap {
     DollyNativePartitionFormat format;
     ULONG rdb_header_block;
     ULONG rdb_backup_blocks; /* raw prefix length in 512-byte blocks */
-    unsigned char mbr_backup_available,rdb_capacity_mismatch;
+    unsigned char mbr_backup_available,rdb_capacity_mismatch,no_partition_table;
     char status[96];
     DollyNativePartition parts[DOLLY_PART_MAX];
 } DollyNativePartitionMap;

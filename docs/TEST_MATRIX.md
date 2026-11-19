@@ -18,6 +18,12 @@
   a proportional font, and applying a font choice without restarting.
 - [Download the test executable](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/main-window-test-20261119).
 
+### Consolidated warning review
+
+- MC68000 cross-build passed. Host CTest passed 36/36.
+- Pending on AmigaOS are warning order, navigation and Cancel, failed
+  unmount handling, and source inhibition cleanup.
+
 ### Sector copy and RAW/HDF Restore
 
 - Host coverage includes bounded batches, flush/readback failure, refusal

@@ -274,3 +274,122 @@ int dolly_amiga_unit_registered(const char *driver,ULONG unit) {
     UnLockDosList(flags);
     return found;
 }
+
+static int mount_name(char out[DOLLY_MOUNT_NAME],BPTR name) {
+    const UBYTE *str;
+    unsigned n;
+    if(!bptr_valid(name,1))return 0;
+    str=BADDR(name);
+    n=str[0];
+    if(!n || n>DOLLY_MOUNT_NAME-2 || !bptr_valid(name,n+1))return 0;
+    if(str[n]==0)--n;
+    if(!n || memchr(str+1,0,n))return 0;
+    memcpy(out,str+1,n);
+    out[n]=':';
+    out[n+1]=0;
+    return 1;
+}
+int dolly_amiga_mounted_extents(const DollyPhysicalEntry *device,uint64_t start,
+                               uint64_t bytes,int include_inactive,DollyMountList *out) {
+    const ULONG flags=LDF_DEVICES|LDF_VOLUMES|LDF_READ;
+    struct DosList *list=LockDosList(flags),*entry=list;
+    int ok=1;
+    out->count=0;
+    if(!list)return 0;
+    while((entry=NextDosEntry(entry,LDF_DEVICES))!=NULL) {
+        const struct FileSysStartupMsg *startup;
+        BPTR b=entry->dol_misc.dol_handler.dol_Startup;
+        DollyPhysicalEntry found;
+        uint64_t first,length;
+        ULONG sector;
+        struct DosList *volume=list;
+        DollyMountedVolume *mount;
+        if((!include_inactive && !entry->dol_Task) || !bptr_valid(b,sizeof(*startup)))continue;
+        startup=BADDR(b);
+        if(startup->fssm_Unit!=device->unit || !driver_name(found.driver,startup->fssm_Device) ||
+           strcasecmp(found.driver,device->driver))continue;
+        if(startup_extent(entry,&found,&first,&length,&sector,NULL) &&
+           (first>=start+bytes || start>=first+length))
+            continue;
+        if(out->count==DOLLY_MOUNT_MAX){ok=0;break;}
+        mount=&out->entries[out->count];
+        memset(mount,0,sizeof(*mount));
+        if(!mount_name(mount->device,entry->dol_Name)){ok=0;break;}
+        mount->entry=entry;
+        mount->handler=entry->dol_Task;
+        while((volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL) {
+            if(!mount->handler || volume->dol_Task!=mount->handler)continue;
+            if(!mount_name(mount->volume,volume->dol_Name))ok=0;
+            break;
+        }
+        if(!ok)break;
+        ++out->count;
+    }
+    UnLockDosList(flags);
+    return ok;
+}
+
+int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend) {
+    const ULONG flags=LDF_DEVICES|LDF_READ;
+    struct DosList *list,*entry;
+    char name[DOLLY_MOUNT_NAME];
+    size_t length=strlen(mount->device);
+    int same;
+    if(length<2 || length>=sizeof(name) || mount->device[length-1]!=':')return 0;
+    memcpy(name,mount->device,length-1);
+    name[length-1]=0;
+    list=LockDosList(flags);
+    if(!list)return 0;
+    entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
+    same=entry && entry==mount->entry && entry->dol_Task==mount->handler;
+    UnLockDosList(flags);
+    /* DOS may send a packet and wait for the handler. Do not hold the list lock. */
+    return same && Inhibit((STRPTR)mount->device,suspend?DOSTRUE:DOSFALSE);
+}
+
+int dolly_amiga_unmount(const DollyMountedVolume *mount) {
+    const ULONG read_flags=LDF_DEVICES|LDF_READ;
+    const ULONG write_flags=LDF_ALL|LDF_WRITE;
+    struct DosList *list,*entry;
+    char name[DOLLY_MOUNT_NAME];
+    size_t length=strlen(mount->device);
+    int same,removed=0;
+    if(length<2 || length>=sizeof(name) || mount->device[length-1]!=':')return 0;
+    memcpy(name,mount->device,length-1);
+    name[length-1]=0;
+    list=LockDosList(read_flags);
+    if(!list)return 0;
+    entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
+    same=entry && entry==mount->entry && entry->dol_Task==mount->handler;
+    UnLockDosList(read_flags);
+    if(!same)return 0;
+
+    /* Respect the filesystem's refusal, for instance when files are open.
+     * A handler that accepts shutdown must unregister or clear dol_Task. */
+    if(mount->handler && !DoPkt(mount->handler,ACTION_DIE,0,0,0,0,0))return 0;
+
+    Forbid();
+    list=AttemptLockDosList(write_flags);
+    if(list) {
+        struct DosList *volume=list;
+        int volume_active=0;
+        while(mount->handler && (volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL)
+            if(volume->dol_Task==mount->handler) {
+                volume_active=1;
+                break;
+            }
+        entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
+        if(!volume_active && !entry)removed=1;
+        else if(!volume_active && entry==mount->entry && !entry->dol_Task) {
+            /* RemDosEntry locks the list itself. The write lock is available
+             * and no other task can run between unlock and removal. */
+            UnLockDosList(write_flags);
+            removed=RemDosEntry(entry)!=0;
+            list=NULL;
+        }
+        if(list)UnLockDosList(write_flags);
+    }
+    Permit();
+    /* The DOS node and startup resources belong to its original owner. */
+    return removed;
+}

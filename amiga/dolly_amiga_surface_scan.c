@@ -26,7 +26,7 @@ void dolly_surface_close(DollySurfaceScan *scan) {
 }
 
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
-                       struct Window *parent,DollyIoRole role,int configure) {
+                       struct Window *parent,DollyIoRole role,int configure,DollyWarnings *warnings) {
     DollyPhysicalEntry device;
     DollyMediaGeometry geometry;
     DollyAmigaDeviceOptions opts;
@@ -77,6 +77,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             return 0;
         }
         found=dolly_amiga_partition_scan(device.driver,device.unit,&geometry,map);
+        scan->has_rdb=found && map->format==DOLLY_NATIVE_PARTITION_RDB;
         ok=endpoint->kind!=DOLLY_ENDPOINT_PARTITION;
         if(found && endpoint->kind==DOLLY_ENDPOINT_UNIT) {
             complete_rdb=map->format==DOLLY_NATIVE_PARTITION_RDB && map->count!=0 &&
@@ -144,13 +145,13 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
         DollyIoHints fallback={0x00fffffeu,DOLLY_IO_MEM_CHIP|DOLLY_IO_MEM_24BIT,
                                geometry.block_bytes>DOLLY_MEDIA_TRANSFER_BYTES?
                                geometry.block_bytes:DOLLY_MEDIA_TRANSFER_BYTES,DOLLY_IO_ALL};
-        int choice=dolly_amiga_role_request(parent,"Dolly - I/O settings",reason,
-                                           "Continue","Settings","Cancel");
-        if(choice!=1) {
-            scan->failure=choice==2?"Review settings, then press Start.":"Operation cancelled.";
-            if(choice==2 && parent)dolly_amiga_io_settings(parent->WScreen,endpoint);
+        DollyWarning *warning=dolly_warning_add(warnings,
+            role==DOLLY_IO_DESTINATION?"Destination I/O":"Source I/O",reason,"Continue");
+        if(!warning) {
+            scan->failure="Cannot collect I/O warning.";
             return 0;
         }
+        warning->settings=endpoint;
         dolly_io_hints_override(&fallback,hints);
         hints=fallback;
     }

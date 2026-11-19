@@ -1,4 +1,5 @@
 #include "dolly_amiga_image.h"
+#include "dolly_amiga_destructive.h"
 #include "dolly_amiga_transfer_guard.h"
 #include <dos/dos.h>
 #include <dos/dosextens.h>
@@ -77,6 +78,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     size_t prefix;
     char drawer[256];
     uint32_t batch_bytes;
+    DollyWarnings warnings={0};
     dolly_image_cancel(image);
     memset(image,0,sizeof(*image));
     image->failure="Choose RAW, HDF or IFF DOLY output.";
@@ -86,9 +88,9 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
         target->image_format!=DOLLY_IMAGE_IFF_DOLY &&
         target->image_format!=DOLLY_IMAGE_IFF_FAST &&
         target->image_format!=DOLLY_IMAGE_IFF_COMPACT))return 0;
-    if(!dolly_surface_open(&image->reader,source,parent,DOLLY_IO_SOURCE,0)) {
+    if(!dolly_surface_open(&image->reader,source,parent,DOLLY_IO_SOURCE,0,&warnings)) {
         image->failure=image->reader.failure;
-        return 0;
+        goto fail;
     }
     image->failure="Image must be smaller than 2 GiB on this writer.";
     if(image->reader.total*image->reader.sector_bytes>INT32_MAX)goto fail;
@@ -111,11 +113,20 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     drawer[prefix]='\0';
     image->drawer=Lock((STRPTR)drawer,ACCESS_READ);
     if(!image->drawer)goto fail;
-    image->failure=dolly_amiga_guard_file_transfer(parent,image->drawer,
+    image->failure=dolly_amiga_guard_file_transfer(&warnings,image->drawer,
                    &image->reader.device,
                    image->reader.first_lba*image->reader.sector_bytes,
                    image->reader.total*image->reader.sector_bytes);
-    if(image->failure)goto fail;
+    if(image->failure) {
+        dolly_amiga_role_request(parent,"Dolly - Create Image blocked",
+                                 image->failure,"OK",NULL,NULL);
+        goto fail;
+    }
+    if(!dolly_warnings_review(parent,&warnings)) {
+        image->failure="Operation cancelled.";
+        goto fail;
+    }
+    dolly_warnings_clear(&warnings);
 
     strcpy(image->name,name);
     strcpy(image->partial,name);
@@ -138,6 +149,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     image->failure=NULL;
     return 1;
 fail:
+    dolly_warnings_clear(&warnings);
     release(image,0);
     return 0;
 }

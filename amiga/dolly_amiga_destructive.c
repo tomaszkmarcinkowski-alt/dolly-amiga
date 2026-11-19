@@ -1,5 +1,7 @@
 #include "dolly_amiga_fonts.h"
 #include "dolly_amiga_destructive.h"
+#include "dolly_amiga_warnings.h"
+#include "dolly_amiga_io_settings.h"
 #include <devices/timer.h>
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
@@ -13,6 +15,7 @@
 #include <ctype.h>
 #include <strings.h>
 #include <string.h>
+#include <stdlib.h>
 
 static void start_second(struct timerequest *timer) {
     timer->tr_node.io_Command=TR_ADDREQUEST;
@@ -70,13 +73,13 @@ static LONG role_text(struct RastPort *rp,const char *text,size_t n,int draw) {
 }
 
 static int wrap_lines(struct RastPort *rp,const char *body,LONG width,
-                      char lines[][97],unsigned *count) {
+                      char lines[][97],unsigned *count,unsigned max_lines) {
     char marked[768];
     const char *text=marked;
     if(!mark_roles(body,marked))return 0;
     while(*text) {
         size_t limit=strcspn(text,"\n"),n=limit<96?limit:96,word;
-        if(*count>=18)return 0;
+        if(*count>=max_lines)return 0;
         while(n && role_text(rp,text,n,0)>width)--n;
         if(!n && limit)return 0;
         if(n<limit) {
@@ -132,11 +135,11 @@ static int run_request(struct Window *parent,const char *title,const char *body,
         if(needed>button_width)button_width=needed;
     }
     if((LONG)count*button_width+((LONG)count-1)*6>width)return 0;
-    if(!wrap_lines(&measure,body,width,lines,&line_count))return 0;
+    if(!wrap_lines(&measure,body,width,lines,&line_count,18))return 0;
     if(destructive && !wrap_lines(&measure,
         "You are continuing at your own risk.\n"
         "Incorrect use can cause data loss. Back up the destination first.",
-        width,lines,&line_count))return 0;
+        width,lines,&line_count,18))return 0;
     rows=line_count+(timed?2u:1u);
     if((LONG)rows*row+30>screen->Height-screen->BarHeight)return 0;
     if(timed) {
@@ -245,4 +248,231 @@ int dolly_amiga_confirm_destructive(struct Window *parent,const char *reason) {
 int dolly_amiga_confirm_outside_range(struct Window *parent,const char *reason) {
     const char *buttons[]={"Fill gap with 0s","Use as-is","Cancel"};
     return run_request(parent,"Partition outside driver range",reason,buttons,3,1,0);
+}
+
+void dolly_warnings_clear(DollyWarnings *warnings) {
+    unsigned i;
+    for(i=0;i<warnings->count;++i) {
+        free(warnings->items[i]->text);
+        free(warnings->items[i]);
+    }
+    warnings->count=0;
+}
+
+DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,
+                               const char *details,const char *button) {
+    DollyWarning *warning;
+    if(warnings->count==DOLLY_WARNING_MAX)return NULL;
+    warning=calloc(1,sizeof(*warning));
+    if(!warning)return NULL;
+    warning->text=malloc(strlen(details)+1);
+    if(!warning->text) {
+        free(warning);
+        return NULL;
+    }
+    strcpy(warning->text,details);
+    snprintf(warning->row,sizeof(warning->row),"  %s",title);
+    warning->node.ln_Name=warning->row;
+    warning->button=button;
+    warnings->items[warnings->count++]=warning;
+    return warning;
+}
+
+int dolly_warning_risk(DollyWarning *warning,const char *details) {
+    char *text=malloc(strlen(details)+1);
+    if(!text)return -1;
+    strcpy(text,details);
+    free(warning->text);
+    warning->text=text;
+    warning->button="Proceed";
+    warning->action=NULL;
+    return 0;
+}
+
+enum { WARN_LIST=1,WARN_ACTION,WARN_SETTINGS,WARN_NEXT,WARN_CANCEL };
+typedef struct WarningView {
+    struct Window *window;
+    struct DrawInfo *info;
+    struct Gadget *gadgets,*listview,*action,*settings,*next;
+    struct List labels;
+    APTR visual;
+    LONG x,y,width,height,row,button_y;
+    unsigned selected,page,lines_per_page;
+} WarningView;
+
+static struct Gadget *warning_button(WarningView *v,struct Gadget *last,UWORD id,
+                                    LONG x,LONG y,LONG width,const char *label) {
+    struct NewGadget ng={(WORD)x,(WORD)y,(WORD)width,(WORD)v->row,(STRPTR)label,
+                         dolly_amiga_text_attr(0),id,0,v->visual,NULL};
+    return CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
+}
+
+static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWarning *warning) {
+    unsigned i;
+    struct Gadget *last;
+    struct NewGadget ng={0};
+    LONG left=v->window->BorderLeft+6;
+    LONG action_width=TextLength(v->window->RPort,(STRPTR)warning->button,
+                                 strlen(warning->button))+14;
+    LONG more_width=TextLength(v->window->RPort,(STRPTR)"More",4)+14;
+    LONG settings_width=warning->settings && !warning->confirmed?TextLength(v->window->RPort,(STRPTR)"Settings",8)+14:0;
+    LONG cancel_width=TextLength(v->window->RPort,(STRPTR)"Cancel",6)+20;
+    if(v->gadgets) {
+        RemoveGList(v->window,v->gadgets,-1);
+        FreeGadgets(v->gadgets);
+        v->gadgets=NULL;
+    }
+    for(i=0;i<warnings->count;++i)
+        warnings->items[i]->row[0]=warnings->items[i]->confirmed?'+':' ';
+    last=CreateContext(&v->gadgets);
+    if(!last || action_width+more_width+settings_width+12>v->width)return 0;
+    ng.ng_LeftEdge=(WORD)left;
+    ng.ng_TopEdge=(WORD)v->y;
+    ng.ng_Width=(WORD)(v->x-left-6);
+    ng.ng_Height=(WORD)v->height;
+    ng.ng_GadgetID=WARN_LIST;
+    ng.ng_VisualInfo=v->visual;
+    ng.ng_TextAttr=dolly_amiga_text_attr(0);
+    v->listview=last=CreateGadget(LISTVIEW_KIND,last,&ng,GTLV_Labels,(ULONG)&v->labels,
+                                GTLV_ShowSelected,0UL,GTLV_Selected,(ULONG)v->selected,
+                                GTLV_MakeVisible,(ULONG)v->selected,TAG_DONE);
+    if(!last)return 0;
+    v->action=last=warning_button(v,last,WARN_ACTION,v->x+4,v->button_y,action_width,warning->button);
+    if(!last)return 0;
+    v->settings=NULL;
+    if(settings_width) {
+        v->settings=last=warning_button(v,last,WARN_SETTINGS,v->x+10+action_width,
+                                       v->button_y,settings_width,"Settings");
+        if(!last)return 0;
+    }
+    v->next=last=warning_button(v,last,WARN_NEXT,v->x+v->width-more_width-4,
+                               v->button_y,more_width,"More");
+    if(!last)return 0;
+    last=warning_button(v,last,WARN_CANCEL,v->x+v->width-cancel_width,
+                         v->y+v->height+5,cancel_width,"Cancel");
+    if(!last)return 0;
+    AddGList(v->window,v->gadgets,(ULONG)-1,-1,NULL);
+    return 1;
+}
+
+static void paint_warning(WarningView *v,
+                          const char lines[][97],unsigned count,int can_act) {
+    struct RastPort *rp=v->window->RPort;
+    struct TagItem tags[]={
+        {GT_VisualInfo,(ULONG)v->visual},{GTBB_Recessed,TRUE},{TAG_DONE,0}
+    };
+    unsigned i,first=v->page*v->lines_per_page;
+    SetDrMd(rp,JAM1);
+    SetAPen(rp,v->info->dri_Pens[BACKGROUNDPEN]);
+    RectFill(rp,v->window->BorderLeft,v->window->BorderTop,
+             v->window->Width-v->window->BorderRight-1,
+             v->window->Height-v->window->BorderBottom-1);
+    DrawBevelBoxA(rp,v->x,v->y,v->width,v->height,tags);
+    SetAPen(rp,v->info->dri_Pens[TEXTPEN]);
+    for(i=0;i<v->lines_per_page && first+i<count;++i) {
+        Move(rp,v->x+6,v->y+5+rp->TxBaseline+(LONG)i*v->row);
+        role_text(rp,lines[first+i],strlen(lines[first+i]),1);
+    }
+    RefreshGList(v->gadgets,v->window,NULL,-1);
+    GT_RefreshWindow(v->window,NULL);
+    GT_SetGadgetAttrs(v->action,v->window,NULL,GA_Disabled,(ULONG)!can_act,TAG_DONE);
+    GT_SetGadgetAttrs(v->next,v->window,NULL,GA_Disabled,(ULONG)(count<=v->lines_per_page),TAG_DONE);
+}
+
+int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
+    WarningView v={0};
+    struct Screen *screen=parent->WScreen;
+    const DollyEndpoint *settings=NULL;
+    LONG outer_width,outer_height,client_width,list_width;
+    unsigned i,count=0,pending=0;
+    int result=0,done=0,rebuild=1;
+    char (*lines)[97];
+    if(!warnings->count)return 1;
+    lines=malloc(36*sizeof(*lines));
+    if(!lines)return 0;
+    outer_width=screen->Width>720?720:screen->Width;
+    outer_height=screen->Height-screen->BarHeight-1;
+    if(outer_height>332)outer_height=332;
+    v.window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,
+        WA_Title,(ULONG)"Dolly - Review warnings",WA_Width,(ULONG)outer_width,
+        WA_Height,(ULONG)outer_height,WA_Top,(ULONG)screen->BarHeight+1,
+        WA_Activate,TRUE,WA_DragBar,TRUE,WA_CloseGadget,TRUE,WA_SmartRefresh,TRUE,
+        WA_IDCMP,LISTVIEWIDCMP|BUTTONIDCMP|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW|IDCMP_RAWKEY,
+        TAG_DONE);
+    if(!v.window)goto out;
+    dolly_amiga_window_font(v.window,0);
+    v.row=v.window->RPort->TxHeight+5;
+    client_width=v.window->Width-v.window->BorderLeft-v.window->BorderRight-12;
+    list_width=client_width/3;
+    v.x=v.window->BorderLeft+12+list_width;
+    v.width=client_width-list_width-6;
+    v.y=v.window->BorderTop+5;
+    v.height=v.window->Height-v.window->BorderBottom-v.y-v.row-10;
+    v.button_y=v.y+v.height-v.row-4;
+    if(v.width<120 || v.button_y-v.y<v.row+9)goto out;
+    v.lines_per_page=(v.button_y-v.y-9)/v.row;
+    v.visual=GetVisualInfo(screen,TAG_DONE);
+    v.info=GetScreenDrawInfo(screen);
+    if(!v.visual || !v.info)goto out;
+    v.labels.lh_Head=(struct Node *)&v.labels.lh_Tail;
+    v.labels.lh_TailPred=(struct Node *)&v.labels.lh_Head;
+    for(i=0;i<warnings->count;++i)AddTail(&v.labels,&warnings->items[i]->node);
+    while(!done) {
+        struct IntuiMessage *msg;
+        DollyWarning *warning=warnings->items[v.selected];
+        if(rebuild) {
+            count=0;
+            if(!wrap_lines(v.window->RPort,warning->text,v.width-12,lines,&count,36) ||
+               !warning_controls(&v,warnings,warning))break;
+            paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending);
+            rebuild=0;
+        }
+        WaitPort(v.window->UserPort);
+        while((msg=GT_GetIMsg(v.window->UserPort))!=NULL) {
+            ULONG cls=msg->Class;
+            UWORD code=msg->Code,id=0;
+            if(cls==IDCMP_GADGETUP && msg->IAddress)id=((struct Gadget *)msg->IAddress)->GadgetID;
+            if(cls==IDCMP_REFRESHWINDOW) {
+                GT_BeginRefresh(v.window);
+                GT_EndRefresh(v.window,TRUE);
+            }
+            GT_ReplyIMsg(msg);
+            if(cls==IDCMP_CLOSEWINDOW || (cls==IDCMP_RAWKEY && code==0x45) || id==WARN_CANCEL) {
+                done=1;
+                continue;
+            }
+            if(done || rebuild)continue;
+            if(cls==IDCMP_REFRESHWINDOW)
+                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending);
+            else if(id==WARN_LIST && code<warnings->count) {
+                v.selected=code;
+                v.page=0;
+                rebuild=1;
+            } else if(id==WARN_NEXT) {
+                if(++v.page*v.lines_per_page>=count)v.page=0;
+                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending);
+            } else if(id==WARN_SETTINGS && warning->settings) {
+                settings=warning->settings;
+                done=1;
+            } else if(id==WARN_ACTION && v.selected==pending) {
+                int action_result=warning->action?warning->action(warning):1;
+                if(action_result<0){done=1;continue;}
+                if(action_result>0) {
+                    warning->confirmed=1;
+                    if(++pending==warnings->count){done=1;result=1;continue;}
+                    v.selected=pending;
+                }
+                v.page=0;
+                rebuild=1;
+            }
+        }
+    }
+out:
+    if(v.window)CloseWindow(v.window);
+    if(v.gadgets)FreeGadgets(v.gadgets);
+    if(v.visual)FreeVisualInfo(v.visual);
+    if(v.info)FreeScreenDrawInfo(screen,v.info);
+    free(lines);
+    if(settings)dolly_amiga_io_settings(screen,settings);
+    return result;
 }

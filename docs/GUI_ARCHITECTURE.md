@@ -1634,3 +1634,19 @@ Unit and Partition number widths account for the widest digit.
 The Logical device view accepts a registered DOS device name in the
 editable **Selected device** field. Case is ignored and the trailing
 colon is optional. Choosing a list entry populates the field.
+
+
+### Review warnings after Start
+
+Copy, Restore, Create Image and Surface Scan collect applicable warnings
+during preflight. When the list is nonempty, Dolly opens one window with
+the ordered warnings on the left and details and the current action on
+the right. Reviewing a different row leaves the current approval pending.
+The action is available for the first pending row. Approved rows are marked
+with a plus sign and Dolly advances to the next row.
+
+The actions have no countdown. If dismounting fails, the same row shows the
+failure and requests an explicit decision to proceed at the user's risk.
+Cancel aborts the operation. Any successfully unmounted destination
+partition stays unmounted for the session. Choosing Settings on a pending
+I/O warning cancels the operation and opens Settings.

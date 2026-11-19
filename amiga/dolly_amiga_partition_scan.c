@@ -288,7 +288,13 @@ static int scan_mbr(Reader *r,DollyNativePartitionMap *out,int inventory) {
         strcpy(out->status,"MBR read failed");return 0;
     }
     if(r->buffer[510]!=0x55u || r->buffer[511]!=0xaau) {
-        strcpy(out->status,"No recognized RDB/MBR");return 0;
+        if(!load_sector(r,1))strcpy(out->status,"GPT header check failed");
+        else if(!memcmp(r->buffer,"EFI PART",8))strcpy(out->status,"GPT unsupported");
+        else {
+            strcpy(out->status,"No recognized RDB/MBR");
+            out->no_partition_table=1;
+        }
+        return 0;
     }
     for(i=0;i<4u;++i) {
         const UBYTE *p=r->buffer+446+16u*i;

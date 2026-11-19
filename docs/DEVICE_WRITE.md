@@ -8,23 +8,37 @@ and destination byte offsets below 4 GiB. Classic AmigaDOS file
 positions limit the RAW/HDF source to less than 2 GiB.
 
 Dolly checks device geometry, the RDB extent, DMA settings, and logical
-overlap. Whole devices may have a validated RDB or no partition table.
-MBR/GPT, hybrid tables, IFF DOLY decoding, filesystem-aware copying and
-resizing remain outside this path. Mounted targets are refused. Dolly
-also refuses a driver open count that it cannot account for. This can
-block a target whose driver also serves another mounted unit.
+overlap. Whole-device Copy treats both devices as raw sectors. Dolly describes
+the destination partition table, if recognized, in the warning review.
+Partition-level operations require RDB. Restore excludes MBR/GPT and
+hybrid tables. IFF DOLY decoding, filesystem-aware copying and resizing
+remain outside this path. For RDB sources, Dolly uses DOS Inhibit on active filesystems within
+the selected range, then releases the temporary inhibits on completion,
+failure or cancellation. The file volume serving a Restore image stays
+available for reading. Restore therefore requires the image to reside
+on a different unit when the RDB destination must be unmounted.
+
+On an RDB destination, Dolly attempts to unmount all DOS partitions
+on the selected physical unit. It asks each handler to shut down and
+removes the device entry only when the handler has released it. A
+successful unmount persists for the session, including after a
+cancelled transfer. Reboot to load the current destination partition
+table. A failure adds a decision to the same review before proceeding at the user's risk.
+Unexpected changes in mounts or raw opens stop the write.
 
 ## Confirmation and transfer
 
 Restore compares the image and destination size, object kind,
 filesystem IDs and RDB attributes. A metadata mismatch requires
-**Allow Restore compatibility override** and timed approval. A size
+**Allow Restore compatibility override** and explicit approval. A size
 mismatch, invalid range, unsupported partition table, or unreadable
 extent blocks the operation. The image file's actual open handle is
 used for the volume overlap check.
 
-Both operations require a ten-second destructive confirmation. After
-approval, Dolly checks geometry and partition selection again, compares
+Copy and Restore collect their warnings after Start and open one review
+window. The left list shows the warnings in order. The right panel shows
+details and the action for the current warning. Cancel aborts the whole
+operation. The review has no countdown. After approval of every item, Dolly checks geometry and partition selection again, compares
 first- and last-sector CRCs, and checks for a busy target. A qualified
 ROM or UAE-IDE `scsi.device`, or an NSD driver advertising both
 `CMD_WRITE` and `CMD_UPDATE`, is required. Dolly also checks that

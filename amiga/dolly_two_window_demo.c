@@ -1468,7 +1468,16 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     dolly_amiga_log_view_close();
                     dolly_operation_init(&operation);
                     if(scan_result) {
-                        total=dolly_surface_open(&surface,&selected_source,main_view.window,DOLLY_IO_SOURCE,1)?surface.total:0;
+                        DollyWarnings warnings={0};
+                        if(dolly_surface_open(&surface,&selected_source,main_view.window,
+                                              DOLLY_IO_SOURCE,1,&warnings)) {
+                            if(dolly_warnings_review(main_view.window,&warnings))total=surface.total;
+                            else {
+                                surface.failure="Operation cancelled.";
+                                dolly_surface_close(&surface);
+                            }
+                        }
+                        dolly_warnings_clear(&warnings);
                     } else if(image_result) {
                         total=dolly_image_open(&image,&selected_source,&selected_target,main_view.window)?
                               image.reader.total:0;

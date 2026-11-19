@@ -20,7 +20,10 @@ typedef struct DollyAmigaTransfer {
     DollyBlockSource *copy_extent;
     void *buffer;
     uint32_t source_first_crc,source_last_crc,target_first_crc,target_last_crc;
-    unsigned own_opens;
+    DollyMountList source_mounts,target_mounts,observed_mounts;
+    struct Window *parent;
+    unsigned expected_opens;
+    int check_source_mounts,check_target_mounts;
     int opened,restoring;
     const char *failure;
 } DollyAmigaTransfer;
