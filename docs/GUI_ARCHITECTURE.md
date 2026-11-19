@@ -1548,7 +1548,7 @@ the current text, including edits made without pressing Return.
 |---|---|
 | Main | Size rows from the active font and align Settings, Start and Stop with the three selector columns. Measure Progress and the percentage field. Details is half a column wide and opens Sheep Counter during an operation. The progress row is ghosted when idle. |
 | Source and Destination | Measure the mode heading, selection and property columns and Query. Use a compact partition heading when the full caption does not fit its column. |
-| Sheep Counter | Measure footer button widths and the progress/header captions. Grid markers use the active interface font when the glyph fits the tile. |
+| Sheep Counter | Measure footer rows and gadget widths from the active font. Align the scan frame with the footer and place the percentage inside the progress well. Grid markers use the active interface font when the glyph fits the tile. |
 | Sheep Inventory | Measure footer buttons and clip status text using the window raster port. |
 | Settings | Size the client area from measured labels, help messages and row height. Use the actual gadget placement for hover help. |
 | Surface Scan parameters and log | Measure form labels, editable fields, and footer buttons. Use the font height for control rows. |
@@ -1600,8 +1600,9 @@ recovery drawer is kept separately from Copy and Create Image
 destinations. Disk Vet execution is still planned.
 
 
-Disabled Cycle controls display no choice. Dolly keeps the chosen
-index and restores its label when the control becomes available.
+Disabled Cycle controls normally display no choice. During a running
+or paused operation, applicable controls keep their selected labels
+visible. Controls with no applicable choice stay blank.
 The destination field is visually inactive when both destination
 controls are disabled. The description uses the same recessed
 frame as the status strip.
