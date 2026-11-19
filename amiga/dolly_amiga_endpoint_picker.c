@@ -18,6 +18,7 @@
 #include <proto/dos.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 extern struct Library *AslBase;
 extern struct DosLibrary *DOSBase;
@@ -185,25 +186,45 @@ static void populate_devices(DollyEndpointPicker *p) {
         ++p->device_count;
     }
 }
+static int selected_scsi(const DollyEndpointPicker *p) {
+    return p->has_device && p->device<p->device_count &&
+           strcasecmp(p->physical_names[p->device],"scsi.device")==0;
+}
+
+static void insert_unit(DollyEndpointPicker *p,ULONG value) {
+    unsigned at=0;
+    while(at<p->unit_count && p->physical_units[at]<value)++at;
+    if(at<p->unit_count && p->physical_units[at]==value)return;
+    memmove(&p->physical_units[at+1],&p->physical_units[at],
+            (p->unit_count-at)*sizeof(p->physical_units[0]));
+    p->physical_units[at]=value;
+    ++p->unit_count;
+}
+
 static void populate_units(DollyEndpointPicker *p) {
-    unsigned i,j;
+    unsigned i;
     init_list(&p->units);
     p->unit_count=0;
     if(!p->has_device || p->device>=p->device_count)return;
     for(i=0;i<p->physical_catalog.count;++i) {
         const DollyPhysicalEntry *e=&p->physical_catalog.entries[i];
-        if(strcmp(e->driver,p->physical_names[p->device])!=0)
-            continue;
-        for(j=0;j<p->unit_count;++j)
-            if(p->physical_units[j]==e->unit)break;
-        if(j<p->unit_count)continue;
-        p->physical_units[j]=e->unit;
-        sprintf(p->unit_names[j],"Unit %lu",
-                (unsigned long)e->unit);
-        memset(&p->unit_nodes[j],0,sizeof(p->unit_nodes[j]));
-        p->unit_nodes[j].ln_Name=p->unit_names[j];
-        AddTail(&p->units,&p->unit_nodes[j]);
-        ++p->unit_count;
+        if(strcasecmp(e->driver,p->physical_names[p->device])==0)
+            insert_unit(p,e->unit);
+    }
+    if(selected_scsi(p) && p->has_manual_unit)
+        insert_unit(p,p->manual_unit);
+    for(i=0;i<p->unit_count;++i) {
+        sprintf(p->unit_names[i],"Unit %lu",(unsigned long)p->physical_units[i]);
+        memset(&p->unit_nodes[i],0,sizeof(p->unit_nodes[i]));
+        p->unit_nodes[i].ln_Name=p->unit_names[i];
+        AddTail(&p->units,&p->unit_nodes[i]);
+    }
+    if(selected_scsi(p)) {
+        struct Node *other=&p->unit_nodes[p->unit_count];
+        memset(other,0,sizeof(*other));
+        strcpy(p->unit_names[p->unit_count],"Other unit...");
+        other->ln_Name=p->unit_names[p->unit_count];
+        AddTail(&p->units,other);
     }
 }
 /* Prepare the OTHER bank, never touching LISTVIEW-owned nodes.
@@ -281,6 +302,70 @@ static struct Gadget *button(struct Gadget *last,DollyEndpointPicker *p,
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
+static int choose_manual_unit(DollyEndpointPicker *p,ULONG *unit) {
+    struct Window *window;
+    struct Gadget *gadgets=NULL,*last,*field;
+    struct NewGadget ng={0};
+    char initial[11],path[32],driver[DOLLY_PHYS_DRIVER_LEN];
+    int accepted=0,done=0;
+    APTR visual=GetVisualInfo(p->screen,TAG_DONE);
+    if(!visual)return 0;
+    snprintf(initial,sizeof(initial),"%lu",
+             (unsigned long)(physical_choice(p)?p->physical_units[p->unit]:0));
+    window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)p->screen,
+        WA_Title,(ULONG)"scsi.device - Unit number",WA_Width,320UL,WA_Height,85UL,
+        WA_CloseGadget,TRUE,WA_DragBar,TRUE,WA_Activate,TRUE,WA_SmartRefresh,TRUE,
+        WA_IDCMP,IDCMP_GADGETUP|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW,TAG_DONE);
+    if(!window)goto out;
+    last=CreateContext(&gadgets);
+    if(!last)goto out;
+    ng.ng_VisualInfo=visual; ng.ng_TextAttr=p->screen->Font;
+    ng.ng_LeftEdge=58; ng.ng_TopEdge=window->BorderTop+5;
+    ng.ng_Width=138; ng.ng_Height=16; ng.ng_GadgetText=(STRPTR)"Unit";
+    ng.ng_Flags=PLACETEXT_LEFT; ng.ng_GadgetID=1;
+    field=last=CreateGadget(STRING_KIND,last,&ng,GTST_String,(ULONG)initial,
+                          GTST_MaxChars,10UL,TAG_DONE);
+    if(!last)goto out;
+    ng.ng_Flags=0;ng.ng_TopEdge+=24;ng.ng_LeftEdge=12;ng.ng_Width=100;
+    ng.ng_GadgetText=(STRPTR)"Use unit";ng.ng_GadgetID=2;
+    last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
+    if(!last)goto out;
+    ng.ng_LeftEdge=202;ng.ng_GadgetText=(STRPTR)"Cancel";ng.ng_GadgetID=3;
+    last=CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
+    if(!last)goto out;
+    AddGList(window,gadgets,(ULONG)-1,-1,NULL);
+    RefreshGList(gadgets,window,NULL,-1);
+    GT_RefreshWindow(window,NULL);
+    ActivateGadget(field,window,NULL);
+    while(!done) {
+        struct IntuiMessage *msg;
+        WaitPort(window->UserPort);
+        while(!done && (msg=GT_GetIMsg(window->UserPort))!=NULL) {
+            ULONG cls=msg->Class;
+            UWORD id=cls==IDCMP_GADGETUP && msg->IAddress?
+                    ((struct Gadget *)msg->IAddress)->GadgetID:0;
+            if(cls==IDCMP_REFRESHWINDOW) {
+                GT_BeginRefresh(window);GT_EndRefresh(window,TRUE);
+            }
+            GT_ReplyIMsg(msg);
+            if(cls==IDCMP_CLOSEWINDOW || id==3)done=1;
+            else if(id==1 || id==2) {
+                const struct StringInfo *info=(const struct StringInfo *)field->SpecialInfo;
+                const char *tail;
+                snprintf(path,sizeof(path),"scsi.device / Unit %.10s",(const char *)info->Buffer);
+                tail=dolly_amiga_parse_unit(path,driver,sizeof(driver),unit);
+                if(tail && !*tail)done=accepted=1;
+                else DisplayBeep(p->screen);
+            }
+        }
+    }
+out:
+    if(window)CloseWindow(window);
+    if(gadgets)FreeGadgets(gadgets);
+    FreeVisualInfo(visual);
+    return accepted;
+}
+
 static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
                            UWORD id,WORD x,WORD y,WORD w,
                            struct List *items,int disabled) {
@@ -732,7 +817,7 @@ static void change_enabled(DollyEndpointPicker *p) {
     if(p->unit_list)
         GT_SetGadgetAttrs(p->unit_list,p->window,NULL,
                           GA_Disabled,(ULONG)!p->has_device ||
-                                      !p->unit_count,TAG_DONE);
+                                      (!p->unit_count && !selected_scsi(p)),TAG_DONE);
     if(p->partition_list)
         GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                           GA_Disabled,(ULONG)!p->partition_count,
@@ -822,7 +907,7 @@ static int rebuild(DollyEndpointPicker *p) {
         p->device_list=last;
         column_geometry(p,columns,1u,&x,&w);
         last=list(last,p,PICK_UNIT,x,g.list_y,w,&p->units,
-                  !p->has_device || !p->unit_count);
+                  !p->has_device || (!p->unit_count && !selected_scsi(p)));
         if(!last)return 0;
         p->unit_list=last;
         if(columns==3u) {
@@ -969,27 +1054,27 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     dolly_amiga_discover_dos_devices(&p->dos_devices);
     p->logical_count=p->dos_devices.count;
     make_logical_list(p);
-    if(initial && initial->kind==DOLLY_ENDPOINT_UNIT &&
-       initial->path[0]) {
+    if(initial && (initial->kind==DOLLY_ENDPOINT_UNIT ||
+                   initial->kind==DOLLY_ENDPOINT_PARTITION)) {
         unsigned d,u;
-        char name[128];
-        for(d=0;d<p->device_count;++d) {
-            p->device=d;p->has_device=1;
-            populate_units(p);
-            for(u=0;u<p->unit_count;++u) {
-                sprintf(name,"%s / Unit %lu",p->physical_names[d],
-                        (unsigned long)p->physical_units[u]);
-                if(strcmp(initial->path,name)==0) {
-                    p->unit=u;p->has_unit=1;
-                    break;
+        ULONG actual;
+        char driver[DOLLY_PHYS_DRIVER_LEN];
+        if(dolly_amiga_parse_unit(initial->path,driver,sizeof(driver),&actual))
+            for(d=0;d<p->device_count;++d) {
+                if(strcasecmp(driver,p->physical_names[d]))continue;
+                p->device=d;p->has_device=1;
+                if(selected_scsi(p)) {
+                    p->manual_unit=actual;
+                    p->has_manual_unit=1;
                 }
+                populate_units(p);
+                for(u=0;u<p->unit_count;++u)
+                    if(p->physical_units[u]==actual) {
+                        p->unit=u;p->has_unit=1;
+                        break;
+                    }
+                break;
             }
-            if(p->has_unit)break;
-        }
-        if(!p->has_unit) {
-            p->has_device=0;
-            populate_units(p);
-        }
     }
     if(initial && initial->kind==DOLLY_ENDPOINT_LOGICAL &&
        initial->path[0]) {
@@ -1101,7 +1186,7 @@ static void release_picker_gadgets(DollyEndpointPicker *p) {
  */
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
-    /* 1 = mode, 2 = device, 3 = unit, 4 = partition Query. */
+    /* 1 mode, 2 device, 3 unit, 4 partition Query, 5 manual unit. */
     unsigned deferred=0;
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
@@ -1149,6 +1234,15 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->device=code;p->has_device=1;
             p->has_unit=0;p->has_partition=0;
             deferred=2;
+        } else if(id==PICK_UNIT && (unsigned)code==p->unit_count &&
+                  selected_scsi(p)) {
+            ULONG unit;
+            if(choose_manual_unit(p,&unit)) {
+                p->manual_unit=unit;
+                p->has_manual_unit=1;
+                deferred=5;
+            } else GT_SetGadgetAttrs(p->unit_list,p->window,NULL,
+                       GTLV_Selected,p->has_unit?(ULONG)p->unit:~0UL,TAG_DONE);
         } else if(id==PICK_UNIT &&
                   (unsigned)code<p->unit_count && p->has_device) {
             p->unit=code;p->has_unit=1;
@@ -1269,6 +1363,15 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             populate_units(p);
         } else if(deferred==3) {
             invalidate_query(p);
+        } else if(deferred==5) {
+            unsigned i;
+            invalidate_query(p);
+            populate_units(p);
+            for(i=0;i<p->unit_count;++i)
+                if(p->physical_units[i]==p->manual_unit) {
+                    p->unit=i;p->has_unit=1;
+                    break;
+                }
         }
         if(!rebuild(p))
             dolly_picker_close(p);

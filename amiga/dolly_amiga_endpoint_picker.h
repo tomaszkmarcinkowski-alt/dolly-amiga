@@ -23,7 +23,7 @@ typedef struct DollyEndpointPicker {
      * pointer. Never modify the nodes/strings of its active bank.
      */
     struct List partition_lists[2];
-    struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX];
+    struct Node device_nodes[DOLLY_PHYS_MAX],unit_nodes[DOLLY_PHYS_MAX+2u];
     struct Node partition_nodes[2][DOLLY_PART_MAX];
     char partition_list_labels[2][DOLLY_PART_MAX][48];
     unsigned partition_bank;
@@ -32,8 +32,10 @@ typedef struct DollyEndpointPicker {
     unsigned partition_count;
     unsigned char partition_scanned;
     char physical_names[DOLLY_PHYS_MAX][DOLLY_PHYS_DRIVER_LEN];
-    char unit_names[DOLLY_PHYS_MAX][20];
-    ULONG physical_units[DOLLY_PHYS_MAX];
+    char unit_names[DOLLY_PHYS_MAX+2u][20];
+    ULONG physical_units[DOLLY_PHYS_MAX+1u];
+    ULONG manual_unit;
+    int has_manual_unit;
     unsigned device_count,unit_count;
     unsigned char queried;
     unsigned char query_attempted;

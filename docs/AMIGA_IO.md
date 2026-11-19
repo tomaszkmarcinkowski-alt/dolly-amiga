@@ -124,3 +124,8 @@ was absent from the AmigaDOS startup list. This covers the case where
 no volume on the disk has been mounted. Select the driver and unit,
 then use **Query** to confirm that the driver can open the unit and
 report media geometry. The picker performs no automatic media probe.
+
+The unit list is sorted by numeric ID. **Other unit…** lets you enter
+any unsigned 32-bit unit number for `scsi.device`, including units
+without a mounted volume or RDB. The number is added to the current
+picker and selected. **Query** explicitly probes only that chosen unit.

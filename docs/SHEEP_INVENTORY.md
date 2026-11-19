@@ -208,3 +208,8 @@ Character-range selection in the drawn details pane would require
 application-owned text, Intuition mouse tracking, hit testing against
 the screen font and selection highlighting. The same Copy action
 could export the resulting range through clipboard.device.
+
+When Inventory cannot identify the partition table, it displays a
+disabled Restore RDB button. The status line reports the result of the
+table scan. Restore onto an empty or unrecognized layout is outside
+the current implementation.
