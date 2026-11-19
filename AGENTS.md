@@ -3,7 +3,7 @@
 ## Project mission
 Dolly is a classic Amiga disk imaging, cloning, recovery and diagnostics project with a humorous sheep personality and professional non-destructive diagnostics. Baseline: **MC68000, AmigaOS 2.04+, GadTools**, including **640x256 / Topaz 8**. Preserve compatibility with low-memory Amigas. Never require FPU/MMU, ReAction or MUI for the MVP.
 
-## Current development snapshot (Alpha 3.3)
+## Current development snapshot (Alpha 3.4)
 - Integration base: `main`. See the documentation index for the current scope.
 - Preserve the current main-window layout and font-sensitive behavior unless the user requests a GUI change.
 - Sheep Inventory adds device and partition details, clipboard copying and RDB/MBR metadata backup. Restore RDB is implemented for supported offline destinations.

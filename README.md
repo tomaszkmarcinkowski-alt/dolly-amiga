@@ -2,13 +2,13 @@
 
 Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga computers. The native interface uses Intuition and GadTools and targets MC68000 and AmigaOS 2.04 or later.
 
-[Download Dolly Alpha 3.3 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.3) · [All releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+[Download Dolly Alpha 3.4 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.4) · [All releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
 
 ![Dolly Alpha 3 displaying a sector copy with Sheep Counter open](docs/screenshots/sector-copy.png)
 
 *Sector copy in an earlier Alpha 3 build.*
 
-## What works in Alpha 3.3
+## What works in Alpha 3.4
 
 | Feature | Current scope |
 | --- | --- |

@@ -76,7 +76,7 @@ static const char hide_label[]="Hide";
 #define MAIN_DESC_ID 214u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.3"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.4"
 #define MAIN_GADGET_HEIGHT 15
 #define MAIN_COLUMN_GAP 6
 
