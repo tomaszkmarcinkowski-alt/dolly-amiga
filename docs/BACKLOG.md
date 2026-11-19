@@ -835,3 +835,13 @@ kontrolerów, ADF, weryfikacja obrazu po zapisie i operacje przywracania.
 - Wrócić do tego zadania przed udostępnieniem wznawiania Restore z zapisem.
   Dla przerwanego zapisu zapisać i ponownie sprawdzać zakres potencjalnie
   zmodyfikowanej partii oraz tożsamość celu.
+
+
+### Diagnostyczna sonda ATA/SCSI poza sterownikiem
+
+**Status:** opcjonalne, odłożone do czasu zakończenia prób konfiguracji
+dysków i emulatorów. Rozważyć osobną sondę tylko do odczytu dla
+wbudowanego ATA A600/A1200, uruchamianą w środowisku zapewniającym
+wyłączność na kanał IDE. Porównać surowe pola CHS/LBA z ATA IDENTIFY
+z READ CAPACITY(10), wynikiem TD_GETGEOMETRY i metadanymi RDB.
+Dla natywnego SCSI ocenić potrzebę osobno dla konkretnych kontrolerów.

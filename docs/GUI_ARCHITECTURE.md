@@ -1558,3 +1558,19 @@ The approved main-window row rhythm remains fixed. The picker and
 Inventory retain fixed vertical regions, so exceptionally tall screen
 fonts still need a runtime layout pass. The 60-column Workbench mode
 and proportional fonts need visual verification on AmigaOS.
+
+
+### Main window medium selection
+
+Three GadTools MX groups share one row of column headings. Operation
+filters the source medium choices through dolly_allowed_modes.
+The destination group is populated only after committing a compatible
+source object. Source and Destination each open the existing picker
+with the corresponding radio choice as its only medium type.
+Changing the source medium clears both concrete selections. Changing
+the operation retains existing selections for correction and keeps
+Start disabled while they are incompatible.
+
+The operation description spans the available width beneath the
+groups. Font measurements derive the minimum width and the spacing
+between radio rows. The main window retains horizontal resizing.

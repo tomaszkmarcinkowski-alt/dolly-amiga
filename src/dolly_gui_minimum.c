@@ -25,7 +25,7 @@ DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
         client_w=max_u32(m.heading_width,
                  2u*max_u32(m.show_button_text_width+12u,
                             m.quit_button_text_width+12u)+8u);
-        /* Main shell: source/target BUTTON+TEXT, operation CYCLE,
+        /* Main shell: source/target BUTTON+TEXT, operation and medium MX groups,
          * description, two action rows, blocks, bottom status strip.
          * Minimum vertical client area follows the actual last control.
          */
