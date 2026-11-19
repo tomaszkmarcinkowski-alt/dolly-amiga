@@ -91,13 +91,13 @@ typedef struct PickerGeometry {
     WORD left,right,full_width;
     WORD mode_x,mode_w,query_w;
     WORD list_y,list_h,action_y,preview_y,disk_info_y,partition_info_y;
-    WORD geometry_info_y;
+    WORD geometry_info_y,size_y;
     WORD browse_y,path_y,detail_y;
     WORD cycle_y,heading_y,list_label_y,file_label_y,format_label_y;
     WORD format_y;
     WORD format_x,format_w;
     WORD value_x,value_w,unit_x,unit_w,unit_label_x,partition_w;
-    WORD name_x,name_w,size_label_x,size_x,size_w;
+    WORD name_w,geometry_w,size_label_x,size_x,size_w;
 } PickerGeometry;
 static LONG picker_text_span(const struct Window *window,const char *text,LONG minimum) {
     LONG width=TextLength(window->RPort,(STRPTR)text,(ULONG)strlen(text))+10;
@@ -106,6 +106,7 @@ static LONG picker_text_span(const struct Window *window,const char *text,LONG m
 static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     PickerGeometry g;
     const struct Window *w=p->window;
+    LONG label_width;
     LONG left=20;
     LONG right=(LONG)w->Width-(LONG)w->BorderRight-20;
     /* Classic non-square-pixel Workbench modes (e.g. 640x256)
@@ -163,17 +164,25 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     /* A shared label column keeps the previews aligned in all
      * modes. The Size field is right-anchored and stays separate.
      */
-    g.value_x=(WORD)(left+picker_text_span(w,"Selected device",140));
+    if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
+        label_width=picker_text_span(w,"Device",84);
+        label_width=picker_text_span(w,"SCSI name",label_width);
+        label_width=picker_text_span(w,p->mode==DOLLY_MODE_PHYSICAL?
+                                     "Geometry":"Partition",label_width);
+    } else label_width=picker_text_span(w,p->mode==DOLLY_MODE_FILE?
+                                           "Selected file":"Selected device",140);
+    g.value_x=(WORD)(left+label_width);
     g.value_w=(WORD)(right-g.value_x);
     g.unit_w=(WORD)picker_text_span(w,"0000000000",58);
     g.unit_x=(WORD)(right-g.query_w-4-g.unit_w);
     g.unit_label_x=(WORD)(g.unit_x-picker_text_span(w,"Unit",38));
     g.partition_w=(WORD)picker_text_span(w,"00",32);
-    g.name_x=(WORD)(left+picker_text_span(w,"Device name",104));
     g.size_w=(WORD)picker_text_span(w,"999999 MiB",102);
     g.size_x=(WORD)(right-g.size_w);
     g.size_label_x=(WORD)(g.size_x-picker_text_span(w,"Size",46));
-    g.name_w=(WORD)(g.size_label_x-8-g.name_x);
+    g.geometry_w=(WORD)(g.size_label_x-8-g.value_x);
+    g.name_w=p->mode==DOLLY_MODE_PHYSICAL?g.value_w:g.geometry_w;
+    g.size_y=p->mode==DOLLY_MODE_PHYSICAL?g.geometry_info_y:g.disk_info_y;
     return g;
 }
 static void init_list(struct List *l) {
@@ -182,21 +191,28 @@ static void init_list(struct List *l) {
     l->lh_TailPred=(struct Node *)&l->lh_Head;
     l->lh_Type=NT_USER;l->l_pad=0;
 }
+/* Only called when GadTools has no references to these nodes. */
+static unsigned append_device(DollyEndpointPicker *p,const char *driver) {
+    unsigned i;
+    for(i=0;i<p->device_count;++i)
+        if(!strcasecmp(driver,p->physical_names[i]))return i;
+    if(i<DOLLY_PHYS_MAX+1u)++p->device_count;
+    else {
+        --i;
+        Remove(&p->device_nodes[i]);
+    }
+    strcpy(p->physical_names[i],driver);
+    memset(&p->device_nodes[i],0,sizeof(p->device_nodes[i]));
+    p->device_nodes[i].ln_Name=p->physical_names[i];
+    AddTail(&p->devices,&p->device_nodes[i]);
+    return i;
+}
 static void populate_devices(DollyEndpointPicker *p) {
-    unsigned i,j;
+    unsigned i;
     init_list(&p->devices);
     p->device_count=0;
-    for(i=0;i<p->physical_catalog.count;++i) {
-        const DollyPhysicalEntry *e=&p->physical_catalog.entries[i];
-        for(j=0;j<p->device_count;++j)
-            if(strcmp(e->driver,p->physical_names[j])==0)break;
-        if(j<p->device_count)continue;
-        strcpy(p->physical_names[j],e->driver);
-        memset(&p->device_nodes[j],0,sizeof(p->device_nodes[j]));
-        p->device_nodes[j].ln_Name=p->physical_names[j];
-        AddTail(&p->devices,&p->device_nodes[j]);
-        ++p->device_count;
-    }
+    for(i=0;i<p->physical_catalog.count;++i)
+        (void)append_device(p,p->physical_catalog.entries[i].driver);
 }
 static void insert_unit(DollyEndpointPicker *p,ULONG value) {
     unsigned at=0;
@@ -306,11 +322,27 @@ static struct Gadget *button(struct Gadget *last,DollyEndpointPicker *p,
     return CreateGadget(BUTTON_KIND,last,&ng,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
+static const char *read_device_field(const DollyEndpointPicker *p) {
+    const struct StringInfo *info;
+    const char *name;
+    size_t i,length;
+    if(!p->selection_text)return NULL;
+    info=(const struct StringInfo *)p->selection_text->SpecialInfo;
+    name=(const char *)info->Buffer;
+    length=strlen(name);
+    if(length<=7u || length>=DOLLY_PHYS_DRIVER_LEN ||
+       strcmp(name+length-7u,".device") || !strcasecmp(name,"trackdisk.device"))
+        return NULL;
+    for(i=0;i<length;++i)
+        if((unsigned char)name[i]<=32u || (unsigned char)name[i]>126u ||
+           name[i]=='/' || name[i]==':')return NULL;
+    return name;
+}
 static int read_unit_field(const DollyEndpointPicker *p,ULONG *unit) {
     const struct StringInfo *info;
     const char *digit;
     ULONG number=0;
-    if(!p->unit_text || !p->has_device)return 0;
+    if(!p->unit_text)return 0;
     info=(const struct StringInfo *)p->unit_text->SpecialInfo;
     digit=(const char *)info->Buffer;
     if(!*digit)return 0;
@@ -373,7 +405,7 @@ static void update_selection_preview(DollyEndpointPicker *p) {
     if(physical_mode(p) && p->has_device && p->device<p->device_count)
         name=p->physical_names[p->device];
     strcpy(p->selection_display,name);
-    p->unit_display[0]='\0';
+    strcpy(p->unit_display,"0");
     if(physical_choice(p))
         snprintf(p->unit_display,sizeof(p->unit_display),"%lu",
                  (unsigned long)p->physical_units[p->unit]);
@@ -394,6 +426,10 @@ static struct Gadget *selection_text(struct Gadget *last,DollyEndpointPicker *p,
         return CreateGadget(STRING_KIND,last,&ng,
                             GTST_String,(ULONG)p->unit_display,GTST_MaxChars,10UL,
                             GA_Disabled,(ULONG)!p->has_device,TAG_DONE);
+    if(physical_mode(p))
+        return CreateGadget(STRING_KIND,last,&ng,
+                            GTST_String,(ULONG)p->selection_display,
+                            GTST_MaxChars,(ULONG)(sizeof(p->selection_display)-1),TAG_DONE);
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->selection_display,
                         GTTX_Border,TRUE,GTTX_Clipped,TRUE,TAG_DONE);
@@ -417,7 +453,8 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
     update_selection_preview(p);
     if(p->selection_text)
         GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
-                          GTTX_Text,(ULONG)p->selection_display,TAG_DONE);
+                          physical_mode(p)?GTST_String:GTTX_Text,
+                          (ULONG)p->selection_display,TAG_DONE);
     if(p->unit_text)
         GT_SetGadgetAttrs(p->unit_text,p->window,NULL,
                           GTST_String,(ULONG)p->unit_display,TAG_DONE);
@@ -426,9 +463,7 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
                           GTIN_Number,p->has_partition?(ULONG)p->partition+1:0UL,
                           GA_Disabled,(ULONG)!p->partition_count,TAG_DONE);
 }
-/* DOS and Exec supply candidates. A unit still needs verification. Only explicit Query opens the driver and probes
- * device geometry. A vendor name alone is not a verified disk size.
- */
+/* A listed unit is only a candidate. Explicit Query verifies geometry. */
 static void update_disk_info(DollyEndpointPicker *p) {
     if(!physical_choice(p)) {
         strcpy(p->disk_info_display,"Select unit...");
@@ -466,13 +501,13 @@ static struct Gadget *disk_info_text(struct Gadget *last,
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=g.name_x;ng.ng_TopEdge=g.disk_info_y;
+    ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.disk_info_y;
     ng.ng_Width=g.name_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_DISK_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
                         GTTX_Text,(ULONG)p->disk_info_display,
-                        GTTX_Border,TRUE,TAG_DONE);
+                        GTTX_Border,TRUE,GTTX_Clipped,TRUE,TAG_DONE);
 }
 static struct Gadget *disk_size_text(struct Gadget *last,
                                      DollyEndpointPicker *p) {
@@ -481,7 +516,7 @@ static struct Gadget *disk_size_text(struct Gadget *last,
     memset(&ng,0,sizeof(ng));
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
-    ng.ng_LeftEdge=g.size_x;ng.ng_TopEdge=g.disk_info_y;
+    ng.ng_LeftEdge=g.size_x;ng.ng_TopEdge=g.size_y;
     ng.ng_Width=g.size_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_DISK_SIZE_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
@@ -497,7 +532,7 @@ static struct Gadget *geometry_info_text(struct Gadget *last,
     ng.ng_VisualInfo=p->visual;
     ng.ng_TextAttr=p->screen->Font;
     ng.ng_LeftEdge=g.value_x;ng.ng_TopEdge=g.geometry_info_y;
-    ng.ng_Width=g.value_w;ng.ng_Height=16;
+    ng.ng_Width=g.geometry_w;ng.ng_Height=16;
     ng.ng_GadgetID=PICK_GEOMETRY_INFO_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -735,7 +770,8 @@ static void captions(DollyEndpointPicker *p) {
         }
     } else {
         Move(rp,g.left,(LONG)g.preview_y+12);
-        Text(rp,(STRPTR)"Selected device",15);
+        if(physical_mode(p))Text(rp,(STRPTR)"Device",6);
+        else Text(rp,(STRPTR)"Selected device",15);
         if(physical_mode(p)) {
             Move(rp,g.unit_label_x,(LONG)g.preview_y+12);
             Text(rp,(STRPTR)"Unit",4);
@@ -743,8 +779,8 @@ static void captions(DollyEndpointPicker *p) {
         if(p->mode==DOLLY_MODE_PHYSICAL ||
            p->mode==DOLLY_MODE_PARTITION) {
             Move(rp,g.left,(LONG)g.disk_info_y+12);
-            Text(rp,(STRPTR)"Device name",11);
-            Move(rp,g.size_label_x,(LONG)g.disk_info_y+12);
+            Text(rp,(STRPTR)"SCSI name",9);
+            Move(rp,g.size_label_x,(LONG)g.size_y+12);
             Text(rp,(STRPTR)"Size",4);
         }
         if(p->mode==DOLLY_MODE_PHYSICAL) {
@@ -767,10 +803,6 @@ static void change_enabled(DollyEndpointPicker *p) {
     if(p->partition_list)
         GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                           GA_Disabled,(ULONG)!p->partition_count,
-                          TAG_DONE);
-    if(p->query_button)
-        GT_SetGadgetAttrs(p->query_button,p->window,NULL,
-                          GA_Disabled,(ULONG)!p->has_device,
                           TAG_DONE);
     if(p->choose_button) {
         int ready=(p->mode==DOLLY_MODE_PHYSICAL &&
@@ -834,7 +866,6 @@ static int rebuild(DollyEndpointPicker *p) {
     p->selection_text=NULL;p->unit_text=NULL;p->partition_number=NULL;
     p->disk_info_text=NULL;
     p->disk_size_text=NULL;
-    p->query_button=NULL;
     p->partition_info_text=NULL;
     p->geometry_info_text=NULL;
     last=CreateContext(&p->gadgets);
@@ -880,9 +911,8 @@ static int rebuild(DollyEndpointPicker *p) {
             p->unit_text=last;
             last=button(last,p,PICK_QUERY,
                         (WORD)(g.right-g.query_w),g.preview_y,
-                        g.query_w,"Query",!p->has_device);
+                        g.query_w,"Query",0);
             if(!last)return 0;
-            p->query_button=last;
         }
         if(p->mode==DOLLY_MODE_PHYSICAL ||
            p->mode==DOLLY_MODE_PARTITION) {
@@ -1006,23 +1036,22 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
     make_logical_list(p);
     if(initial && (initial->kind==DOLLY_ENDPOINT_UNIT ||
                    initial->kind==DOLLY_ENDPOINT_PARTITION)) {
-        unsigned d,u;
+        unsigned u;
         ULONG actual;
         char driver[DOLLY_PHYS_DRIVER_LEN];
-        if(dolly_amiga_parse_unit(initial->path,driver,sizeof(driver),&actual))
-            for(d=0;d<p->device_count;++d) {
-                if(strcasecmp(driver,p->physical_names[d]))continue;
-                p->device=d;p->has_device=1;
-                p->manual_unit=actual;
-                p->has_manual_unit=1;
-                populate_units(p,1);
-                for(u=0;u<p->unit_count;++u)
-                    if(p->physical_units[u]==actual) {
-                        p->unit=u;p->has_unit=1;
-                        break;
-                    }
-                break;
-            }
+        if(physical_mode(p) &&
+           dolly_amiga_parse_unit(initial->path,driver,sizeof(driver),&actual)) {
+            p->device=append_device(p,driver);
+            p->has_device=1;
+            p->manual_unit=actual;
+            p->has_manual_unit=1;
+            populate_units(p,1);
+            for(u=0;u<p->unit_count;++u)
+                if(p->physical_units[u]==actual) {
+                    p->unit=u;p->has_unit=1;
+                    break;
+                }
+        }
     }
     if(initial && initial->kind==DOLLY_ENDPOINT_LOGICAL &&
        initial->path[0]) {
@@ -1098,7 +1127,10 @@ static int commit_picker(DollyEndpointPicker *p) {
     int ok=0;
     if(physical_mode(p)) {
         ULONG unit;
-        if(!physical_choice(p) || !read_unit_field(p,&unit) ||
+        const char *driver=read_device_field(p);
+        if(!physical_choice(p) || !driver ||
+           strcasecmp(driver,p->physical_names[p->device]) ||
+           !read_unit_field(p,&unit) ||
            unit!=p->physical_units[p->unit]) {
             DisplayBeep(p->screen);
             return 0;
@@ -1197,8 +1229,10 @@ static void query_picker_unit(DollyEndpointPicker *p) {
  */
 void dolly_picker_pump(DollyEndpointPicker *p) {
     struct IntuiMessage *msg;
-    /* 1 mode, 2 device, 3 unit, 4 Query, 5 manual unit, 6 manual unit + Query. */
-    unsigned deferred=0;
+    enum {CHANGE_NONE,CHANGE_MODE,CHANGE_DEVICE,CHANGE_UNIT,RUN_QUERY,
+          MANUAL_UNIT,MANUAL_UNIT_QUERY,MANUAL_DEVICE,MANUAL_DEVICE_QUERY};
+    unsigned deferred=CHANGE_NONE;
+    char pending_driver[DOLLY_PHYS_DRIVER_LEN]={0};
     if(!p || !p->window)return;
     while((msg=GT_GetIMsg(p->window->UserPort))!=NULL) {
         ULONG cls=msg->Class;
@@ -1240,16 +1274,16 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->mode=p->allowed_mode_ids[code];
             p->has_device=0;p->has_unit=0;p->has_manual_unit=0;
             p->has_partition=0;p->has_logical=0;
-            deferred=1;
+            deferred=CHANGE_MODE;
         } else if(id==PICK_DEVICE && (unsigned)code<p->device_count) {
             if(!p->has_device || p->device!=code)p->has_manual_unit=0;
             p->device=code;p->has_device=1;
             p->has_unit=0;p->has_partition=0;
-            deferred=2;
+            deferred=CHANGE_DEVICE;
         } else if(id==PICK_UNIT &&
                   (unsigned)code<p->unit_count && p->has_device) {
             p->unit=code;p->has_unit=1;
-            deferred=3;
+            deferred=CHANGE_UNIT;
         } else if(id==PICK_PARTITION &&
                   p->mode==DOLLY_MODE_PARTITION &&
                   (unsigned)code<p->partition_count &&
@@ -1262,14 +1296,25 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             p->logical=code;p->has_logical=1;
             change_enabled(p);
             refresh_selection_preview(p);
-        } else if((id==PICK_QUERY || id==PICK_UNIT_TEXT) && physical_mode(p)) {
-            ULONG unit;
-            if(!read_unit_field(p,&unit))DisplayBeep(p->screen);
-            else if(!physical_choice(p) || unit!=p->physical_units[p->unit]) {
-                p->manual_unit=unit;
-                p->has_manual_unit=1;
-                deferred=id==PICK_QUERY?6:5;
-            } else if(id==PICK_QUERY)deferred=4;
+        } else if((id==PICK_QUERY || id==PICK_UNIT_TEXT ||
+                   id==PICK_SELECTION_TEXT) && physical_mode(p)) {
+            const char *driver=read_device_field(p);
+            ULONG unit=0;
+            int have_unit=read_unit_field(p,&unit);
+            if(!driver)DisplayBeep(p->screen);
+            else if(!p->has_device || strcasecmp(driver,p->physical_names[p->device])) {
+                strcpy(pending_driver,driver);
+                p->has_manual_unit=id==PICK_QUERY && have_unit;
+                if(p->has_manual_unit)p->manual_unit=unit;
+                deferred=p->has_manual_unit?MANUAL_DEVICE_QUERY:MANUAL_DEVICE;
+            } else if(id!=PICK_SELECTION_TEXT) {
+                if(!have_unit)DisplayBeep(p->screen);
+                else if(!physical_choice(p) || unit!=p->physical_units[p->unit]) {
+                    p->manual_unit=unit;
+                    p->has_manual_unit=1;
+                    deferred=id==PICK_QUERY?MANUAL_UNIT_QUERY:MANUAL_UNIT;
+                } else if(id==PICK_QUERY)deferred=RUN_QUERY;
+            }
         } else if(id==PICK_PARTITION_NUMBER) {
             (void)capture_partition_number(p);
         } else if(id==PICK_SELECT) {
@@ -1304,7 +1349,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         /* No IntuiMessage can refer to the old gadgets after this
          * point. Detach BEFORE changing list nodes and label buffers.
          */
-        if(deferred==4) {
+        if(deferred==RUN_QUERY) {
             if(p->partition_list)
                 GT_SetGadgetAttrs(p->partition_list,p->window,NULL,
                                   GTLV_Labels,(ULONG)~0ul,TAG_DONE);
@@ -1320,21 +1365,27 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             return;
         }
         release_picker_gadgets(p);
-        if(deferred==1 || deferred==2) {
+        if(deferred==MANUAL_DEVICE || deferred==MANUAL_DEVICE_QUERY) {
+            p->device=append_device(p,pending_driver);
+            p->has_device=1;
+            p->has_unit=0;
+        }
+        if(deferred==CHANGE_MODE || deferred==CHANGE_DEVICE || deferred==MANUAL_DEVICE) {
             invalidate_query(p);
             populate_units(p,1);
-        } else if(deferred==3) {
+        } else if(deferred==CHANGE_UNIT) {
             invalidate_query(p);
-        } else if(deferred==5 || deferred==6) {
+        } else if(deferred==MANUAL_UNIT || deferred==MANUAL_UNIT_QUERY ||
+                  deferred==MANUAL_DEVICE_QUERY) {
             unsigned i;
             invalidate_query(p);
-            populate_units(p,0);
+            populate_units(p,deferred==MANUAL_DEVICE_QUERY);
             for(i=0;i<p->unit_count;++i)
                 if(p->physical_units[i]==p->manual_unit) {
                     p->unit=i;p->has_unit=1;
                     break;
                 }
-            if(deferred==6)query_picker_unit(p);
+            if(deferred!=MANUAL_UNIT)query_picker_unit(p);
         }
         if(!rebuild(p))
             dolly_picker_close(p);

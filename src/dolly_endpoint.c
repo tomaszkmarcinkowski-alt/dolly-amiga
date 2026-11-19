@@ -4,7 +4,7 @@ void dolly_endpoint_clear(DollyEndpoint *e) {
     if(e)memset(e,0,sizeof(*e));
 }
 int dolly_endpoint_set_unit(DollyEndpoint *e,unsigned d,unsigned u) {
-    if(!e || d>15u || u>15u)return 0;
+    if(!e || d>UINT8_MAX || u>UINT8_MAX)return 0;
     dolly_endpoint_clear(e);
     e->kind=DOLLY_ENDPOINT_UNIT;
     e->device=(uint8_t)d;

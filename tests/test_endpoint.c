@@ -11,6 +11,10 @@ int main(void) {
 
     DollyEndpoint src={0},dst={0};
     assert(!dolly_demo_can_start(DOLLY_DEMO_SCAN,&src,&dst));
+    assert(dolly_endpoint_set_unit(&src,16,26));
+    assert(src.device==16 && src.unit==26);
+    assert(!dolly_endpoint_set_unit(&src,256,0));
+    assert(!dolly_endpoint_set_unit(&src,0,256));
     assert(dolly_endpoint_set_unit(&src,0,0));
     assert(dolly_demo_can_start(DOLLY_DEMO_SCAN,&src,&dst));
     assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
@@ -63,7 +67,6 @@ int main(void) {
     assert(dolly_demo_can_start(DOLLY_DEMO_COPY,&src,&dst));
     assert(!dolly_endpoint_set_file(&dst,""));
     assert(dolly_endpoint_set_unit(&dst,2,0));
-    assert(!dolly_endpoint_set_unit(&dst,16,0));
     assert(dolly_endpoint_set_unit(&src,0,0));
     assert(dolly_endpoint_set_unit(&dst,1,0));
     strcpy(src.path,"scsi.device / Unit 0");

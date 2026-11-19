@@ -121,7 +121,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
     struct SCSICmd sc;
     UBYTE *data=NULL;
     LONG rc;
-    int opened=0,have_capacity=0,have_name=0;
+    int opened=0,have_capacity=0,have_name=0,have_td_geometry=0;
     if(!name || !size || !name_capacity || !size_capacity ||
        !driver || !*driver)return 0;
     if(geometry)memset(geometry,0,sizeof(*geometry));
@@ -151,6 +151,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             (uint64_t)geom.dg_TotalSectors*
             (uint64_t)geom.dg_SectorSize);
         have_capacity=1;
+        have_td_geometry=1;
         if(geometry) {
             geometry->block_count=geom.dg_TotalSectors;
             geometry->block_bytes=geom.dg_SectorSize;
@@ -190,8 +191,10 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 assign_string(name,name_capacity,vendor);have_name=1;
             }
         }
-        if(!have_capacity) {
+        {
             ULONG last,block;
+            /* TD_GETGEOMETRY can report a translated, cylinder-rounded size.
+             * READ CAPACITY reports the device's last addressable LBA. */
             memset(data,0,64);
             memset(&sc,0,sizeof(sc));
             data[40]=0x25u;  /* READ CAPACITY (10) */
@@ -209,7 +212,8 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
             if(rc==0 && sc.scsi_Status==0 && sc.scsi_Actual>=8) {
                 last=read_be32(data);
                 block=read_be32(data+4);
-                if(last!=0xfffffffful && valid_sector_bytes(block)) {
+                if(last!=0xfffffffful && valid_sector_bytes(block) &&
+                   (!have_td_geometry || block==geom.dg_SectorSize)) {
                     capacity_string(size,size_capacity,
                        ((uint64_t)last+1u)*(uint64_t)block);
                     have_capacity=1;
@@ -222,8 +226,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 }
             }
         }
-        if(probe_chs && geometry &&
-           geometry->capacity_source==DOLLY_GEOMETRY_SCSI_CAPACITY10) {
+        if(probe_chs && geometry && have_capacity && !have_td_geometry) {
             const UBYTE *page=mode_page(io,data,4u,6u);
             if(page) {
                 geometry->cylinders=((ULONG)page[2]<<16)|

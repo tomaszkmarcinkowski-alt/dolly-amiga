@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | Host CTest | 36 tests, including native Exec mocks, image/target assessment, Restore batch transfer, DLRP serialization and LBA/CHS parsing. | Real-driver behavior. |
 | Native build | MC68000 GUI, write adapter and Restore source targets cross-compiled. | Runtime checks of the new scan dialog, Pause/Resume, the Restore timer and checkpoint save. |
+| Disk-unit enumeration | User confirmed that the disk-units test build reports the correct units and Query results for scsi.device Unit 0 with a valid RDB and two FFS partitions, and uaehf.device Units 0 and 1 with no RDB. | Additional controller and media configurations. |
 
 ## Historical emulator verification through Alpha 2
 

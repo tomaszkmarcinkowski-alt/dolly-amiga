@@ -123,8 +123,8 @@ device list with storage driver candidates from Exec. The Exec list
 contains driver names, and AmigaOS has no generic list of their unit
 numbers. For drivers with no DOS startup record, Dolly recognizes the
 standard resident names and looks for storage-related names in the
-loaded Exec list. An unloaded third-party driver is visible only if a
-DOS record references it.
+loaded Exec list. A driver missing from the list can be entered by name in the **Device**
+field.
 
 When a driver is selected, Dolly attempts OpenDevice for units 0–9
 and immediately closes successful opens. It merges those units with
@@ -132,9 +132,20 @@ AmigaDOS registrations and sorts the list by numeric ID. The same
 rule applies to each driver and keeps disks without RDB discoverable.
 Dolly does this outside the DOS list lock. No disk I/O commands are
 issued by unit discovery. Query separately checks the selected unit
-and reads capacity and partition metadata as appropriate.
+and reads capacity and partition metadata as appropriate. Query
+prefers the last addressable LBA from SCSI READ CAPACITY(10) when it
+returns a valid count and agrees with the sector size from
+TD_GETGEOMETRY. The latter remains the fallback and supplies CHS when
+available. RDB partition bounds are checked against the resulting
+sector count. An out-of-bounds diagnostic reports the partition's
+last LBA and the disk sector count.
 
-The editable **Unit** field accepts any unsigned 32-bit unit number.
+In Physical device and Partition mode, **Device** and **Unit** are
+editable. **Device**, **SCSI name** and **Geometry** or **Partition**
+share a left edge based on the current font metrics. In Physical
+device mode, **Size** shares the **Geometry** row, leaving the full
+value column available to **SCSI name**. The **Unit** field defaults
+to 0 and accepts any unsigned 32-bit unit number.
 Press Return to select it, or select **Query** directly. Partition
 mode has an integer **Partition** field. The first entry in the RDB
 PART chain is 1. After Query, selecting an item or entering its

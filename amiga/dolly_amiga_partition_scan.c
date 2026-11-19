@@ -3,6 +3,7 @@
 #include "dolly_amiga_destructive.h"
 #include "dolly_amiga_source.h"
 #include "dolly_amiga_write.h"
+#include "dolly_surface_log.h"
 #include <exec/devices.h>
 #include <stdlib.h>
 #include <exec/io.h>
@@ -173,10 +174,18 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
            !mul_checked(low,cyl_bytes,&begin) ||
            !add_checked((uint64_t)base_lba*BLK,begin,&begin) ||
            !mul_checked((uint64_t)high-(uint64_t)low+1u,
-                        cyl_bytes,&length) ||
-           begin>r->total_bytes || !length ||
-           length>r->total_bytes-begin) {
-            strcpy(out->status,"RDB partition outside media");
+                        cyl_bytes,&length)) {
+            strcpy(out->status,"RDB partition geometry overflows byte range");
+            return -1;
+        }
+        if(begin>=r->total_bytes || length>r->total_bytes-begin) {
+            char last_lba[21],media_lbas[21];
+            /* Compute the last sector without adding byte offsets. */
+            dolly_surface_log_decimal(last_lba,begin/BLK+length/BLK-1u);
+            dolly_surface_log_decimal(media_lbas,r->total_bytes/BLK);
+            snprintf(out->status,sizeof(out->status),
+                     "RDB #%u outside media: end LBA %s, disk %s sectors",
+                     used,last_lba,media_lbas);
             return -1;
         }
         p=&out->parts[out->count++];
