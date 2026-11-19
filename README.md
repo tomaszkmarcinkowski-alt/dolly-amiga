@@ -23,7 +23,7 @@ Sector-by-sector copying in an Alpha 3 development build. [Download Alpha 3.1](h
 - RAW cloning and filesystem-aware resizing for OFS/FFS (`DOS\0`–`DOS\7`).
 - Read-only DiskDoctor analysis followed by controlled recovery/repair.
 - Disk-based scratch, optional AddBuffers with consent and rollback, safe/experimental Berserk modes.
-- Dedicated **Sheep Counter** 320×256 progress screen with error counters, sheep mascot and optional 8-bit audio.
+- Resizable **Sheep Counter** window with a progress grid, percentage, processed block and error counters, Pause/Resume, and access to the Surface Scan log. Open it through **Details** during an operation.
 
 ## Current implementation
 
