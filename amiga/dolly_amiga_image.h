@@ -10,6 +10,7 @@ typedef struct DollyAmigaImage {
     int staging,keep_staging;
     char name[256],partial[261],staged_file[267];
     const char *failure;
+    char read_failure[64];
 } DollyAmigaImage;
 
 /* Initialize to zero. Each step copies one sector-aligned chunk. */

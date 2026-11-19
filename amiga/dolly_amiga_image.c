@@ -171,9 +171,9 @@ void dolly_image_step(DollyAmigaImage *image) {
     if(result.status!=DOLLY_BLOCK_OK || result.bytes_read!=bytes) {
         char position[21];
         dolly_surface_log_decimal(position,lba);
-        printf("CREATE IMAGE: read failed at LBA %s (%s)\n",position,
-               dolly_block_status_name(result.status));
-        image->failure="Read failed. Image was not completed.";
+        snprintf(image->read_failure,sizeof(image->read_failure),
+                 "Read failed at LBA %s. Image incomplete.",position);
+        image->failure=image->read_failure;
         return;
     }
     if(!(image->dly.file_bytes?

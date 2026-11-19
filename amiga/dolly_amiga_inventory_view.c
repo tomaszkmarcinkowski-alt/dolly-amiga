@@ -715,8 +715,6 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
             if(v->geometry.block_bytes==512ul &&
                dolly_amiga_inventory_scan(v->driver,v->unit,
                                           &v->geometry,&v->map)) {
-                printf("INVENTORY: scanner=%s count=%lu\n",
-                       v->map.status,(unsigned long)v->map.count);
                 for(i=0;i<v->map.count && i<DOLLY_PART_MAX;++i) {
                     const DollyNativePartition *p=&v->map.parts[i];
                     if(p->is_rdb)
@@ -726,8 +724,6 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                         sprintf(line,"MBR Partition (%s) %lu",
                                 p->mbr_type==0x76u?"RDB":mbr_role(p),
                                 (unsigned long)p->mbr_slot);
-                    printf("INVENTORY: PART %lu label='%s'\n",
-                           (unsigned long)(i+1u),p->label);
                     add_row(v,line);
                 }
                 if(v->map.rdb_capacity_mismatch)

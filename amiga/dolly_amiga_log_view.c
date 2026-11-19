@@ -276,6 +276,10 @@ fail:
     dolly_amiga_log_view_close();
     return 0;
 }
+ULONG dolly_amiga_log_view_signal(void) {
+    return view.window && view.window->UserPort ? 1UL<<view.window->UserPort->mp_SigBit : 0;
+}
+
 void dolly_amiga_log_view_pump(void) {
     struct IntuiMessage *msg;
     if(!view.window)return;

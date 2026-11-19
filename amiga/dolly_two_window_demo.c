@@ -35,6 +35,9 @@
 #include <stdio.h>
 #include <string.h>
 
+/* libnix opens this stream for Workbench launches before main(). */
+char __stdiowin[]="NIL:";
+
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
@@ -58,7 +61,6 @@ static const char hide_label[]="Hide";
 #define SHEEP_LOG_ID 220u
 #define SHEEP_PAUSE_ID 221u
 #define MAIN_START_ID 208u
-#define MAIN_DEVICE_ID 209u
 #define MAIN_OPERATION_ID 210u
 #define MAIN_SOURCE_MODE_ID 220u
 #define MAIN_TARGET_MODE_ID 221u
@@ -73,7 +75,7 @@ static const char hide_label[]="Hide";
 #define MAIN_DESC_ID 214u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.1"
+#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.2"
 #define MAIN_GADGET_HEIGHT 15
 #define MAIN_COLUMN_GAP 6
 
@@ -938,10 +940,7 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
         TAG_DONE);
     if(!v->window)return 0;
     dolly_amiga_window_font(v->window,0);
-    if(!set_content_minimum(v,main_window)) {
-        puts("WINDOW FAIL: measured minimum does not fit");
-        return 0;
-    }
+    if(!set_content_minimum(v,main_window))return 0;
     return rebuild_gadgets(v,main_window);
 }
 static void clear_client(DollyDemoView *v) {
@@ -1460,7 +1459,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 if(selected_operation==DOLLY_DEMO_INVENTORY) {
                     if(!dolly_inventory_view_open(&inventory_view,
                                                    public_screen,&selected_source))
-                        puts("INVENTORY WARN: unable to open Inventory");
+                        dolly_amiga_role_request(v->window,"Dolly","Could not open Sheep Inventory.","OK",NULL,NULL);
                 } else {
                     uint64_t total=0;
                     scan_result=(unsigned char)(selected_operation==DOLLY_DEMO_SCAN);
@@ -1504,7 +1503,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 ask_stop();
             } else if(id==MAIN_DETAILS_ID && operation_active() &&
                       !show_sheep())
-                puts("MAIN WARN: unable to show Sheep Counter");
+                dolly_amiga_role_request(v->window,"Dolly","Could not open Sheep Counter.","OK",NULL,NULL);
         } else if(cls==IDCMP_CLOSEWINDOW || id==SHEEP_HIDE_ID)hide=1;
         if(main_window && (id==MAIN_SETTINGS_ID ||
            (cls==IDCMP_MENUPICK && code==IO_SETTINGS_ITEM)) &&
@@ -1513,7 +1512,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         if(!main_window && id==SHEEP_PAUSE_ID && operation_active())toggle_pause();
         if(!main_window && id==SHEEP_LOG_ID && log_available() &&
            !dolly_amiga_log_view_open(public_screen,&surface,log_outcome()))
-            puts("SURFACE SCAN: could not open log window");
+            dolly_amiga_role_request(v->window,"Dolly","Could not open the Surface Scan log.","OK",NULL,NULL);
         if(hide)break;
     }
     if(hide) {
@@ -1523,7 +1522,6 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
     if(*quit)return;
     if(relayout) {
         if(!rebuild_gadgets(v,main_window)) {
-            puts("WINDOW WARN: resize layout rejected");
             /* Reattach the previous list if the layout could not be
              * reconstructed. It is no longer safe to leave a detached
              * GadTools list orphaned in an otherwise usable window.
@@ -1589,13 +1587,14 @@ static int open_main_with_fallback(void) {
     }
     return 1;
 }
+static ULONG window_signal(const struct Window *window) {
+    return window && window->UserPort ? 1UL<<window->UserPort->mp_SigBit : 0;
+}
+
 int main(int argc,char **argv) {
-    unsigned frames=0;
     int quit=0,rc=10;
     const char *prefs_error;
     dolly_operation_init(&operation);
-    puts("Dolly: entered main");
-    /* Open the main UI idle. Starting a synthetic operation is explicit. */
     IntuitionBase=(struct IntuitionBase *)OpenLibrary("intuition.library",36);
     if(!IntuitionBase)return 10;
     GfxBase=(struct GfxBase *)OpenLibrary("graphics.library",36);
@@ -1609,7 +1608,6 @@ int main(int argc,char **argv) {
        (ULONG)public_screen->Height<256ul)goto cleanup;
     screen_info=GetScreenDrawInfo(public_screen);
     if(!screen_info)goto cleanup;
-    puts("Dolly: public screen ready");
     prefs_error=dolly_amiga_prefs_load(argc,argv);
     if(!dolly_amiga_fonts_init(public_screen) || !open_main_with_fallback())
         goto cleanup;
@@ -1623,10 +1621,12 @@ int main(int argc,char **argv) {
             EasyRequestArgs(main_view.window,&request,NULL,args);
         }
     }
-    puts("Dolly: main window ready");
     /* Sheep Counter intentionally remains closed until explicitly shown. */
     while(!quit) {
-        WaitTOF();
+        if(operation.state==DOLLY_OP_RUNNING)WaitTOF();
+        else Wait(window_signal(main_view.window) | window_signal(sheep_view.window) |
+                  window_signal(source_picker.window) | window_signal(target_picker.window) |
+                  window_signal(inventory_view.window) | dolly_amiga_log_view_signal());
         process_view(&main_view,1,&quit);
         {
             int was_open=source_picker.window!=NULL ||
@@ -1718,26 +1718,10 @@ int main(int argc,char **argv) {
                                            surface.errors,surface.retries);
             if(surface.failure || surface.processed==surface.total) {
                 (void)dolly_operation_finish(&operation,surface.failure==NULL);
-                printf("SURFACE SCAN: processed=%lu errors=%lu retries=%lu\n",
-                       (unsigned long)surface.processed,(unsigned long)surface.errors,
-                       (unsigned long)surface.retries);
                 dolly_surface_close(&surface);
                 refresh_main_selection();
             }
             progress_view_update(old,cell_changed);
-        } else if(!quit && ++frames>=8u && operation.state==DOLLY_OP_RUNNING) {
-            unsigned old;
-            frames=0;
-            if(operation.completed_blocks<GRID_TOTAL) {
-                old=(unsigned)operation.completed_blocks;
-                if(dolly_operation_progress(&operation,
-                    operation.completed_blocks+1,
-                    operation.errors,operation.retries)==DOLLY_OP_OK)
-                    progress_view_update(old,0);
-            } else {
-                (void)dolly_operation_finish(&operation,1);
-                refresh_main_selection();
-            }
         }
         if(!quit && dolly_amiga_fonts_changed()) {
             int counter_open=sheep_view.window!=NULL;
@@ -1753,11 +1737,6 @@ int main(int argc,char **argv) {
         }
         if(!quit)sync_action_labels();
     }
-    printf("Session blocks=%lu/%lu state=%u visible=%u\n",
-           (unsigned long)operation.completed_blocks,
-           (unsigned long)operation.total_blocks,
-           (unsigned)operation.state,
-           (unsigned)operation.sheep_counter_visible);
     rc=0;
 cleanup:
     dolly_amiga_transfer_close(&transfer);

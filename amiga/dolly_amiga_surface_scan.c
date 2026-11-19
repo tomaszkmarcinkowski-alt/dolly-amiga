@@ -201,17 +201,11 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
         dolly_surface_close(scan);
         return 0;
     }
-    printf("I/O: Mask=%08lx BufMemType=%08lx MaxTransfer=%lu Batch=%lu\n",
-           (unsigned long)hints.mask,(unsigned long)hints.buffer_memory,
-           (unsigned long)hints.max_transfer,(unsigned long)transfer);
     strcpy(scan->source_path,endpoint->path);
     strcpy(scan->device_name,name);
     scan->geometry=geometry;
     scan->effective_io=hints;
     scan->device=device;
-    printf("SURFACE SCAN: %s unit=%lu first LBA=%lu sectors=%lu\n",
-           device.driver,(unsigned long)device.unit,(unsigned long)scan->first_lba,
-           (unsigned long)scan->total);
     return 1;
 }
 
@@ -276,12 +270,6 @@ void dolly_surface_step(DollySurfaceScan *scan) {
         }
         dolly_surface_log_add(&scan->log,DOLLY_SURFACE_UNREADABLE,lba,1,read.status);
         ++scan->errors;
-        {
-            DollySurfaceEvent event={lba,1,DOLLY_SURFACE_UNREADABLE,read.status};
-            char line[DOLLY_LOG_LINE_SIZE];
-            dolly_surface_log_line(line,&event,&scan->geometry);
-            printf("SURFACE SCAN: %s\n",line);
-        }
     } else if(scan->retry_pending) {
         dolly_surface_log_add(&scan->log,DOLLY_SURFACE_RECOVERED,lba,1,read.status);
     }

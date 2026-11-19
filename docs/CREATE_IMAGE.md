@@ -52,3 +52,13 @@ For two sequential reads of the same 1 MiB range at each batch size,
 4 KiB took 4.68 s and 3.16 s, 8 KiB took 2.58 s and 2.58 s, and 16 KiB
 took 2.32 s and 2.24 s. These timings cover source reads on the
 emulated controller. They exclude file writes and GUI updates.
+
+
+## Imaging a running Amiga system
+
+Create Image opens the source through the read-only sector adapter. It
+does not send AmigaDOS Inhibit to source partitions. A booted volume
+remains live, so any concurrent filesystem writes can leave an image
+with inconsistent filesystem contents. A sector image includes
+unformatted partitions as raw bytes. Workbench volume labels do not
+establish whether Dolly inhibited a partition.
