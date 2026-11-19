@@ -66,12 +66,13 @@ static const char hide_label[]="Hide";
 #define MAIN_IMAGE_FORMAT_ID 222u
 #define MAIN_COMPRESSION_ID 223u
 #define MAIN_COPY_MODE_ID 224u
+#define MAIN_VET_MODE_ID 225u
+#define MAIN_VET_REPAIR_ID 226u
 #define MAIN_STATUS_ID 211u
 #define MAIN_SOURCE_ID 212u
 #define MAIN_TARGET_ID 213u
 #define MAIN_DESC_ID 214u
 #define MAIN_SOURCE_TEXT_ID 215u
-#define MAIN_TARGET_TEXT_ID 216u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
@@ -101,7 +102,7 @@ typedef struct DollyDemoView {
     struct Gadget *show, *settings, *placeholder, *stop, *quit;
     struct Gadget *start, *hide, *log, *pause, *count, *errors, *percent;
     const char *action_label;
-    struct Gadget *device,*target_button,*source_text,*target_text;
+    struct Gadget *device,*target_button,*source_text;
     struct Gadget *description,*selectors[3],*operation_options[2],*status;
     STRPTR mode_labels[2][5];
     DollyEndpointMode mode_ids[2][4];
@@ -162,7 +163,14 @@ static STRPTR compression_types[]={
 static STRPTR copy_modes[]={
     (STRPTR)"Sector-to-sector",(STRPTR)"Smart Copy",(STRPTR)"Clone and resize",NULL
 };
-static unsigned image_type,compression_type,copy_mode;
+static STRPTR vet_modes[]={
+    (STRPTR)"Analyze (read only)",(STRPTR)"Analyze & repair",NULL
+};
+static STRPTR vet_repairs[]={
+    (STRPTR)"Repair in place",(STRPTR)"File recovery",NULL
+};
+static unsigned image_type,compression_type,copy_mode,vet_mode,vet_repair;
+static char recovery_drawer[256];
 static DollyImageFormat selected_image_format(void) {
     static const DollyImageFormat formats[]={
         DOLLY_IMAGE_IFF_DOLY,DOLLY_IMAGE_IFF_FAST,DOLLY_IMAGE_IFF_COMPACT
@@ -184,9 +192,18 @@ static unsigned destination_mode_mask(void) {
                                1u,selected_source.kind,berserk_mode);
 }
 
+static int recovery_destination(void) {
+    return selected_operation==DOLLY_DEMO_DISK_VET && vet_mode==1u && vet_repair==1u;
+}
+static int destination_button_available(void) {
+    if(recovery_destination() || selected_operation==DOLLY_DEMO_CREATE_IMAGE)
+        return AslBase && (recovery_destination() || destination_mode_mask());
+    return destination_mode_mask()!=0u;
+}
+
 static DollyEndpointMode medium_modes[2]={DOLLY_MODE_PHYSICAL,DOLLY_MODE_PHYSICAL};
-static STRPTR no_destination_choices[]={(STRPTR)"Not Required",NULL};
-static STRPTR awaiting_source_choices[]={(STRPTR)"Select a source",NULL};
+static int main_cycle_rebuild;
+static STRPTR blank_cycle_labels[]={(STRPTR)"",NULL};
 static const char *const selector_titles[]={"Operation","Source","Destination"};
 static STRPTR medium_names[]={
     (STRPTR)"Physical device",(STRPTR)"Logical device",
@@ -228,8 +245,9 @@ static LONG main_selector_width(struct RastPort *rp) {
     LONG width=0;
     unsigned i;
     static const char *const extra_labels[]={
-        "Select a source","Not Required","Sheep Counter","Destination...",
-        "Sector-to-sector","Clone and resize","Not compressed"
+        "Not Required","Sheep Counter","Destination...",
+        "Sector-to-sector","Clone and resize","Not compressed",
+        "Analyze (read only)","Analyze & repair","Repair in place","File recovery"
     };
     for(i=0;i<sizeof(extra_labels)/sizeof(extra_labels[0]);++i) {
         LONG label=TextLength(rp,(STRPTR)extra_labels[i],strlen(extra_labels[i]));
@@ -294,6 +312,10 @@ static int can_start_operation(void) {
 static int operation_active(void) {
     return operation.state==DOLLY_OP_RUNNING || operation.state==DOLLY_OP_PAUSED;
 }
+static int main_controls_busy(void) {
+    return operation_active() || source_picker.window || target_picker.window;
+}
+
 static const char *action_label(int main_window) {
     if(operation.state==DOLLY_OP_PAUSED)return "Resume";
     if(operation.state==DOLLY_OP_RUNNING || !main_window)return "Pause";
@@ -356,7 +378,10 @@ static void update_main_status(void) {
                   "Ready for read-only Inventory.");
     else if(selected_operation==DOLLY_DEMO_DISK_VET)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  "Disk Vet planned; no repairs available yet.");
+                  recovery_destination()?(recovery_drawer[0]?
+                    "Recovery drawer selected. File recovery is planned.":
+                    "Choose a destination drawer for file recovery."):
+                    "Disk Vet planned; no repairs available yet.");
     else if(!selected_source.kind)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Choose source.");
@@ -385,14 +410,17 @@ static void update_main_status(void) {
                   "Ready to create image.":"Ready. No disk I/O.");
     format_endpoint(main_view.source_label,sizeof(main_view.source_label),
                     &selected_source);
-    if(need)
+    if(recovery_destination())
+        text_copy(main_view.target_label,sizeof(main_view.target_label),
+                  recovery_drawer[0]?recovery_drawer:"<not selected>");
+    else if(need)
         format_endpoint(main_view.target_label,sizeof(main_view.target_label),&selected_target);
     else text_copy(main_view.target_label,sizeof(main_view.target_label),"Not Required");
     if(main_view.window) {
         DemoLayout *d=&main_view.l;
         clip_main(main_view.source_label,d->selector_w[1]-8);
         clip_main(main_view.target_label,d->selector_w[2]-8);
-        clip_main(main_view.desc_label,d->right-d->left);
+        clip_main(main_view.desc_label,d->right-d->left-5);
         clip_main(main_view.status_label,d->right-d->left-8);
     }
 }
@@ -607,10 +635,7 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
                           (id==MAIN_SHOW_ID && !counter_available()) ||
                           (id==MAIN_START_ID && !operation_active() && !can_start_operation()) ||
                           (id==SHEEP_PAUSE_ID && !operation_active()) ||
-                          (id==MAIN_TARGET_ID &&
-                           (!dolly_demo_needs_target(
-                             (DollyDemoOperation)selected_operation) ||
-                            !destination_mode_mask()))),
+                          (id==MAIN_TARGET_ID && !destination_button_available())),
                         TAG_DONE);
 }
 static struct Gadget *make_number(struct Gadget *last,DollyDemoView *v,
@@ -639,7 +664,7 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
-    ng.ng_Height=(id==MAIN_SOURCE_TEXT_ID || id==MAIN_TARGET_TEXT_ID)?
+    ng.ng_Height=id==MAIN_SOURCE_TEXT_ID?
                  (WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)"";
@@ -660,8 +685,14 @@ static struct Gadget *make_selector(struct Gadget *last,DollyDemoView *v,
     ng.ng_Width=(WORD)v->l.selector_w[column];
     ng.ng_Height=(WORD)v->l.selector_h;
     ng.ng_GadgetID=id;
+    disabled=disabled || main_controls_busy();
+    if(disabled && GadToolsBase->lib_Version<37u) {
+        ng.ng_GadgetText=(STRPTR)"";
+        return CreateGadget(BUTTON_KIND,last,&ng,GA_Disabled,TRUE,TAG_DONE);
+    }
     return CreateGadget(CYCLE_KIND,last,&ng,
-                        GTCY_Labels,(ULONG)choices,GTCY_Active,(ULONG)active,
+                        GTCY_Labels,(ULONG)(disabled?blank_cycle_labels:choices),
+                        GTCY_Active,(ULONG)(disabled?0u:active),
                         GA_Disabled,(ULONG)disabled,
                         TAG_DONE);
 }
@@ -670,6 +701,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     DemoLayout *d=&v->l;
     if(!calculate_layout(v,main_window))return 0;
     update_labels(v);
+    if(main_window)main_cycle_rebuild=0;
     if(v->gadgets) {
         /* IDCMP_SIZEVERIFY already detached the list before sizing.
          * Never remove the same gadgets twice.
@@ -682,7 +714,7 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->percent=NULL;v->log=NULL;v->pause=NULL;
         v->device=NULL;v->target_button=NULL;
-        v->source_text=NULL;v->target_text=NULL;
+        v->source_text=NULL;
         v->description=NULL;v->status=NULL;
         memset(v->selectors,0,sizeof(v->selectors));
         memset(v->operation_options,0,sizeof(v->operation_options));
@@ -705,21 +737,13 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->selector_w[2],"Destination...");
         if(!last)return 0;
         v->target_button=last;
-        last=make_text(last,v,MAIN_TARGET_TEXT_ID,d->selector_x[2],d->endpoint_frame_y,
-                       d->selector_w[2],v->target_label,TRUE);
-        if(!last)return 0;
-        v->target_text=last;
         last=make_selector(last,v,MAIN_OPERATION_ID,0,d->selector_y,
                            demo_operations,selected_operation,0);
         if(!last)return 0;
         v->selectors[0]=last;
         for(role=0;role<2u;++role) {
-            STRPTR *choices=v->mode_labels[role];
-            if(!v->mode_count[role])
-                choices=role && !dolly_demo_needs_target((DollyDemoOperation)selected_operation)?
-                        no_destination_choices:awaiting_source_choices;
             last=make_selector(last,v,role?MAIN_TARGET_MODE_ID:MAIN_SOURCE_MODE_ID,
-                               role+1u,d->selector_y,choices,
+                               role+1u,d->selector_y,v->mode_labels[role],
                                v->mode_active[role],!v->mode_count[role]);
             if(!last)return 0;
             v->selectors[role+1u]=last;
@@ -738,9 +762,18 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                                copy_modes,copy_mode,0);
             if(!last)return 0;
             v->operation_options[0]=last;
+        } else if(selected_operation==DOLLY_DEMO_DISK_VET) {
+            last=make_selector(last,v,MAIN_VET_MODE_ID,0,d->endpoint_button_y,
+                               vet_modes,vet_mode,0);
+            if(!last)return 0;
+            v->operation_options[0]=last;
+            last=make_selector(last,v,MAIN_VET_REPAIR_ID,0,d->endpoint_frame_y,
+                               vet_repairs,vet_repair,!vet_mode);
+            if(!last)return 0;
+            v->operation_options[1]=last;
         }
-        last=make_text(last,v,MAIN_DESC_ID,d->left,d->main_desc_y,
-                       d->right-d->left+1,v->desc_label,FALSE);
+        last=make_text(last,v,MAIN_DESC_ID,d->left+3,d->main_desc_y,
+                       d->right-d->left-5,v->desc_label,FALSE);
         if(!last)return 0;
         v->description=last;
         last=make_button(last,v,MAIN_SHOW_ID,d->selector_x[0],d->controls_y+19,
@@ -827,7 +860,7 @@ static void destroy_view(DollyDemoView *v) {
     v->stop=NULL;v->quit=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;v->percent=NULL;
     v->device=NULL;v->target_button=NULL;
-    v->source_text=NULL;v->target_text=NULL;
+    v->source_text=NULL;
     v->description=NULL;v->status=NULL;
         memset(v->selectors,0,sizeof(v->selectors));
 }
@@ -979,6 +1012,26 @@ static void update_numbers(DollyDemoView *v) {
     }
     v->displayed_errors=(ULONG)operation.errors;
 }
+static void draw_destination_frame(void) {
+    DemoLayout *d=&main_view.l;
+    struct RastPort *rp=main_view.window->RPort;
+    struct TagItem tags[]={
+        {GT_VisualInfo,(ULONG)main_view.visual},
+        {GTBB_Recessed,TRUE},
+        {TAG_DONE,0}
+    };
+    LONG x=d->selector_x[2],y=d->endpoint_frame_y;
+    LONG width=d->selector_w[2],height=d->selector_h;
+    int inactive=main_controls_busy() ||
+                 (!main_view.mode_count[1] && !destination_button_available());
+    SetDrMd(rp,JAM1);
+    fill(rp,system_pen(BACKGROUNDPEN),x+2,y+2,x+width-3,y+height-3);
+    DrawBevelBoxA(rp,x,y,width,height,tags);
+    SetAPen(rp,system_pen(inactive?SHADOWPEN:TEXTPEN));
+    Move(rp,x+4,y+(height-rp->TxHeight)/2+rp->TxBaseline);
+    Text(rp,(STRPTR)main_view.target_label,strlen(main_view.target_label));
+}
+
 static void draw_main_static(void) {
     DemoLayout *d=&main_view.l;
     struct TagItem tags[3];
@@ -1013,9 +1066,11 @@ static void draw_main_static(void) {
     tags[1].ti_Data=TRUE;
     tags[2].ti_Tag=TAG_DONE;
     tags[2].ti_Data=0;
-    DrawBevelBoxA(main_view.window->RPort,
-                  d->left,d->main_status_y-2,
-                  d->right-d->left+1,19,tags);
+    DrawBevelBoxA(main_view.window->RPort,d->left,d->main_status_y-2,
+                  d->right-d->left+1,MAIN_STATUS_BEVEL_HEIGHT,tags);
+    DrawBevelBoxA(main_view.window->RPort,d->left,d->main_desc_y-2,
+                  d->right-d->left+1,MAIN_STATUS_BEVEL_HEIGHT,tags);
+    draw_destination_frame();
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
                         LONG width,LONG height,char marker,ULONG pen) {
@@ -1157,6 +1212,17 @@ static int io_settings_available(void) {
            operation.state!=DOLLY_OP_PAUSED &&
            !source_picker.window && !target_picker.window;
 }
+static void set_cycle_state(struct Gadget *g,STRPTR *labels,unsigned active,int disabled) {
+    if(!g || ((g->Flags&GFLG_DISABLED)!=0)==disabled)return;
+    if(GadToolsBase->lib_Version<37u) {
+        main_cycle_rebuild=1;
+        return;
+    }
+    GT_SetGadgetAttrs(g,main_view.window,NULL,
+                      GTCY_Labels,(ULONG)(disabled?blank_cycle_labels:labels),
+                      GTCY_Active,(ULONG)(disabled?0u:active),
+                      GA_Disabled,(ULONG)disabled,TAG_DONE);
+}
 static void update_main_actions(void) {
     int active=operation_active();
     if(sheep_view.window && sheep_view.pause)
@@ -1192,26 +1258,34 @@ static void update_main_actions(void) {
                           source_picker.window || target_picker.window),TAG_DONE);
     if(main_view.target_button)
         GT_SetGadgetAttrs(main_view.target_button,main_view.window,NULL,
-                          GA_Disabled,(ULONG)(active || !destination_mode_mask() ||
+                          GA_Disabled,(ULONG)(active || !destination_button_available() ||
                           source_picker.window || target_picker.window),TAG_DONE);
     {
-        int busy=active || source_picker.window || target_picker.window;
-        unsigned i;
-        for(i=0;i<3u;++i)if(main_view.selectors[i])
-            GT_SetGadgetAttrs(main_view.selectors[i],main_view.window,NULL,
-                              GA_Disabled,(ULONG)(busy ||
-                                                 (i && !main_view.mode_count[i-1u])),TAG_DONE);
-        for(i=0;i<2u;++i)if(main_view.operation_options[i])
-            GT_SetGadgetAttrs(main_view.operation_options[i],main_view.window,NULL,
-                              GA_Disabled,(ULONG)(busy || (i && !image_type)),TAG_DONE);
+        int busy=main_controls_busy();
+        unsigned role;
+        set_cycle_state(main_view.selectors[0],demo_operations,selected_operation,busy);
+        for(role=0;role<2u;++role)
+            set_cycle_state(main_view.selectors[role+1u],main_view.mode_labels[role],
+                            main_view.mode_active[role],busy || !main_view.mode_count[role]);
+        if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
+            set_cycle_state(main_view.operation_options[0],image_types,image_type,busy);
+            set_cycle_state(main_view.operation_options[1],compression_types,compression_type,
+                            busy || !image_type);
+        } else if(selected_operation==DOLLY_DEMO_DISK_VET) {
+            set_cycle_state(main_view.operation_options[0],vet_modes,vet_mode,busy);
+            set_cycle_state(main_view.operation_options[1],vet_repairs,vet_repair,busy || !vet_mode);
+        } else if(selected_operation==DOLLY_DEMO_COPY)
+            set_cycle_state(main_view.operation_options[0],copy_modes,copy_mode,busy);
     }
+    if(!main_view.gadgets_detached)draw_destination_frame();
 }
 /* Rebuild only after draining the window queues, whose IAddress fields
  * can still reference the current gadgets. */
 static void sync_action_labels(void) {
     int changed=0;
     if(main_view.window && !main_view.gadgets_detached &&
-       main_view.action_label && strcmp(main_view.action_label,action_label(1)) &&
+       (main_cycle_rebuild ||
+        (main_view.action_label && strcmp(main_view.action_label,action_label(1)))) &&
        rebuild_gadgets(&main_view,1)) {
         draw_full(&main_view,1);
         changed=1;
@@ -1230,9 +1304,6 @@ static void refresh_main_selection(void) {
     if(main_view.source_text)
         GT_SetGadgetAttrs(main_view.source_text,main_view.window,NULL,
                           GTTX_Text,(ULONG)main_view.source_label,TAG_DONE);
-    if(main_view.target_text)
-        GT_SetGadgetAttrs(main_view.target_text,main_view.window,NULL,
-                          GTTX_Text,(ULONG)main_view.target_label,TAG_DONE);
     if(main_view.description)
         GT_SetGadgetAttrs(main_view.description,main_view.window,NULL,
                           GTTX_Text,(ULONG)main_view.desc_label,TAG_DONE);
@@ -1327,8 +1398,11 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 update_main_actions();
             } else if(id==MAIN_TARGET_ID && !operation_active() && !relayout &&
                       !source_picker.window && !target_picker.window &&
-                      destination_mode_mask()!=0u) {
-                if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
+                      destination_button_available()) {
+                if(recovery_destination()) {
+                    if(dolly_amiga_pick_drawer(v->window,recovery_drawer))
+                        refresh_main_selection();
+                } else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
                     if(dolly_amiga_pick_file(v->window,&selected_target,1)) {
                         selected_target.image_format=selected_image_format();
                         refresh_main_selection();
@@ -1341,12 +1415,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
             } else if(cls==IDCMP_GADGETUP &&
                       (id==MAIN_OPERATION_ID || id==MAIN_SOURCE_MODE_ID ||
                        id==MAIN_TARGET_MODE_ID)) {
-                if(operation_active() || source_picker.window || target_picker.window) {
-                    unsigned column=id==MAIN_OPERATION_ID?0u:id==MAIN_SOURCE_MODE_ID?1u:2u;
-                    if(v->selectors[column])
-                        GT_SetGadgetAttrs(v->selectors[column],v->window,NULL,GTCY_Active,
-                            (ULONG)(column?v->mode_active[column-1u]:selected_operation),TAG_DONE);
-                } else if(!relayout && id==MAIN_OPERATION_ID && code<6u) {
+                if(!main_controls_busy() && !relayout && id==MAIN_OPERATION_ID && code<6u) {
                     selected_operation=code;
                     if(selected_operation==DOLLY_DEMO_CREATE_IMAGE)
                         selected_target.image_format=selected_image_format();
@@ -1357,7 +1426,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                        dolly_mode_allowed(destination_mode_mask(),dolly_endpoint_mode(&selected_target)))
                         medium_modes[1]=dolly_endpoint_mode(&selected_target);
                     relayout=1;
-                } else if(!relayout && id!=MAIN_OPERATION_ID) {
+                } else if(!main_controls_busy() && !relayout && id!=MAIN_OPERATION_ID) {
                     unsigned role=id==MAIN_SOURCE_MODE_ID?0u:1u;
                     if(code<v->mode_count[role] && medium_modes[role]!=v->mode_ids[role][code]) {
                         medium_modes[role]=v->mode_ids[role][code];
@@ -1382,6 +1451,13 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                       selected_operation==DOLLY_DEMO_COPY) {
                 copy_mode=code;
                 refresh_main_selection();
+            } else if(!operation_active() && !relayout &&
+                      !source_picker.window && !target_picker.window &&
+                      selected_operation==DOLLY_DEMO_DISK_VET && code<2u &&
+                      (id==MAIN_VET_MODE_ID || (id==MAIN_VET_REPAIR_ID && vet_mode))) {
+                if(id==MAIN_VET_MODE_ID)vet_mode=code;
+                else vet_repair=code;
+                relayout=1;
             } else if(id==MAIN_START_ID && operation_active())toggle_pause();
             else if(id==MAIN_START_ID &&
                       operation.state!=DOLLY_OP_RUNNING &&

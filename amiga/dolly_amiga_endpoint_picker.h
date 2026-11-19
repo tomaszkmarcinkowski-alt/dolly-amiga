@@ -76,6 +76,7 @@ int dolly_picker_open(DollyEndpointPicker *picker,struct Screen *screen,
                       DollyEndpointMode preferred_mode,
                       unsigned allowed_mask);
 int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination);
+int dolly_amiga_pick_drawer(struct Window *parent,char path[256]);
 void dolly_picker_pump(DollyEndpointPicker *picker);
 void dolly_picker_close(DollyEndpointPicker *picker);
 #endif

@@ -1589,3 +1589,18 @@ updates the selected output format without requiring a new filename.
 For Copy, a Cycle in the same column selects Sector-to-sector, Smart
 Copy or Clone and resize. Sector-to-sector uses the existing preflight.
 The two planned modes disable Start.
+
+
+For Disk Vet, the Operation column offers Analyze (read only) or Analyze
+& repair. The latter enables Repair in place and File recovery. In File
+recovery, Destination opens the ASL drawer requester and displays the
+chosen drawer. The destination medium Cycle remains disabled. The
+recovery drawer is kept separately from Copy and Create Image
+destinations. Disk Vet execution is still planned.
+
+
+Disabled Cycle controls display no choice. Dolly keeps the chosen
+index and restores its label when the control becomes available.
+The destination field is visually inactive when both destination
+controls are disabled. The description uses the same recessed
+frame as the status strip.

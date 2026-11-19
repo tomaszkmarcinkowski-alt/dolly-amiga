@@ -1027,6 +1027,27 @@ int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned d
     FreeAslRequest(fr);
     return ok;
 }
+int dolly_amiga_pick_drawer(struct Window *parent,char path[256]) {
+    struct FileRequester *fr;
+    char selected[256];
+    int ok=0;
+    if(!AslBase)return 0;
+    fr=(struct FileRequester *)AllocAslRequestTags(
+        ASL_FileRequest,ASLFR_Flags2,(ULONG)FRF_DRAWERSONLY,
+        ASLFR_Window,(ULONG)parent,
+        ASLFR_TitleText,(ULONG)"Select recovery destination drawer",TAG_DONE);
+    if(!fr)return 0;
+    if(AslRequest(fr,NULL)) {
+        BPTR lock=Lock(fr->fr_Drawer?fr->fr_Drawer:(STRPTR)"",ACCESS_READ);
+        if(lock) {
+            ok=NameFromLock(lock,(STRPTR)selected,sizeof(selected))!=0;
+            if(ok)strcpy(path,selected);
+            UnLock(lock);
+        }
+    }
+    FreeAslRequest(fr);
+    return ok;
+}
 int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
                       unsigned role,const DollyEndpoint *initial,
                       DollyEndpointMode preferred_mode,
