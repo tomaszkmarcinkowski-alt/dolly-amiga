@@ -36,7 +36,7 @@ The CLI reads primary MBR and nested RDB or a whole-device RDB and formats PART 
 8. A future Flock Manager can reuse **user-approved, privacy-filtered** inventory metadata, not automatically uploaded hardware IDs.
 
 ## Verification
-The standalone `dolly_inventory_partition` C99 source and test passed local GCC `-Wall -Wextra -Werror -pedantic` compilation and execution, including missing fields, arithmetic overflow and early stopping. A host CLI was compiled and executed against a synthetic nested-RDB image using a locally reconstructed previous parser snapshot. **Full current GitHub CMake/CTest and native Motorola 68000 builds remain unverified.**
+The standalone `dolly_inventory_partition` C99 source and test passed local GCC `-Wall -Wextra -Werror -pedantic` compilation and execution, including missing fields, arithmetic overflow and early stopping. A host CLI was compiled and executed against a synthetic nested-RDB image using a locally reconstructed previous parser snapshot. For later CMake/CTest and native MC68000 coverage, see the [test matrix](TEST_MATRIX.md).
 
 ## Incremental providers added (November 2026)
 

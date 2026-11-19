@@ -18,7 +18,7 @@ Dolly pozostaje darmowym projektem **MIT + dobrowolne Retroware**. Każda faza w
 
 - **M0** dostarczył BlockSource, narzędzia hostowe, odczyt RDB/MBR, analizę kolizji i pojemności oraz strukturalny inspektor IFF. Przebieg odnotowano w [historii M0](SPRINT_M0.md).
 - **M1** przyniósł kompilację MC68000, główne okno GadTools, selektory urządzeń, Sheep Inventory oraz [Surface Scan](SURFACE_SCAN.md). W FS-UAE zweryfikowano również odczyt wybranego zakresu przez granicę 4 GiB.
-- **Zakres M2** ma działający prototyp [Create Image](CREATE_IMAGE.md) dla RAW i HDF. Źródło jest tylko do odczytu. Otwarta pozostaje walidacja innych urządzeń docelowych, ADF i weryfikacja po zapisie w aplikacji.
+- **Zakres M2** ma działający prototyp [Create Image](CREATE_IMAGE.md) dla RAW i HDF. Źródło jest tylko do odczytu. Kopiowanie sektorowe i odtwarzanie RAW/HDF oferują opcjonalny odczyt weryfikacyjny. Otwarte pozostają testy na kolejnych kontrolerach i pełna obsługa ADF.
 - **Zakres M3** ma jednoplikowy zapis [IFF DOLY](IFF_FORMAT.md): v1 bez kompresji i v2 z PackBits/LZSS. Weryfikacja na hoście porównała dane z obrazów emulowanych ze źródłem. Segmentacja, wznowienie i odtwarzanie pozostają otwarte.
 
 - **Alpha 3** dodaje zakres LBA/CHS i ponowienia do Surface Scan, pauzę,

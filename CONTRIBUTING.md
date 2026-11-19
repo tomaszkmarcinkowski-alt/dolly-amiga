@@ -1,10 +1,10 @@
 # Contributing to Dolly
 
-Welcome! We are beginning with Milestone M0: safe read-only inspection and a tested portable core.
+Dolly is an alpha Amiga application with a portable inspection core and native disk I/O.
 
 - Propose a change or bug report in GitHub Issues.
 - Prefer small, reviewable PRs linked to a user story.
-- Keep disk-facing code read-only until safe write and verification designs are reviewed.
+- Keep inspection paths read-only. Changes to write paths must preserve target bounds, warning review and optional verification.
 - Include regression tests for parsers, sector boundaries and malformed input.
 - Preserve support for a baseline Motorola 68000 / low-memory Amiga.
 - Separate professional diagnostics from optional sheep-related humor.

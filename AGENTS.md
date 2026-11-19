@@ -3,10 +3,10 @@
 ## Project mission
 Dolly is a classic Amiga disk imaging, cloning, recovery and diagnostics project with a humorous sheep personality and professional non-destructive diagnostics. Baseline: **MC68000, AmigaOS 2.04+, GadTools**, including **640x256 / Topaz 8**. Preserve compatibility with low-memory Amigas. Never require FPU/MMU, ReAction or MUI for the MVP.
 
-## Current development snapshot (18 November 2026)
-- Integration base: `feature/m146-partition-details`.
-- **The M1.41 main-window layout is approved and frozen.** Preserve placement, size, margins, horizontal-only resizing, Stop/Quit positions, placeholders and percentage formatting.
-- Sheep Inventory adds device and partition details, clipboard copying and RDB/MBR metadata backup. Restore remains disabled.
+## Current development snapshot (Alpha 3.3)
+- Integration base: `main`. See the documentation index for the current scope.
+- Preserve the current main-window layout and font-sensitive behavior unless the user requests a GUI change.
+- Sheep Inventory adds device and partition details, clipboard copying and RDB/MBR metadata backup. Restore RDB is implemented for supported offline destinations.
 - Surface Scan is an accepted read-only UAE-IDE prototype with 64-bit reads, retries and LBA/CHS logs.
 - Create Image reads the source and writes a staged RAW, HDF or DLY file to a separately verified destination. DLY v1 is raw and v2 supports PackBits and LZSS.
 - Host tests, the MC68000 build and FS-UAE checks are recorded in `docs/TEST_MATRIX.md`. Physical-controller qualification remains open.

@@ -1,6 +1,6 @@
 # Dolly GUI architecture — MVP GadTools only; future optional backends
 
-**Current status:** the native GadTools prototype includes the frozen main window, endpoint pickers, Sheep Inventory, resizable Sheep Counter, Surface Scan log and Create Image. Optional ReAction/MUI backends remain design work. Dated entries below record the state at their milestones. See the [current test matrix](TEST_MATRIX.md).
+**Current status:** the native GadTools prototype includes the Cycle-based main window, endpoint pickers, Sheep Inventory, resizable Sheep Counter via Details, ASL file selection and font settings, and a shared transfer warning window. Optional ReAction/MUI backends remain design work. Dated entries below record the state at their milestones. See the [current test matrix](TEST_MATRIX.md).
 
 ## GUI backends
 

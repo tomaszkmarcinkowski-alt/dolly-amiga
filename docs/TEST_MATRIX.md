@@ -1,5 +1,13 @@
 # Dolly — staged testing matrix
 
+## Alpha 3.3 verification
+
+| Scope | Result |
+| --- | --- |
+| Host | 36/36 CTest cases passed. Restore coverage includes matching sizes, both directions of size mismatch, bounded writes, RDB diagnostics, and rejection of encoded IFF DOLY input. |
+| Build | The GadTools executable cross-compiled for MC68000 with GCC 10 and the AmigaOS toolchain. |
+| Native runtime | Verify aligned writes and cancellation on disposable media, both Restore size warnings, and Inhibit/unmount behavior for affected AmigaDOS devices, including a booted volume. WinUAE confirmation for Alpha 3.3 is pending. |
+
 ## Alpha 3 verification
 
 | Scope | Observed result | Remaining coverage |
@@ -28,7 +36,7 @@
 ### Sector copy and RAW/HDF Restore
 
 - Host coverage includes bounded batches, flush/readback failure, refusal
-  of missing NSD flush support, and rejection of MBR and renamed IFF DOLY images.
+  of missing NSD flush support, and rejection of renamed IFF DOLY images. A detected MBR/PC signature is advisory for whole-device RAW transfers.
 - Pending native runtime checks on disposable media: copy and restore byte
   comparison, offline/busy rejection, Stop, optional verify and DLRP capture
   after a forced failure.

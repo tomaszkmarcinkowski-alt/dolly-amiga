@@ -1,5 +1,7 @@
 # Dolly — sklonuj dysk, policz owce
 
+> Historical project record. See the [documentation index](README.md) for the current release.
+
 *Projekt narzędzia do obrazowania, migracji i ratowania dysków klasycznej Amigi*
 
 W świecie Amigi nośniki pamięci mają za sobą często kilkadziesiąt lat pracy. Dyskietki zawodzą, stare dyski twarde zaczynają gubić sektory, a współczesne rozwiązania — od kart CF po PiStorm/Emu68 — wprowadzają zupełnie nowe układy partycji. Przeniesienie sprawnego Workbencha na inny nośnik bywa łatwe tylko wtedy, gdy nic nie idzie źle.

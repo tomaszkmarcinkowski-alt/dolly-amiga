@@ -1,5 +1,7 @@
 # M0 — implementation and handoff
 
+> Historical project record. See the [documentation index](README.md) for the current release.
+
 M0 delivered a portable, read-only inspection foundation for Dolly.
 The host tools probe ADF and RAW/HDF candidates, inspect RDB and MBR
 including nested RDB, audit ranges and capacity, and validate the IFF
