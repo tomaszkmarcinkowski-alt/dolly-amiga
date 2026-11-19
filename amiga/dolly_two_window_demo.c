@@ -7,6 +7,7 @@
 #include "dolly_gui_minimum.h"
 #include "dolly_endpoint.h"
 #include "dolly_amiga_endpoint_picker.h"
+#include "dolly_amiga_device_query.h"
 #include "dolly_amiga_inventory_view.h"
 #include "dolly_amiga_surface_scan.h"
 #include "dolly_amiga_log_view.h"
@@ -61,7 +62,6 @@ static const char hide_label[]="Hide";
 #define MAIN_OPERATION_ID 210u
 #define MAIN_SOURCE_MODE_ID 220u
 #define MAIN_TARGET_MODE_ID 221u
-#define MAIN_MX_HEIGHT 9
 #define MAIN_STATUS_ID 211u
 #define MAIN_SOURCE_ID 212u
 #define MAIN_TARGET_ID 213u
@@ -72,18 +72,19 @@ static const char hide_label[]="Hide";
 #define MAIN_STOP_ID 218u
 #define MAIN_PLACEHOLDER_ID 219u
 #define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3"
-#define MAIN_CONTROLS_OFFSET 87
-#define MAIN_PROGRESS_OFFSET 125
-#define MAIN_STATUS_OFFSET 147
+#define MAIN_CONTROLS_OFFSET 47
+#define MAIN_PROGRESS_OFFSET 85
+#define MAIN_STATUS_OFFSET 107
 #define MAIN_GADGET_HEIGHT 15
+#define MAIN_COLUMN_GAP 6
 #define MAIN_STATUS_BEVEL_HEIGHT 19
 
 typedef struct DemoLayout {
     LONG left, right, top, bottom;
-    LONG main_device_y, main_target_y, main_operation_y;
+    LONG endpoint_button_y,endpoint_frame_y,main_operation_y;
     LONG main_desc_y, main_status_y, main_count_y;
     LONG progress_x, progress_w, stop_x, quit_x, stop_quit_w;
-    LONG detail_x,selector_x[3],selector_y,selector_step;
+    LONG selector_x[3],selector_w[3],selector_y,selector_h;
     LONG pad_x, pad_y;
     LONG controls_y, bar_y, bar_right, percent_x, percent_w;
     LONG grid_x, grid_y, cell_w, cell_h, gap_x, gap_y;
@@ -166,6 +167,8 @@ static unsigned destination_mode_mask(void) {
 }
 
 static DollyEndpointMode medium_modes[2]={DOLLY_MODE_PHYSICAL,DOLLY_MODE_PHYSICAL};
+static STRPTR no_destination_choices[]={(STRPTR)"Not Required",NULL};
+static STRPTR awaiting_source_choices[]={(STRPTR)"Select a source",NULL};
 static const char *const selector_titles[]={"Operation","Source","Destination"};
 static STRPTR medium_names[]={
     (STRPTR)"Physical device",(STRPTR)"Logical device",
@@ -196,16 +199,23 @@ static void prepare_medium_modes(DollyDemoView *v) {
         v->mode_labels[role][v->mode_count[role]]=NULL;
     }
 }
-static LONG main_selector_step(const struct TextFont *font) {
-    LONG height=font->tf_YSize+1;
-    return height>MAIN_MX_HEIGHT+1?height:MAIN_MX_HEIGHT+1;
+static LONG selector_height(const struct TextFont *font) {
+    LONG height=font->tf_YSize+4;
+    return height>MAIN_GADGET_HEIGHT?height:MAIN_GADGET_HEIGHT;
 }
 static LONG main_selector_extra(const struct TextFont *font) {
-    return font->tf_YSize+6*main_selector_step(font)-15;
+    return font->tf_YSize+3*selector_height(font)-3;
 }
 static LONG main_selector_width(struct RastPort *rp) {
     LONG width=0;
     unsigned i;
+    static const char *const extra_labels[]={
+        "Select a source","Not Required","Sheep Counter","Destination..."
+    };
+    for(i=0;i<sizeof(extra_labels)/sizeof(extra_labels[0]);++i) {
+        LONG label=TextLength(rp,(STRPTR)extra_labels[i],strlen(extra_labels[i]));
+        if(label>width)width=label;
+    }
     for(i=0;i<4u;++i) {
         LONG label=TextLength(rp,medium_names[i],strlen((const char *)medium_names[i]));
         if(label>width)width=label;
@@ -214,7 +224,7 @@ static LONG main_selector_width(struct RastPort *rp) {
         LONG label=TextLength(rp,demo_operations[i],strlen((const char *)demo_operations[i]));
         if(label>width)width=label;
     }
-    return 3*(width+30);
+    return 3*(width+30)+2*MAIN_COLUMN_GAP;
 }
 
 static void text_copy(char *dst,size_t cap,const char *src) {
@@ -223,30 +233,27 @@ static void text_copy(char *dst,size_t cap,const char *src) {
     if(n)memcpy(dst,src,n);
     dst[n]='\0';
 }
+static const char *endpoint_basename(const char *path) {
+    const char *name=path;
+    for(;*path;++path)
+        if(*path==':' || *path=='/')name=path+1;
+    return *name?name:path;
+}
 static void format_endpoint(char *out,size_t cap,const DollyEndpoint *e) {
-    char tmp[72];
-    if(e->kind==DOLLY_ENDPOINT_NONE){
-        text_copy(out,cap,"<not selected>");return;
-    }
-    if(e->kind==DOLLY_ENDPOINT_FILE){
-        text_copy(out,cap,e->path);return;
-    }
-    if(e->kind==DOLLY_ENDPOINT_LOGICAL) {
-        text_copy(out,cap,e->path[0] ? e->path :
-                   "<logical device not resolved>");
-        return;
-    }
-    if(e->path[0]) {
-        text_copy(out,cap,e->path);
-        return;
-    }
-    sprintf(tmp,"Device %u / unit %u",
-            (unsigned)e->device,(unsigned)e->unit);
-    if(e->kind==DOLLY_ENDPOINT_PARTITION)
-        sprintf(tmp+strlen(tmp)," / partition %u",(unsigned)e->partition);
-    else
-        strcat(tmp," (whole)");
-    text_copy(out,cap,tmp);
+    char driver[DOLLY_PHYS_DRIVER_LEN];
+    ULONG unit;
+    if(e->kind==DOLLY_ENDPOINT_NONE) {
+        text_copy(out,cap,"<not selected>");
+    } else if(e->kind==DOLLY_ENDPOINT_FILE) {
+        text_copy(out,cap,endpoint_basename(e->path));
+    } else if((e->kind==DOLLY_ENDPOINT_UNIT || e->kind==DOLLY_ENDPOINT_PARTITION) &&
+               dolly_amiga_parse_unit(e->path,driver,sizeof(driver),&unit)) {
+        driver[strlen(driver)-7u]='\0';
+        if(e->kind==DOLLY_ENDPOINT_PARTITION)
+            snprintf(out,cap,"%s:%lu:%u",driver,(unsigned long)unit,
+                     (unsigned)e->partition+1u);
+        else snprintf(out,cap,"%s:%lu",driver,(unsigned long)unit);
+    } else text_copy(out,cap,e->path[0]?e->path:"<unresolved>");
 }
 /* Text is pre-clipped against the live system font. Some early
  * GadTools versions do not implement later clipping attributes.
@@ -278,7 +285,7 @@ static const char *image_format_label(DollyImageFormat format) {
 static void format_destination_image(char *dst,size_t cap,
                                      const DollyEndpoint *endpoint,
                                      LONG max_pixels) {
-    const char *name=endpoint->path;
+    const char *name=endpoint_basename(endpoint->path);
     const char *fmt=image_format_label(endpoint->image_format);
     size_t name_len=strlen(name),fmt_len=strlen(fmt);
     size_t tail_len=fmt_len+3u; /* space, (, ) */
@@ -408,22 +415,23 @@ static void update_main_status(void) {
                   "Ready to create image.":"Ready. No disk I/O.");
     format_endpoint(main_view.source_label,sizeof(main_view.source_label),
                     &selected_source);
-    format_endpoint(main_view.target_label,sizeof(main_view.target_label),
-                    &selected_target);
+    if(need)
+        format_endpoint(main_view.target_label,sizeof(main_view.target_label),&selected_target);
+    else text_copy(main_view.target_label,sizeof(main_view.target_label),"Not Required");
     if(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
        selected_target.kind==DOLLY_ENDPOINT_FILE) {
         LONG pixel_width=main_view.window ?
-                         main_view.l.right-main_view.l.detail_x : 9999;
+                         main_view.l.selector_w[2]-8 : 9999;
         format_destination_image(main_view.target_label,
                                  sizeof(main_view.target_label),
                                  &selected_target,pixel_width);
     }
     if(main_view.window) {
         DemoLayout *d=&main_view.l;
-        clip_main(main_view.source_label,d->right-d->detail_x);
+        clip_main(main_view.source_label,d->selector_w[1]-8);
         if(!(selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
              selected_target.kind==DOLLY_ENDPOINT_FILE))
-            clip_main(main_view.target_label,d->right-d->detail_x);
+            clip_main(main_view.target_label,d->selector_w[2]-8);
         clip_main(main_view.desc_label,d->right-d->left);
         clip_main(main_view.status_label,d->right-d->left-8);
     }
@@ -559,24 +567,26 @@ static int calculate_layout(DollyDemoView *v,int main_window) {
     avail_h=d.bottom-d.top+1;
     if(main_window) {
         LONG extra=main_selector_extra(w->RPort->Font);
-        LONG endpoint=TextLength(w->RPort,(STRPTR)"Destination...",14)+8;
+        LONG column_width=(avail_w-2*MAIN_COLUMN_GAP)/3;
+        LONG footer_extra=selector_height(w->RPort->Font)-MAIN_GADGET_HEIGHT;
         LONG progress=TextLength(w->RPort,(STRPTR)"Progress:",9)+10;
         unsigned column;
         if(avail_w<320 || avail_w<main_selector_width(w->RPort) ||
-           avail_h<MAIN_STATUS_OFFSET+MAIN_STATUS_BEVEL_HEIGHT+extra)
+           avail_h<MAIN_STATUS_OFFSET+MAIN_STATUS_BEVEL_HEIGHT+extra+footer_extra)
             return 0;
         d.main_operation_y=d.top+3;
         d.selector_y=d.main_operation_y+w->RPort->Font->tf_YSize+4;
-        d.selector_step=main_selector_step(w->RPort->Font);
-        for(column=0;column<3u;++column)
-            d.selector_x[column]=d.left+4+(LONG)column*avail_w/3;
+        d.selector_h=selector_height(w->RPort->Font);
+        for(column=0;column<3u;++column) {
+            d.selector_x[column]=d.left+(LONG)column*(column_width+MAIN_COLUMN_GAP);
+            d.selector_w[column]=column_width;
+        }
+        d.endpoint_button_y=d.selector_y+d.selector_h+4;
+        d.endpoint_frame_y=d.endpoint_button_y+d.selector_h+4;
         d.main_desc_y=d.top+23+extra;
-        d.main_device_y=d.top+43+extra;
-        d.main_target_y=d.top+63+extra;
         d.controls_y=d.top+MAIN_CONTROLS_OFFSET+extra;
-        d.main_count_y=d.top+MAIN_PROGRESS_OFFSET+extra;
-        d.main_status_y=d.top+MAIN_STATUS_OFFSET+extra;
-        d.detail_x=d.left+(endpoint>120?endpoint:120);
+        d.main_count_y=d.top+MAIN_PROGRESS_OFFSET+extra+footer_extra;
+        d.main_status_y=d.top+MAIN_STATUS_OFFSET+extra+footer_extra;
         d.progress_x=d.left+(progress>86?progress:86);
         d.progress_w=66;
         /* Keep 320px client layouts viable: shorten both buttons
@@ -623,7 +633,9 @@ static struct Gadget *make_button(struct Gadget *last,DollyDemoView *v,
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
-    ng.ng_Height=15;
+    ng.ng_Height=(id==MAIN_SHOW_ID || id==MAIN_SETTINGS_ID || id==MAIN_PLACEHOLDER_ID ||
+                  id==MAIN_SOURCE_ID || id==MAIN_TARGET_ID)?
+                 (WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)title;
     return CreateGadget(BUTTON_KIND,last,&ng,
@@ -667,7 +679,8 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)y;
     ng.ng_Width=(WORD)width;
-    ng.ng_Height=15;
+    ng.ng_Height=(id==MAIN_SOURCE_TEXT_ID || id==MAIN_TARGET_TEXT_ID)?
+                 (WORD)v->l.selector_h:MAIN_GADGET_HEIGHT;
     ng.ng_GadgetID=id;
     ng.ng_GadgetText=(STRPTR)"";
     return CreateGadget(TEXT_KIND,last,&ng,
@@ -676,19 +689,19 @@ static struct Gadget *make_text(struct Gadget *last,DollyDemoView *v,
                         GTTX_Clipped,TRUE,TAG_DONE);
 }
 static struct Gadget *make_selector(struct Gadget *last,DollyDemoView *v,
-                                    UWORD id,LONG x,STRPTR *choices,UWORD active) {
+                                    UWORD id,unsigned column,STRPTR *choices,UWORD active) {
     struct NewGadget ng={0};
+    LONG x=v->l.selector_x[column];
     ng.ng_VisualInfo=v->visual;
     ng.ng_TextAttr=public_screen->Font;
     ng.ng_LeftEdge=(WORD)x;
     ng.ng_TopEdge=(WORD)v->l.selector_y;
-    ng.ng_Width=17;
-    ng.ng_Height=MAIN_MX_HEIGHT;
+    ng.ng_Width=(WORD)v->l.selector_w[column];
+    ng.ng_Height=(WORD)v->l.selector_h;
     ng.ng_GadgetID=id;
-    ng.ng_Flags=PLACETEXT_RIGHT;
-    return CreateGadget(MX_KIND,last,&ng,
-                        GTMX_Labels,(ULONG)choices,GTMX_Active,(ULONG)active,
-                        GTMX_Spacing,(ULONG)(v->l.selector_step-MAIN_MX_HEIGHT),
+    return CreateGadget(CYCLE_KIND,last,&ng,
+                        GTCY_Labels,(ULONG)choices,GTCY_Active,(ULONG)active,
+                        GA_Disabled,(ULONG)(column && !v->mode_count[column-1u]),
                         TAG_DONE);
 }
 static int rebuild_gadgets(DollyDemoView *v,int main_window) {
@@ -715,36 +728,36 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
     if(main_window) {
-        LONG detail_x=d->detail_x;
-        LONG detail_w=d->right-detail_x+1;
         unsigned role;
         prepare_medium_modes(v);
-        LONG three_width,three_gap=6;
         update_main_status();
-        last=make_button(last,v,MAIN_SOURCE_ID,d->left,d->main_device_y,
-                         detail_x-d->left-6,"Source...");
+        last=make_button(last,v,MAIN_SOURCE_ID,d->selector_x[1],d->endpoint_button_y,
+                         d->selector_w[1],"Source...");
         if(!last)return 0;
         v->device=last;
-        last=make_text(last,v,MAIN_SOURCE_TEXT_ID,detail_x,d->main_device_y,
-                       detail_w,v->source_label,TRUE);
+        last=make_text(last,v,MAIN_SOURCE_TEXT_ID,d->selector_x[1],d->endpoint_frame_y,
+                       d->selector_w[1],v->source_label,TRUE);
         if(!last)return 0;
         v->source_text=last;
-        last=make_button(last,v,MAIN_TARGET_ID,d->left,d->main_target_y,
-                         detail_x-d->left-6,"Destination...");
+        last=make_button(last,v,MAIN_TARGET_ID,d->selector_x[2],d->endpoint_button_y,
+                         d->selector_w[2],"Destination...");
         if(!last)return 0;
         v->target_button=last;
-        last=make_text(last,v,MAIN_TARGET_TEXT_ID,detail_x,d->main_target_y,
-                       detail_w,v->target_label,TRUE);
+        last=make_text(last,v,MAIN_TARGET_TEXT_ID,d->selector_x[2],d->endpoint_frame_y,
+                       d->selector_w[2],v->target_label,TRUE);
         if(!last)return 0;
         v->target_text=last;
-        last=make_selector(last,v,MAIN_OPERATION_ID,d->selector_x[0],
+        last=make_selector(last,v,MAIN_OPERATION_ID,0,
                            demo_operations,selected_operation);
         if(!last)return 0;
         v->selectors[0]=last;
         for(role=0;role<2u;++role) {
-            if(!v->mode_count[role])continue;
+            STRPTR *choices=v->mode_labels[role];
+            if(!v->mode_count[role])
+                choices=role && !dolly_demo_needs_target((DollyDemoOperation)selected_operation)?
+                        no_destination_choices:awaiting_source_choices;
             last=make_selector(last,v,role?MAIN_TARGET_MODE_ID:MAIN_SOURCE_MODE_ID,
-                               d->selector_x[role+1u],v->mode_labels[role],
+                               role+1u,choices,
                                (UWORD)v->mode_active[role]);
             if(!last)return 0;
             v->selectors[role+1u]=last;
@@ -753,19 +766,18 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                        d->right-d->left+1,v->desc_label,FALSE);
         if(!last)return 0;
         v->description=last;
-        three_width=(d->right-d->left+1-2*three_gap)/3;
-        last=make_button(last,v,MAIN_SHOW_ID,d->left,d->controls_y+19,
-                         three_width,"Sheep Counter");
+        last=make_button(last,v,MAIN_SHOW_ID,d->selector_x[0],d->controls_y+19,
+                         d->selector_w[0],"Sheep Counter");
         if(!last)return 0;
         v->show=last;
         last=make_button(last,v,MAIN_SETTINGS_ID,
-                         d->left+three_width+three_gap,d->controls_y+19,
-                         three_width,"Settings");
+                         d->selector_x[1],d->controls_y+19,
+                         d->selector_w[1],"Settings");
         if(!last)return 0;
         v->settings=last;
         last=make_button(last,v,MAIN_PLACEHOLDER_ID,
-                         d->left+2*(three_width+three_gap),d->controls_y+19,
-                         three_width,"");
+                         d->selector_x[2],d->controls_y+19,
+                         d->selector_w[2],"");
         if(!last)return 0;
         v->placeholder=last;
         last=make_button(last,v,MAIN_START_ID,d->left,
@@ -874,7 +886,8 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
         if(m.main_content_height<buttons_bottom)
             m.main_content_height=buttons_bottom;
         /* Same visual breathing room below as above the controls. */
-        m.main_content_height+=3u+(ULONG)main_selector_extra(rp->Font);
+        m.main_content_height+=3u+(ULONG)main_selector_extra(rp->Font)+
+            (ULONG)(selector_height(rp->Font)-MAIN_GADGET_HEIGHT);
         m.main_build_label_width=(ULONG)TextLength(rp,
             (STRPTR)DOLLY_DEMO_BUILD_LABEL,
             (ULONG)strlen(DOLLY_DEMO_BUILD_LABEL));
@@ -957,7 +970,7 @@ static int open_view(DollyDemoView *v,int main_window,const char *title,
         WA_Activate,TRUE,WA_SmartRefresh,TRUE,
         WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                  IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE|IDCMP_SIZEVERIFY|
-                 (main_window?(IDCMP_MENUPICK|IDCMP_GADGETDOWN):0),
+                 (main_window?IDCMP_MENUPICK:0),
         TAG_DONE);
     if(!v->window)return 0;
     if(!set_content_minimum(v,main_window)) {
@@ -998,11 +1011,6 @@ static void draw_main_static(void) {
         label(main_view.window,d->selector_x[column],
               d->main_operation_y+main_view.window->RPort->TxBaseline,
               selector_titles[column]);
-    if(!main_view.mode_count[1])
-        label(main_view.window,d->selector_x[2],
-              d->selector_y+main_view.window->RPort->TxBaseline,
-              dolly_demo_needs_target((DollyDemoOperation)selected_operation)?
-              "Select a source":"Not required");
     label(main_view.window,d->left,d->main_count_y+11,"Progress:");
     /* Build label occupies only the gap between the progress well
      * and Stop. Omit it when a minimum-width window cannot fit it;
@@ -1214,7 +1222,8 @@ static void update_main_actions(void) {
         for(i=0;i<3u;++i)if(main_view.selectors[i])
             GT_SetGadgetAttrs(main_view.selectors[i],main_view.window,NULL,
                               GA_Disabled,(ULONG)(active || source_picker.window ||
-                                                 target_picker.window),TAG_DONE);
+                                                 target_picker.window ||
+                                                 (i && !main_view.mode_count[i-1u])),TAG_DONE);
     }
 }
 /* Rebuild only after draining the window queues, whose IAddress fields
@@ -1284,8 +1293,8 @@ static void ask_stop(void) {
         (STRPTR)"Abort|Resume"
     };
     ULONG args[]={(ULONG)(scan_result?"Surface Scan":image_result?"Create Image":"Copy"),
-                  (ULONG)main_view.source_label,
-                  (ULONG)(scan_result?"-":main_view.target_label)};
+                  (ULONG)(selected_source.path[0]?selected_source.path:main_view.source_label),
+                  (ULONG)(scan_result?"-":selected_target.path[0]?selected_target.path:main_view.target_label)};
     if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
     quit_blocked=0;
     refresh_main_selection();
@@ -1305,7 +1314,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
         ULONG cls=msg->Class;
         UWORD id=0;
         UWORD code=msg->Code;
-        if((cls==IDCMP_GADGETUP || cls==IDCMP_GADGETDOWN) && msg->IAddress)
+        if(cls==IDCMP_GADGETUP && msg->IAddress)
             id=((struct Gadget *)msg->IAddress)->GadgetID;
         if(cls==IDCMP_SIZEVERIFY && !v->gadgets_detached &&
            v->gadgets) {
@@ -1347,13 +1356,13 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                                       medium_modes[1],DOLLY_MODE_BIT(medium_modes[1])))
                     dolly_picker_close(&target_picker);
                 update_main_actions();
-            } else if(cls==IDCMP_GADGETDOWN &&
+            } else if(cls==IDCMP_GADGETUP &&
                       (id==MAIN_OPERATION_ID || id==MAIN_SOURCE_MODE_ID ||
                        id==MAIN_TARGET_MODE_ID)) {
                 if(operation_active() || source_picker.window || target_picker.window) {
                     unsigned column=id==MAIN_OPERATION_ID?0u:id==MAIN_SOURCE_MODE_ID?1u:2u;
                     if(v->selectors[column])
-                        GT_SetGadgetAttrs(v->selectors[column],v->window,NULL,GTMX_Active,
+                        GT_SetGadgetAttrs(v->selectors[column],v->window,NULL,GTCY_Active,
                             (ULONG)(column?v->mode_active[column-1u]:selected_operation),TAG_DONE);
                 } else if(!relayout && id==MAIN_OPERATION_ID && code<6u) {
                     selected_operation=code;
@@ -1482,7 +1491,9 @@ int main(int argc,char **argv) {
     {
         ULONG top=(ULONG)public_screen->BarHeight+1ul;
         ULONG max_height=(ULONG)public_screen->Height-top;
-        ULONG height=190u+(ULONG)main_selector_extra(public_screen->RastPort.Font);
+        const struct TextFont *font=public_screen->RastPort.Font;
+        ULONG height=150u+(ULONG)main_selector_extra(font)+
+                     (ULONG)(selector_height(font)-MAIN_GADGET_HEIGHT);
         ULONG width=(ULONG)main_selector_width(&public_screen->RastPort)+32u;
         if(height>max_height)height=max_height;
         if(width<600u)width=600u;

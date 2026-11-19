@@ -1562,15 +1562,19 @@ and proportional fonts need visual verification on AmigaOS.
 
 ### Main window medium selection
 
-Three GadTools MX groups share one row of column headings. Operation
-filters the source medium choices through dolly_allowed_modes.
-The destination group is populated only after committing a compatible
-source object. Source and Destination each open the existing picker
-with the corresponding radio choice as its only medium type.
-Changing the source medium clears both concrete selections. Changing
-the operation retains existing selections for correction and keeps
-Start disabled while they are incompatible.
+Three GadTools Cycle gadgets share a row of column headings.
+Operation filters the source medium choices through dolly_allowed_modes.
+Destination remains disabled until a compatible source object is committed,
+and whenever the operation requires no destination.
 
-The operation description spans the available width beneath the
-groups. Font measurements derive the minimum width and the spacing
-between radio rows. The main window retains horizontal resizing.
+Source and Destination buttons sit below their Cycle gadgets, with
+the selected object shown in a recessed field underneath. Physical
+units use driver:unit and partitions use driver:unit:partition
+with the partition number starting at 1. File selections show their
+basename. An operation without a destination displays Not Required
+in the destination field.
+
+The operation description spans the width below the endpoint fields.
+The window retains horizontal resizing. The Cycle gadgets and the
+three buttons below Start share the same column edges and height.
+Minimum column widths and the control height follow the screen font.
