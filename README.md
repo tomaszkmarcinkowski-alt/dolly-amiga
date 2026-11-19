@@ -17,6 +17,7 @@ Sector-by-sector copying in an Alpha 3 development build. [Download Alpha 3.1](h
 ## Goals
 - AmigaOS 2.04+, Motorola 68000 baseline, no FPU or MMU required.
 - CLI plus **built-in GadTools GUI** in the MVP; optional ReAction and MUI backends are **post-MVP**, separately delivered extensions.
+- Fully resolution, font size and aspect ratio aware GUI with resizable windows.
 - Read/write ADF, HDF, RAW; IFF `FORM DOLY` image container with segmented/compressed data.
 - RDB, nested/hybrid MBR/RDB, PiStorm/Emu68 layouts and later GPT.
 - RAW cloning and filesystem-aware resizing for OFS/FFS (`DOS\0`–`DOS\7`).
