@@ -1531,8 +1531,12 @@ MBR calls must use it before submitting writes.
 ### Read-only data views
 
 Use a GadTools LISTVIEW with clipboard support for new views that present
-queried or parsed data. Follow Sheep Inventory: clicking a row copies its
-complete text to the Amiga clipboard, even when the visible label is
-clipped. Keep the existing meaning of the row selection and show the copy
+queried or parsed data. In Sheep Inventory, clicking a header or detail
+row copies its complete text to the Amiga clipboard, even when the
+visible label is clipped. The left list selects a partition. Keep the existing meaning of the row selection and show the copy
 result in the status area. Use IFF FTXT/CHRS on clipboard.device unit 0.
 Review existing windows before applying this pattern to them.
+
+In Restore and Create Image, the file picker uses a GadTools string
+field for the full path. Browse fills the field. Use selection commits
+the current text, including edits made without pressing Return.

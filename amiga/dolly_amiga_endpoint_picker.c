@@ -75,7 +75,7 @@ static void sync_mode_index(DollyEndpointPicker *p) {
     p->mode=p->allowed_mode_ids[0];
 }
 
-/* The driver/unit lists are snapshots of verified DOS startup tuples.
+/* The driver/unit lists contain DOS startup tuples and Exec candidates.
  * No guessed devices and no fabricated RDB/MBR partition labels.
  */
 /* Logical devices now come from a bounded AmigaDOS snapshot. */
@@ -310,34 +310,14 @@ static struct Gadget *list(struct Gadget *last,DollyEndpointPicker *p,
                         GTLV_Selected,selected,
                         GA_Disabled,(ULONG)disabled,TAG_DONE);
 }
-/* Read-only GadTools text field with the same inset border convention as
- * the other Dolly controls. The string lives in the picker until close.
- */
-/* Display may truncate, but the committed endpoint keeps the FULL path.
- * Use the actual window font metrics, not an assumed character width.
- */
-static void preview_file(DollyEndpointPicker *p) {
-    ULONG len;
-    struct RastPort *rp;
-    if(p->pending_file.kind!=DOLLY_ENDPOINT_FILE) {
-        p->file_display[0]='\0';
-        return;
-    }
-    memcpy(p->file_display,p->pending_file.path,
-           sizeof(p->file_display));
-    if(!p->window)return;
-    rp=p->window->RPort;
-    len=(ULONG)strlen(p->file_display);
-    while(len>3u &&
-          (LONG)TextLength(rp,(STRPTR)p->file_display,len)>
-          (LONG)picker_geometry(p).value_w-16) {
-        p->file_display[--len]='\0';
-    }
-    if(len<(ULONG)strlen(p->pending_file.path) && len>=3u) {
-        p->file_display[len-3u]='.';
-        p->file_display[len-2u]='.';
-        p->file_display[len-1u]='.';
-    }
+/* Read the gadget's live buffer before committing or rebuilding it. */
+static void capture_file_text(DollyEndpointPicker *p) {
+    const struct StringInfo *info;
+    if(!p->file_text)return;
+    info=(const struct StringInfo *)p->file_text->SpecialInfo;
+    if(!info || !info->Buffer)return;
+    if(!dolly_endpoint_set_file(&p->pending_file,(const char *)info->Buffer))
+        dolly_endpoint_clear(&p->pending_file);
 }
 /* Preview is provisional: the parent selection only changes after
  * Use selection. Show the current hierarchy as the user moves through
@@ -418,8 +398,7 @@ static void refresh_selection_preview(DollyEndpointPicker *p) {
         GT_SetGadgetAttrs(p->selection_text,p->window,NULL,
                           GTTX_Text,(ULONG)p->selection_display,TAG_DONE);
 }
-/* DosList supplies registered driver/unit candidates, not proof that
- * a disk is present. Only explicit Query opens the driver and probes
+/* DOS and Exec supply candidates. A unit still needs verification. Only explicit Query opens the driver and probes
  * device geometry. A vendor name alone is not a verified disk size.
  */
 static void update_disk_info(DollyEndpointPicker *p) {
@@ -572,9 +551,9 @@ static struct Gadget *file_text(struct Gadget *last,DollyEndpointPicker *p) {
     ng.ng_Width=picker_geometry(p).value_w;ng.ng_Height=17;
     ng.ng_GadgetID=PICK_FILE_TEXT;
     ng.ng_GadgetText=(STRPTR)"";
-    return CreateGadget(TEXT_KIND,last,&ng,
-                        GTTX_Text,(ULONG)p->file_display,
-                        GTTX_Border,TRUE,TAG_DONE);
+    return CreateGadget(STRING_KIND,last,&ng,
+                        GTST_String,(ULONG)p->pending_file.path,
+                        GTST_MaxChars,(ULONG)(sizeof(p->pending_file.path)-1u),TAG_DONE);
 }
 static struct Gadget *details_text(struct Gadget *last,DollyEndpointPicker *p) {
     struct NewGadget ng;
@@ -772,8 +751,7 @@ static void change_enabled(DollyEndpointPicker *p) {
                    p->media_geometry.capacity_valid &&
                    p->partition_scanned && p->has_partition &&
                    p->partition<p->partition_count) ||
-                  (p->mode==DOLLY_MODE_FILE &&
-                   p->pending_file.kind==DOLLY_ENDPOINT_FILE);
+                  p->mode==DOLLY_MODE_FILE;
         GT_SetGadgetAttrs(p->choose_button,p->window,NULL,
                           GA_Disabled,(ULONG)!ready,TAG_DONE);
     }
@@ -803,7 +781,7 @@ static int rebuild(DollyEndpointPicker *p) {
     PickerGeometry g;
     if(!p->window)return 0;
     g=picker_geometry(p);
-    preview_file(p);
+    capture_file_text(p);
     file_details(p);
     if(p->mode!=DOLLY_MODE_FILE)update_selection_preview(p);
     if(p->mode==DOLLY_MODE_PHYSICAL ||
@@ -974,8 +952,6 @@ int dolly_picker_open(DollyEndpointPicker *p,struct Screen *screen,
         p->result=*initial;
         if(initial->kind==DOLLY_ENDPOINT_FILE) {
             p->pending_file=*initial;
-            memcpy(p->file_display,initial->path,
-                   sizeof(p->file_display));
         }
     }
     if(initial && initial->kind==DOLLY_ENDPOINT_FILE &&
@@ -1093,11 +1069,13 @@ static int commit_picker(DollyEndpointPicker *p) {
             if(ok)strcpy(p->result.path,
                          p->dos_devices.names[p->logical]);
         }
-    } else if(p->mode==DOLLY_MODE_FILE &&
-            p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
-        p->result=p->pending_file;
-        if(p->role)p->result.image_format=p->output_format;
-        ok=1;
+    } else if(p->mode==DOLLY_MODE_FILE) {
+        capture_file_text(p);
+        if(p->pending_file.kind==DOLLY_ENDPOINT_FILE) {
+            p->result=p->pending_file;
+            if(p->role)p->result.image_format=p->output_format;
+            ok=1;
+        } else DisplayBeep(p->screen);
     }
     if(ok)p->changed=1;
     return ok;
@@ -1113,6 +1091,7 @@ static void release_picker_gadgets(DollyEndpointPicker *p) {
         RemoveGList(p->window,p->gadgets,-1);
     FreeGadgets(p->gadgets);
     p->gadgets=NULL;
+    p->file_text=NULL;
     p->gadgets_detached=1;
 }
 /* Rebuild ONLY after draining and replying to all GadTools messages.
@@ -1160,6 +1139,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
         }
         if(cls==IDCMP_CLOSEWINDOW || id==PICK_CANCEL)close=1;
         else if(id==PICK_MODE && (unsigned)code<p->mode_count) {
+            capture_file_text(p);
             p->mode_index=code;
             p->mode=p->allowed_mode_ids[code];
             p->has_device=0;p->has_unit=0;
@@ -1207,11 +1187,16 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
             close=commit_picker(p);
         } else if(id==PICK_IMAGE_FORMAT && p->role && code<=DOLLY_IMAGE_IFF_COMPACT) {
             p->output_format=(DollyImageFormat)code;
+        } else if(id==PICK_FILE_TEXT && p->mode==DOLLY_MODE_FILE) {
+            capture_file_text(p);
+            file_details(p);
+            if(p->file_info)
+                GT_SetGadgetAttrs(p->file_info,p->window,NULL,
+                                  GTTX_Text,(ULONG)p->file_details,TAG_DONE);
         } else if(id==PICK_FILE && p->mode==DOLLY_MODE_FILE) {
             DollyEndpoint selected={0};
             if(pick_file(&selected,p->role)) {
                 p->pending_file=selected;
-                preview_file(p);
                 file_details(p);
                 if(p->file_info)
                     GT_SetGadgetAttrs(p->file_info,p->window,NULL,
@@ -1219,7 +1204,7 @@ void dolly_picker_pump(DollyEndpointPicker *p) {
                                       TAG_DONE);
                 if(p->file_text)
                     GT_SetGadgetAttrs(p->file_text,p->window,NULL,
-                                      GTTX_Text,(ULONG)p->file_display,
+                                      GTST_String,(ULONG)p->pending_file.path,
                                       TAG_DONE);
                 change_enabled(p);
             }

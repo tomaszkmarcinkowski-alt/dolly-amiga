@@ -6,6 +6,8 @@
 #include <intuition/intuition.h>
 #include <proto/intuition.h>
 #include <stdio.h>
+#include <string.h>
+#include <strings.h>
 
 int dolly_amiga_confirm_restore_assessment(struct Window *parent,
                                            const DollyRestoreAssessment *assessment) {
@@ -70,4 +72,52 @@ out:
     dolly_amiga_restore_source_close(&source);
     dolly_surface_close(&disk);
     dolly_surface_log_clear(&disk.log);
+}
+
+void dolly_amiga_copy_preview(struct Window *parent,const DollyEndpoint *source,
+                              const DollyEndpoint *destination) {
+    DollySurfaceScan src={0},dst={0};
+    char reason[180],source_bytes[21],target_bytes[21];
+    struct EasyStruct request={sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Copy",
+                               (STRPTR)"%s",(STRPTR)"OK"};
+    ULONG args[]={(ULONG)reason};
+    if(source->kind==DOLLY_ENDPOINT_FILE || destination->kind==DOLLY_ENDPOINT_FILE)
+        strcpy(reason,"Copy preview currently supports device and partition extents.");
+    else if(!dolly_surface_open(&src,source,parent,0))
+        snprintf(reason,sizeof(reason),"Source: %s",src.failure?src.failure:"Cannot open source.");
+    else if(!dolly_surface_open(&dst,destination,parent,0))
+        snprintf(reason,sizeof(reason),"Destination: %s",dst.failure?dst.failure:"Cannot open destination.");
+    else {
+        uint64_t a=src.total*src.sector_bytes,b=dst.total*dst.sector_bytes;
+        dolly_surface_log_decimal(source_bytes,a);
+        dolly_surface_log_decimal(target_bytes,b);
+        if(a!=b || src.sector_bytes!=dst.sector_bytes)
+            snprintf(reason,sizeof(reason),
+                "Copy blocked: source %s bytes, target %s bytes.\n"
+                "Sector size: source %lu B, target %lu B.\n"
+                "Copy requires matching size and sector geometry.",
+                source_bytes,target_bytes,(unsigned long)src.sector_bytes,
+                (unsigned long)dst.sector_bytes);
+        else if(src.device.unit==dst.device.unit &&
+                !strcasecmp(src.device.driver,dst.device.driver) &&
+                dolly_unit_relation(src.first_lba,src.total,dst.first_lba,dst.total)
+                    !=DOLLY_UNIT_RANGE_DISJOINT)
+            strcpy(reason,"Copy blocked: source and destination ranges overlap.");
+        else {
+            if(src.device.unit==dst.device.unit &&
+               !strcasecmp(src.device.driver,dst.device.driver))
+                dolly_amiga_warn_same_unit(parent);
+            snprintf(reason,sizeof(reason),"Copy into %s / Unit %lu.\n"
+                "Target bytes: %s. This build runs a read-only preview.",
+                dst.device.driver,(unsigned long)dst.device.unit,target_bytes);
+            if(!dolly_amiga_confirm_destructive(parent,reason))goto out;
+            strcpy(reason,"Copy preflight completed. Device writing is pending.");
+        }
+    }
+    EasyRequestArgs(parent,&request,NULL,args);
+out:
+    dolly_surface_close(&dst);
+    dolly_surface_close(&src);
+    dolly_surface_log_clear(&dst.log);
+    dolly_surface_log_clear(&src.log);
 }

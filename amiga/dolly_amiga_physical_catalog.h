@@ -1,7 +1,8 @@
 #ifndef DOLLY_AMIGA_PHYSICAL_CATALOG_H
 #define DOLLY_AMIGA_PHYSICAL_CATALOG_H
 /* Bounded immutable snapshot from registered AmigaDOS disk startup
- * records. Never opens drivers, sends I/O or follows DOS pointers
+ * records and the Exec scsi.device candidate. Never opens drivers,
+ * sends I/O or follows DOS pointers
  * after UnLockDosList. A registration is not proof of present media.
  */
 #include "dolly_dma_policy.h"
@@ -22,6 +23,8 @@ typedef struct DollyPhysicalCatalog {
 /* A disk handler can have an unknown extent, reported as length zero. */
 int dolly_physical_from_lock(BPTR lock,DollyPhysicalEntry *device,
                             uint64_t *start,uint64_t *length);
+/* Returns 1 for a registered unit and -1 if enumeration is unavailable. */
+int dolly_amiga_unit_registered(const char *driver,ULONG unit);
 void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out);
 int dolly_logical_extent(const char *name,DollyPhysicalEntry *device,
                          uint64_t *start,uint64_t *length,ULONG *sector_bytes,

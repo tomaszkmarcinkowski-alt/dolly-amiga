@@ -42,7 +42,6 @@ typedef struct DollyEndpointPicker {
     DollyDosDevices dos_devices;
     DollyEndpoint result;
     DollyEndpoint pending_file;
-    char file_display[256];
     char file_details[160];
     char selection_display[160];
     char disk_info_display[160];

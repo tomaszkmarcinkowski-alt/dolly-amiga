@@ -1,5 +1,6 @@
 # 🐑 Dolly — Disk Imaging, Cloning & Recovery for Amiga
 [Dolly Alpha 3](docs/RELEASE_ALPHA_3.md) · [GitHub Releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+[Restore RDB test build](docs/RELEASE_RDB_TEST.md)
 
 **Public development repository • Alpha 3 development preview • experimental native prototypes**
 

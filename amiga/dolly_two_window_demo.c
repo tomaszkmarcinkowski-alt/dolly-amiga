@@ -266,6 +266,12 @@ static const char *action_label(int main_window) {
     return "Start";
 }
 static int quit_blocked;
+static const char *image_source_name(void) {
+    const char *source=image.reader.source_path;
+    const char *unit=strstr(source," / Unit ");
+    const char *partition=unit?strstr(unit+8," / "):NULL;
+    return partition?partition+3:source;
+}
 static void update_main_status(void) {
     int need=dolly_demo_needs_target((DollyDemoOperation)selected_operation);
     int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
@@ -281,7 +287,8 @@ static void update_main_status(void) {
         text_copy(main_view.status_label,sizeof(main_view.status_label),image.failure);
     else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result &&
             operation.state==DOLLY_OP_COMPLETED)
-        text_copy(main_view.status_label,sizeof(main_view.status_label),"Image saved.");
+        snprintf(main_view.status_label,sizeof(main_view.status_label),
+                 "Copy complete: %.20s -> %.23s",image_source_name(),image.name);
     else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result &&
             operation.state==DOLLY_OP_CANCELLED)
         text_copy(main_view.status_label,sizeof(main_view.status_label),"Image cancelled.");
@@ -295,10 +302,19 @@ static void update_main_status(void) {
             operation.state==DOLLY_OP_CANCELLED)
         sprintf(main_view.status_label,"Scan stopped: %lu unreadable sectors.",
                 (unsigned long)operation.errors);
-    else if(operation.state==DOLLY_OP_RUNNING)
-        text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  scan_result?"Reading source sectors...":
-                  image_result?"Writing image file...":"Operation in progress...");
+    else if(operation.state==DOLLY_OP_RUNNING) {
+        const char *kind=selected_source.kind==DOLLY_ENDPOINT_PARTITION?"partition":
+                         selected_source.kind==DOLLY_ENDPOINT_LOGICAL?"volume":"disk";
+        if(image_result)
+            snprintf(main_view.status_label,sizeof(main_view.status_label),
+                     "Writing %s to image: %.32s",kind,image.name);
+        else if(scan_result)
+            snprintf(main_view.status_label,sizeof(main_view.status_label),
+                     "Scanning %s: %.38s",kind,surface.source_path);
+        else
+            text_copy(main_view.status_label,sizeof(main_view.status_label),
+                      "Operation in progress.");
+    }
     else if(selected_operation==DOLLY_DEMO_INVENTORY && can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Ready for read-only Inventory.");
@@ -1274,6 +1290,8 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                         puts("INVENTORY WARN: unable to open Inventory");
                 } else if(selected_operation==DOLLY_DEMO_RESTORE) {
                     dolly_amiga_restore_preview(main_view.window,&selected_source,&selected_target);
+                } else if(selected_operation==DOLLY_DEMO_COPY) {
+                    dolly_amiga_copy_preview(main_view.window,&selected_source,&selected_target);
                 } else {
                     uint64_t total=GRID_TOTAL;
                     scan_result=(unsigned char)(selected_operation==DOLLY_DEMO_SCAN);

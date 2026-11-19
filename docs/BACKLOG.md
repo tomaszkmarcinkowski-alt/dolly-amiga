@@ -690,7 +690,7 @@ kontrolerów, ADF, weryfikacja obrazu po zapisie i operacje przywracania.
 
 **Bezpieczeństwo:** Restore wymaga weryfikacji nośnika docelowego, kopii aktualnego RDB, podglądu planowanych zmian blok po bloku, jawnego potwierdzenia, zapisu z późniejszym odczytem weryfikującym, procedury odzyskiwania po przerwanym zapisie. Nie obiecywać atomowości. W przypadku niezgodnej pojemności nie wykonywać Restore bez osobnej, bezpiecznej analizy.
 
-**Status:** Sheep Inventory zapisuje surową kopię zarezerwowanego obszaru RDB na obsługiwanym dysku oraz sektor LBA 0 dla klasycznego MBR z partycjami podstawowymi. Przyciski Restore RDB i Restore MBR pozostają nieaktywne do czasu wdrożenia przywracania.
+**Status:** Sheep Inventory zapisuje surową kopię zarezerwowanego obszaru RDB na obsługiwanym dysku oraz sektor LBA 0 dla klasycznego MBR z partycjami podstawowymi. Restore RDB ma ograniczoną ścieżkę offline dla ROM scsi.device i zgodnych metadanych RDSK/PART. Restore MBR oraz przywracanie metadanych na cele o zmienionym układzie pozostają otwarte.
 
 #### Restore RDB i Restore MBR — wymagania przed wdrożeniem
 

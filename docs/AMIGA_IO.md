@@ -115,3 +115,12 @@ The above documents inform design only; they do not constitute hardware validati
 `MEMF_PUBLIC` alone is insufficient evidence of hardware DMA reachability. The adapter now fails closed unless the caller provides resolved DMA mask/alignment constraints, can optionally request `MEMF_24BITDMA` and rejects a bounce buffer outside the addressable aperture. This remains a **partial** safety check; it does not validate cache coherency, bus routing, controller quirks or active configuration. See [DMA safety](DMA_SAFETY.md) and [Issue #8](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/8).
 
 A local reconstructed adapter/mock suite passed GCC, Clang and GCC ASan/UBSan, with short read and I/O-error injection. Native AmigaOS ABI and real device tests remain open.
+
+### Finding scsi.device without a mounted volume
+
+The physical and partition pickers also list Unit 0 as a candidate if
+Exec knows `scsi.device` as a resident or loaded device and the unit
+was absent from the AmigaDOS startup list. This covers the case where
+no volume on the disk has been mounted. Select the driver and unit,
+then use **Query** to confirm that the driver can open the unit and
+report media geometry. The picker performs no automatic media probe.

@@ -6,6 +6,18 @@
 #include <proto/intuition.h>
 #include <strings.h>
 
+void dolly_amiga_warn_same_unit(struct Window *parent) {
+    if(parent && !dolly_amiga_suppress_same_unit_warning()) {
+        struct EasyStruct request={
+            sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Copy performance",
+            (STRPTR)"Source and destination are on the same device unit.\n"
+                    "Copying between them may be slower.",
+            (STRPTR)"OK"
+        };
+        EasyRequestArgs(parent,&request,NULL,NULL);
+    }
+}
+
 const char *dolly_amiga_guard_file_transfer(struct Window *parent,BPTR file_lock,
                          const DollyPhysicalEntry *raw_device,
                          uint64_t raw_start,uint64_t raw_length) {
@@ -35,14 +47,6 @@ const char *dolly_amiga_guard_file_transfer(struct Window *parent,BPTR file_lock
         if(parent)EasyRequestArgs(parent,&request,NULL,NULL);
         return reason;
     }
-    if(parent && !dolly_amiga_suppress_same_unit_warning()) {
-        struct EasyStruct request={
-            sizeof(struct EasyStruct),0,(STRPTR)"Dolly - Copy performance",
-            (STRPTR)"Source and destination are on the same device unit.\n"
-                    "Copying between them may be slower.",
-            (STRPTR)"OK"
-        };
-        EasyRequestArgs(parent,&request,NULL,NULL);
-    }
+    dolly_amiga_warn_same_unit(parent);
     return NULL;
 }

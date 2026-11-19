@@ -1,4 +1,10 @@
 #include "dolly_amiga_partition_scan.h"
+#include "dolly_amiga_physical_catalog.h"
+#include "dolly_amiga_destructive.h"
+#include "dolly_amiga_source.h"
+#include "dolly_amiga_write.h"
+#include <exec/devices.h>
+#include <stdlib.h>
 #include <exec/io.h>
 #include <exec/memory.h>
 #include <devices/trackdisk.h>
@@ -34,11 +40,19 @@ typedef struct Reader {
     uint64_t total_bytes;
     ULONG base_lba;
     int unreadable;
+    const UBYTE *snapshot;
+    ULONG snapshot_bytes;
 } Reader;
 static int load_sector(Reader *r,ULONG relative_lba) {
     uint64_t lba=(uint64_t)r->base_lba+(uint64_t)relative_lba;
     uint64_t pos=lba*BLK;
-    struct IOStdReq *io=&r->io->iotd_Req;
+    struct IOStdReq *io;
+    if(r->snapshot) {
+        if(pos>r->snapshot_bytes || BLK>r->snapshot_bytes-pos)return 0;
+        memcpy(r->buffer,r->snapshot+(size_t)pos,BLK);
+        return 1;
+    }
+    io=&r->io->iotd_Req;
     if(pos>r->total_bytes || BLK>r->total_bytes-pos ||
        pos>0xfffffffful)return 0;
     io->io_Command=CMD_READ;
@@ -46,9 +60,10 @@ static int load_sector(Reader *r,ULONG relative_lba) {
     io->io_Length=BLK;
     io->io_Offset=(ULONG)pos;
     io->io_Flags=0;
+    io->io_Error=0;
     io->io_Actual=0;
     if(DoIO((struct IORequest *)r->io)!=0 ||
-       io->io_Actual!=BLK) {
+       io->io_Error || io->io_Actual!=BLK) {
         r->unreadable=1;
         return 0;
     }
@@ -172,6 +187,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         p->rdb_bootable=(unsigned char)((be32(r->buffer+20)&1u)!=0);
         p->rdb_automount=(unsigned char)((be32(r->buffer+20)&2u)==0);
         p->start_bytes=begin;p->length_bytes=length;
+        p->descriptor_block=head;
         p->low_cyl=low;p->high_cyl=high;
         p->fs_block_bytes=blockwords*4u;
         p->sectors_per_block=be32(r->buffer+144);
@@ -248,6 +264,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         }
     strcpy(out->status,"RDB");
     out->format=DOLLY_NATIVE_PARTITION_RDB;
+    out->rdb_header_block=header_block;
     if(backup_range_ok)out->rdb_backup_blocks=reserved_hi+1u;
     return 1;
 }
@@ -405,4 +422,148 @@ int dolly_amiga_partition_backup(const char *driver,ULONG unit,
     ok=scan_device(driver,unit,geometry,map,format,file,0);
     FreeMem(map,sizeof(*map));
     return ok;
+}
+
+/* Validate the snapshot with the same bounded parser as Inventory. Only
+ * RDSK/PART sectors may change, and only at their existing locations. */
+static int restore_maps_match(const DollyNativePartitionMap *old,
+                              const DollyNativePartitionMap *replacement) {
+    unsigned i;
+    if(!old->rdb_backup_blocks || old->rdb_backup_blocks!=replacement->rdb_backup_blocks ||
+       old->rdb_header_block!=replacement->rdb_header_block ||
+       old->count!=replacement->count)return 0;
+    for(i=0;i<old->count;++i)
+        if(old->parts[i].descriptor_block!=replacement->parts[i].descriptor_block ||
+           old->parts[i].start_bytes!=replacement->parts[i].start_bytes ||
+           old->parts[i].length_bytes!=replacement->parts[i].length_bytes)return 0;
+    return 1;
+}
+
+static int restore_unit_idle(const char *driver,ULONG unit,const struct IOStdReq *io) {
+    return dolly_amiga_unit_registered(driver,unit)==0 && io->io_Device &&
+           io->io_Device->dd_Library.lib_OpenCnt==1;
+}
+
+const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
+          const DollyMediaGeometry *geometry,ULONG blocks,BPTR backup,
+          DollyRdbRecoverySink save_recovery,void *context) {
+    struct MsgPort *port=NULL;
+    struct IOExtTD *request=NULL;
+    DollyNativePartitionMap *old=NULL,*replacement=NULL;
+    DollyAmigaWriteTarget target;
+    DollyMediaGeometry live={0};
+    Reader reader={0};
+    UBYTE *bytes=NULL,*previous=NULL;
+    ULONG size,i,header=RDB_END;
+    unsigned pass;
+    int opened=0,changed=0;
+    char unit_name[112],size_text[48],warning[160];
+    const char *failure="Restore RDB requires an offline ROM scsi.device unit with 512 B sectors.";
+    if(!parent || !backup || !save_recovery || !geometry->capacity_valid ||
+       geometry->block_bytes!=BLK || blocks<16 || blocks>DOLLY_RDB_RESTORE_MAX_BLOCKS ||
+       blocks>geometry->block_count || strcmp(driver,"scsi.device")!=0 ||
+       dolly_amiga_unit_registered(driver,unit)!=0 ||
+       !dolly_amiga_probe_rom_scsi(unit))return failure;
+    size=blocks*BLK;
+    failure="Cannot verify current target capacity.";
+    if(!dolly_amiga_device_query(driver,unit,unit_name,sizeof(unit_name),size_text,
+                                 sizeof(size_text),&live,1) ||
+       !live.capacity_valid || live.block_bytes!=BLK ||
+       live.block_count!=geometry->block_count ||
+       live.block_count>UINT64_MAX/BLK)return failure;
+    failure="Not enough memory or could not open the target.";
+    old=calloc(1,sizeof(*old));replacement=calloc(1,sizeof(*replacement));
+    bytes=malloc(size);previous=malloc(size);
+    port=CreateMsgPort();
+    reader.buffer=AllocMem(BLK,MEMF_CHIP|MEMF_PUBLIC);
+    if(!old || !replacement || !bytes || !previous || !port || !reader.buffer)goto out;
+    request=(struct IOExtTD *)CreateIORequest(port,sizeof(*request)+128u);
+    if(!request || OpenDevice((STRPTR)driver,unit,(struct IORequest *)request,0))goto out;
+    opened=1;
+    reader.io=request;
+    reader.total_bytes=live.block_count*BLK;
+    failure="Target is registered in AmigaDOS or the device is already in use.";
+    if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+    failure="Backup size or read error. Expected the complete reserved RDB area.";
+    if(Read(backup,bytes,size)!=(LONG)size || Read(backup,reader.buffer,1)!=0)goto out;
+    failure="Cannot read current RDB sectors.";
+    for(i=0;i<blocks;++i) {
+        if(!load_sector(&reader,i))goto out;
+        memcpy(previous+i*BLK,reader.buffer,BLK);
+    }
+    reader.snapshot_bytes=size;
+    reader.snapshot=previous;
+    failure="Current RDB is invalid or exceeds the backup area.";
+    if(scan_rdb(&reader,old,0,16)!=1 || old->rdb_backup_blocks!=blocks)goto out;
+    reader.snapshot=bytes;
+    failure="Backup RDB is invalid or partition extents differ.";
+    if(scan_rdb(&reader,replacement,0,16)!=1 || !restore_maps_match(old,replacement))goto out;
+    failure="Only existing RDSK/PART metadata may change in this build.";
+    for(i=0;i<blocks;++i) {
+        const UBYTE *a=previous+i*BLK,*b=bytes+i*BLK;
+        if(memcmp(a,b,BLK)==0)continue;
+        if(memcmp(a,b,4)!=0)goto out;
+        if(memcmp(a,"RDSK",4)==0 && i==old->rdb_header_block) {
+            /* Keep physical geometry, reserved bounds, and top-level links. */
+            if(header!=RDB_END || be32(a+4)<39u || be32(b+4)<39u ||
+               memcmp(a+12,b+12,148)!=0 ||
+               memcmp(a+216,b+216,BLK-216)!=0)goto out;
+            header=i;
+        } else {
+            unsigned part;
+            for(part=0;part<old->count;++part)
+                if(old->parts[part].descriptor_block==i)break;
+            if(part==old->count || memcmp(a,"PART",4)!=0 ||
+               !checksum(a,45) || !checksum(b,45) ||
+               be32(a+16)!=be32(b+16) ||
+               memcmp(a+132,b+132,32)!=0)goto out;
+        }
+        changed=1;
+    }
+    if(!changed)goto success;
+    snprintf(warning,sizeof(warning),"Restore RDB on %s / Unit %lu.\n"
+        "Reserved range: LBA 0-%lu. Partition extents stay the same.",
+        driver,(unsigned long)unit,(unsigned long)(blocks-1));
+    failure="Restore RDB cancelled.";
+    if(!dolly_amiga_confirm_destructive(parent,warning))goto out;
+    failure="Could not save the current RDB as the recovery copy.";
+    if(!save_recovery(context,previous,size))goto out;
+    reader.snapshot=NULL;
+    failure="Target changed or became busy. Restore stopped before writing.";
+    if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+    for(i=0;i<blocks;++i)
+        if(!load_sector(&reader,i) || memcmp(reader.buffer,previous+i*BLK,BLK))goto out;
+    if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+    /* Qualify UPDATE before the first modification. Readback is mandatory. */
+    request->iotd_Req.io_Command=CMD_UPDATE;
+    request->iotd_Req.io_Flags=0;
+    request->iotd_Req.io_Error=0;
+    request->iotd_Req.io_Length=0;
+    request->iotd_Req.io_Data=NULL;
+    request->iotd_Req.io_Offset=0;
+    request->iotd_Req.io_Actual=0;
+    failure="The target driver did not accept CMD_UPDATE. No RDB sectors written.";
+    if(DoIO((struct IORequest *)request) || request->iotd_Req.io_Error)goto out;
+    target=(DollyAmigaWriteTarget){&request->iotd_Req,reader.buffer,BLK,
+        reader.total_bytes,0,size,BLK,BLK,0x00fffffe,2};
+    failure="RDB write or verification failed. Use the recovery copy.";
+    for(pass=0;pass<2;++pass)
+        for(i=0;i<blocks;++i) {
+            if((pass==1)!=(i==header) || !memcmp(previous+i*BLK,bytes+i*BLK,BLK))
+                continue;
+            if(!restore_unit_idle(driver,unit,&request->iotd_Req) ||
+               dolly_amiga_write_batch(&target,(uint64_t)i*BLK,bytes+i*BLK,BLK,1)
+                    !=DOLLY_WRITE_VERIFIED)goto out;
+        }
+    for(i=0;i<blocks;++i)
+        if(!load_sector(&reader,i) || memcmp(reader.buffer,bytes+i*BLK,BLK))goto out;
+success:
+    failure=NULL;
+out:
+    if(opened)CloseDevice((struct IORequest *)request);
+    if(request)DeleteIORequest((struct IORequest *)request);
+    if(port)DeleteMsgPort(port);
+    if(reader.buffer)FreeMem(reader.buffer,BLK);
+    free(previous);free(bytes);free(replacement);free(old);
+    return failure;
 }

@@ -10,4 +10,6 @@ int dolly_amiga_restore_preflight(struct Window *parent,
                        const DollyRestoreExtent *target);
 void dolly_amiga_restore_preview(struct Window *parent,const DollyEndpoint *image,
                                 const DollyEndpoint *destination);
+void dolly_amiga_copy_preview(struct Window *parent,const DollyEndpoint *source,
+                              const DollyEndpoint *destination);
 #endif

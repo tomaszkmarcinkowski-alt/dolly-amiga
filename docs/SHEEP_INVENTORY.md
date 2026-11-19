@@ -1,6 +1,6 @@
 # Sheep Inventory — initial engineering design (prototype)
 
-**Status:** host CLI and native GadTools prototype. Native views include device geometry, RDB/MBR partition details, clipboard copying and metadata backup. Restore controls are disabled pending safety work. Historical sections preserve their original scope. Epic: [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13) / DOL-060.
+**Status:** host CLI and native GadTools prototype. Native views include device geometry, RDB/MBR partition details, clipboard copying and metadata backup. Restore RDB has a restricted offline implementation. Restore MBR is pending. Historical sections preserve their original scope. Epic: [Issue #13](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/13) / DOL-060.
 
 ## Why a streaming model?
 Classic Amigas may have little free Fast RAM and very limited stack space. The first implementation emits one `DollyInventoryField` at a time via a callback; the GUI or CLI consumes each field immediately without allocating an inventory list or copying the entire RDB layout again.
@@ -158,7 +158,24 @@ uses the same ASL save flow. It exports the full LBA 0, including boot
 code, the primary partition entries and the MBR signature. Export is
 disabled for layouts with extended or nested RDB containers. Protective
 MBR (GPT) and hybrid layouts remain unsupported. The matching
-**Restore RDB** or **Restore MBR** button is disabled.
+**Restore RDB** button is available for a verified `scsi.device` RDB
+with a supported backup span. **Restore MBR** remains disabled.
+Restore RDB requires a ROM driver, 512-byte sectors, a 16–128-sector
+reserved prefix, and a target with no AmigaDOS registration and no
+other observed opens. The original and replacement must have the
+same RDB geometry, metadata locations and partition extents. The
+first implementation accepts changes to the validated RDSK/PART
+records only, so filesystem driver segments and other sectors must
+match. It is intended for compatible metadata recovery, including
+changes to partition labels or flags.
+
+Select a backup and a separate path for the mandatory recovery copy.
+The shared Proceed/Cancel requester delays approval for ten seconds.
+Dolly saves the current metadata, rereads the original reserved area
+and aborts if it changed, then writes and reads back changed sectors.
+The RDSK header, when changed, is verified last. This is a sequence
+of writes. If a failure leaves a partially updated or invalid RDB,
+keep the recovery file and use an independent recovery environment.
 
 ### Resizable window
 
@@ -180,10 +197,10 @@ the selected partition without querying the source again.
 
 ### Experimental lists and clipboard
 
-Clicking a row in the driver/geometry header, partition list or details
-list copies the entire row, including text clipped by the list width.
-Clicking a partition also displays its details. **Edit → Copy** or
-**Right Amiga+C** copies the most recently clicked row again.
+Clicking a row in the driver/geometry header or details list copies the
+entire row, including text clipped by the list width. The left list
+selects which partition to display. **Edit → Copy** or **Right Amiga+C**
+copies the selected header or detail row again.
 Dolly writes IFF FORM FTXT with a CHRS
 chunk to clipboard.device unit 0. [GadTools listview](https://wiki.amigaos.net/wiki/GadTools_Gadgets#Listview_Gadgets) · [Clipboard Device](https://wiki.amigaos.net/wiki/Clipboard_Device#Writing_to_the_Clipboard_Device)
 

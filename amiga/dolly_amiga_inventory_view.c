@@ -1,10 +1,11 @@
-/* Sheep Inventory M1.46: native read-only device snapshot.
+/* Sheep Inventory: device snapshot and explicit RDB backup/restore.
  * Only the selected device/unit from the established picker is queried.
  * Registered AmigaDOS entries do not guarantee usable media.
  */
 #include "dolly_amiga_inventory_view.h"
 #include "dolly_amiga_device_query.h"
 #include "dolly_amiga_clipboard.h"
+#include "dolly_amiga_physical_catalog.h"
 #include <exec/types.h>
 #include <dos/dosextens.h>
 #include <libraries/asl.h>
@@ -377,6 +378,12 @@ static int backup_available(const DollyNativeInventoryView *v) {
     return AslBase && (v->map.mbr_backup_available ||
                        v->map.rdb_backup_blocks!=0);
 }
+static int restore_available(const DollyNativeInventoryView *v) {
+    return AslBase && v->verified && v->map.format==DOLLY_NATIVE_PARTITION_RDB &&
+           v->map.rdb_backup_blocks>=16 &&
+           v->map.rdb_backup_blocks<=DOLLY_RDB_RESTORE_MAX_BLOCKS &&
+           strcmp(v->driver,"scsi.device")==0;
+}
 static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     struct Window *w=v->window;
     struct Screen *screen=w->WScreen;
@@ -394,6 +401,11 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
         v->gadgets=NULL;
     }
     if(details_changed) {
+        if(v->selected_detail<v->detail_count &&
+           v->clipboard_row==v->detail_text[v->selected_detail]) {
+            v->clipboard_row=NULL;
+            if(v->menu)OffMenu(w,INV_COPY_MENU);
+        }
         /* GadTools no longer holds these nodes, so they can be reused. */
         populate_details(v);
     }
@@ -419,7 +431,7 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
         if(!last)return 0;
         last=create_button(last,v,screen,(left+right-INV_BUTTON_WIDTH)/2,
                            button_top,INV_BUTTON_WIDTH,INV_RESTORE_ID,
-                           (STRPTR)(mbr?"Restore MBR":"Restore RDB"),TRUE);
+                           (STRPTR)(mbr?"Restore MBR":"Restore RDB"),!restore_available(v));
         if(!last)return 0;
     }
     last=create_button(last,v,screen,right-INV_BUTTON_WIDTH,button_top,INV_BUTTON_WIDTH,
@@ -499,6 +511,87 @@ static void backup_partition_table(DollyNativeInventoryView *v) {
         set_status(v,"Backup failed. .part file remains");
     }
 }
+static int choose_restore_file(struct Window *window,int save,char path[256]) {
+    struct FileRequester *fr=(struct FileRequester *)AllocAslRequestTags(ASL_FileRequest,
+        ASL_FuncFlags,(ULONG)(save?FILF_SAVE:0),ASLFR_Window,(ULONG)window,
+        ASLFR_TitleText,(ULONG)(save?"Save current RDB recovery copy":"Select RDB backup"),
+        ASLFR_InitialFile,(ULONG)(save?"dolly-rdb-before-restore.bin":"dolly-rdb.bin"),
+        TAG_DONE);
+    int ok=0;
+    if(!fr)return 0;
+    if(AslRequest(fr,NULL)) {
+        const char *drawer=fr->fr_Drawer?(const char *)fr->fr_Drawer:"";
+        const char *name=(const char *)fr->fr_File;
+        if(strlen(drawer)<256 && name && *name && !strpbrk(name,":/") &&
+           strcmp(name,".") && strcmp(name,"..")) {
+            strcpy(path,drawer);
+            ok=AddPart((STRPTR)path,(STRPTR)name,256)!=0;
+        }
+    }
+    FreeAslRequest(fr);
+    return ok;
+}
+static int save_rdb_recovery(void *context,const void *data,ULONG bytes) {
+    const char *path=context;
+    char drawer[272],temporary[278];
+    size_t prefix=(size_t)((const char *)FilePart((STRPTR)path)-path);
+    BPTR lock,handle;
+    int ok=0;
+    if(!path_is_unused((STRPTR)path))return 0;
+    memcpy(drawer,path,prefix);
+    strcpy(drawer+prefix,".dolly-rdb");
+    strcpy(temporary,drawer);
+    strcat(temporary,"/data");
+    lock=CreateDir((STRPTR)drawer);
+    if(!lock)return 0;
+    UnLock(lock);
+    handle=Open((STRPTR)temporary,MODE_NEWFILE);
+    if(handle) {
+        ok=Write(handle,(APTR)data,bytes)==(LONG)bytes;
+        if(!Close(handle))ok=0;
+        if(ok)ok=path_is_unused((STRPTR)path) &&
+                 Rename((STRPTR)temporary,(STRPTR)path);
+    }
+    if(!ok)DeleteFile((STRPTR)temporary);
+    DeleteFile((STRPTR)drawer);
+    return ok;
+}
+static void show_restore_failure(DollyNativeInventoryView *v,const char *reason) {
+    struct EasyStruct request={sizeof(struct EasyStruct),0,
+        (STRPTR)"Dolly - Restore RDB",(STRPTR)"%s",(STRPTR)"OK"};
+    ULONG args[]={(ULONG)reason};
+    char first_line[112];
+    size_t len=strcspn(reason,"\n");
+    if(len>=sizeof(first_line))len=sizeof(first_line)-1;
+    memcpy(first_line,reason,len);
+    first_line[len]=0;
+    set_status(v,first_line);
+    if(strcmp(reason,"Restore RDB cancelled.")!=0)
+        EasyRequestArgs(v->window,&request,NULL,args);
+}
+static void restore_partition_table(DollyNativeInventoryView *v) {
+    char input[256],recovery[256];
+    BPTR file;
+    const char *reason;
+    if(!restore_available(v))return;
+    if(dolly_amiga_unit_registered(v->driver,v->unit)!=0) {
+        show_restore_failure(v,"Restore RDB requires an offline target.\nNo AmigaDOS device registration may refer to it.");
+        return;
+    }
+    if(!choose_restore_file(v->window,0,input) ||
+       !choose_restore_file(v->window,1,recovery))return;
+    file=Open((STRPTR)input,MODE_OLDFILE);
+    if(!file) {
+        show_restore_failure(v,"Could not open the RDB backup.");
+        return;
+    }
+    reason=dolly_amiga_restore_rdb(v->window,v->driver,v->unit,&v->geometry,
+                 v->map.rdb_backup_blocks,file,save_rdb_recovery,recovery);
+    Close(file);
+    if(reason)show_restore_failure(v,reason);
+    else set_status(v,"RDB checked. Reopen Inventory to refresh the device snapshot.");
+}
+
 void dolly_inventory_view_close(DollyNativeInventoryView *v) {
     if(!v)return;
     if(v->window) {
@@ -596,7 +689,7 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
      * nodes. Display that state as plain text instead. */
     populate_header(v);
     if(!v->status[0])
-        copy_text(v->status,sizeof(v->status),"Click on listview item copies to Clipboard");
+        copy_text(v->status,sizeof(v->status),"Click a header or detail row to copy it");
     v->visual=GetVisualInfo(screen,TAG_DONE);
     if(!v->visual)return 0;
     v->window=OpenWindowTags(NULL,
@@ -644,10 +737,10 @@ void dolly_inventory_view_pump(DollyNativeInventoryView *v) {
             dolly_inventory_view_close(v);return;
         }
         if(!relayout && id==INV_BACKUP_ID)backup_partition_table(v);
+        if(!relayout && id==INV_RESTORE_ID)restore_partition_table(v);
         if(id==INV_HEADER_ID && (unsigned)code<DOLLY_INVENTORY_HEADER_ROWS) {
             row=v->header_text[code];
         } else if(id==INV_PART_ID && (unsigned)code<v->count) {
-            row=v->row_text[code];
             if((unsigned)code!=v->selected_partition) {
                 v->selected_partition=(unsigned)code;
                 details_changed=1;

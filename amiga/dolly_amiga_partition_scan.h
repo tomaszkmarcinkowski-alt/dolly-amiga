@@ -8,6 +8,7 @@ typedef struct DollyNativePartition {
     char label[40];     /* RDB drive name, or explicit MBR entry */
     char summary[160];  /* formatted from validated on-disk fields */
     uint64_t start_bytes,length_bytes;
+    ULONG descriptor_block;
     ULONG low_cyl,high_cyl,fs_block_bytes,sectors_per_block,dos_type;
     ULONG max_transfer,dma_mask;
     DollyIoHints io_hints;
@@ -29,6 +30,7 @@ typedef enum DollyNativePartitionFormat {
 typedef struct DollyNativePartitionMap {
     unsigned count;
     DollyNativePartitionFormat format;
+    ULONG rdb_header_block;
     ULONG rdb_backup_blocks; /* raw prefix length in 512-byte blocks */
     unsigned char mbr_backup_available;
     char status[96];
@@ -48,4 +50,12 @@ int dolly_amiga_inventory_scan(const char *driver,ULONG unit,
 int dolly_amiga_partition_backup(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionFormat format,
           BPTR file);
+#define DOLLY_RDB_RESTORE_MAX_BLOCKS 128u
+struct Window;
+/* A successful recovery sink publishes a durable copy before writes begin. */
+typedef int (*DollyRdbRecoverySink)(void *context,const void *data,ULONG bytes);
+/* Returns NULL on success, or a literal diagnostic on failure. */
+const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
+          const DollyMediaGeometry *geometry,ULONG backup_blocks,BPTR backup,
+          DollyRdbRecoverySink save_recovery,void *context);
 #endif

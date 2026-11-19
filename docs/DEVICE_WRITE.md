@@ -57,3 +57,11 @@ a time and submits it to an already approved target. Progress advances
 after the batch succeeds. A read, write or verification failure halts
 the engine and preserves the offset of the failed batch. The GUI
 preflight does not invoke the engine.
+
+## Copy preflight and completion status
+
+Copy displays source and target capacities and sector sizes on a
+mismatch. Matched raw extents run the destructive confirmation as
+part of a read-only preview. Copy and RAW/HDF Restore execution are
+still pending. A successful Create Image operation identifies the
+source and output file in the main status panel.

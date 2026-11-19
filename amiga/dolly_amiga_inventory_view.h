@@ -1,7 +1,8 @@
 #ifndef DOLLY_AMIGA_INVENTORY_VIEW_H
 #define DOLLY_AMIGA_INVENTORY_VIEW_H
 /* M1.45: dedicated, explicitly requested, read-only AmigaOS inventory.
- * No device write is performed. A device with unsupported geometry is
+ * Snapshot reads are separate from the explicit Restore RDB action.
+ * A device with unsupported geometry is
  * displayed as unverified, not silently treated as empty.
  */
 #include "dolly_endpoint.h"

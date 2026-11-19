@@ -1,11 +1,14 @@
 #include "dolly_amiga_physical_catalog.h"
 #include <exec/memory.h>
+#include <exec/execbase.h>
+#include <exec/resident.h>
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <dos/filehandler.h>
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <string.h>
+#include <strings.h>
 extern struct DosLibrary *DOSBase;
 
 static int region(const void *pointer,ULONG bytes) {
@@ -41,6 +44,29 @@ static int driver_name(char *out,BPTR b) {
     }
     return strcmp(out,"trackdisk.device")!=0;
 }
+static void add_scsi_candidate(DollyPhysicalCatalog *out) {
+    const struct Resident *resident;
+    unsigned i;
+    int present;
+    for(i=0;i<out->count;++i)
+        if(out->entries[i].unit==0 &&
+           strcasecmp(out->entries[i].driver,"scsi.device")==0)return;
+    resident=FindResident((STRPTR)"scsi.device");
+    present=resident && resident->rt_Type==NT_DEVICE;
+    if(!present) {
+        Forbid();
+        present=FindName(&SysBase->DeviceList,(STRPTR)"scsi.device")!=NULL;
+        Permit();
+    }
+    if(!present)return;
+    if(out->count==DOLLY_PHYS_MAX) {
+        out->truncated=1;
+        return;
+    }
+    strcpy(out->entries[out->count].driver,"scsi.device");
+    out->entries[out->count++].unit=0;
+    out->available=1;
+}
 void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
     const ULONG flags=LDF_DEVICES|LDF_READ;
     struct DosList *entry;
@@ -48,7 +74,10 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
     memset(out,0,sizeof(*out));
     if(!DOSBase)return;
     entry=LockDosList(flags);
-    if(!entry)return;
+    if(!entry) {
+        add_scsi_candidate(out);
+        return;
+    }
     out->available=1;
     while((entry=NextDosEntry(entry,LDF_DEVICES))!=NULL) {
         BPTR start=(BPTR)entry->dol_misc.dol_handler.dol_Startup;
@@ -76,6 +105,7 @@ void dolly_physical_catalog_snapshot(DollyPhysicalCatalog *out) {
         else out->truncated=1;
     }
     UnLockDosList(flags);
+    add_scsi_candidate(out);
 }
 static int startup_extent(const struct DosList *entry,DollyPhysicalEntry *device,
                           uint64_t *start,uint64_t *length,ULONG *sector_bytes,
@@ -179,6 +209,27 @@ int dolly_physical_from_lock(BPTR lock,DollyPhysicalEntry *device,
         device->unit=startup->fssm_Unit;
         (void)startup_extent(entry,device,start,length,&sector_bytes,NULL);
         found=1;
+    }
+    UnLockDosList(flags);
+    return found;
+}
+
+int dolly_amiga_unit_registered(const char *driver,ULONG unit) {
+    const ULONG flags=LDF_DEVICES|LDF_READ;
+    struct DosList *entry=LockDosList(flags);
+    int found=0;
+    if(!entry)return -1;
+    while((entry=NextDosEntry(entry,LDF_DEVICES))!=NULL) {
+        const struct FileSysStartupMsg *startup;
+        char name[DOLLY_PHYS_DRIVER_LEN];
+        BPTR b=entry->dol_misc.dol_handler.dol_Startup;
+        if(!bptr_valid(b,sizeof(*startup)))continue;
+        startup=BADDR(b);
+        if(startup->fssm_Unit==unit &&
+           driver_name(name,startup->fssm_Device) && !strcasecmp(name,driver)) {
+            found=1;
+            break;
+        }
     }
     UnLockDosList(flags);
     return found;
