@@ -70,6 +70,8 @@ static int write_log(BPTR file) {
         return 0;
     snprintf(summary,sizeof(summary),"Device Name: %s",scan->device_name);
     if(!write_line(file,summary))return 0;
+    snprintf(summary,sizeof(summary),"ATA IDENTIFY: %s",scan->ata_identify);
+    if(!write_line(file,summary))return 0;
     dolly_surface_log_geometry(line,&scan->geometry);
     if(!write_line(file,line))return 0;
     dolly_surface_log_decimal(blocks,scan->geometry.block_count);

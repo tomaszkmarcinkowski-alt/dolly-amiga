@@ -133,7 +133,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
     if(header_block==RDB_END)return 0;
     while(head!=RDB_END) {
         ULONG next,envwords,blockwords,heads,spt,low,high,dos;
-        uint64_t cyl_bytes,begin,length;
+        uint64_t cyl_bytes,begin,length,end;
         DollyNativePartition *p;
         char type[5],label_copy[40];
         if(used>=DOLLY_PART_MAX) {
@@ -174,22 +174,25 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
            !mul_checked(low,cyl_bytes,&begin) ||
            !add_checked((uint64_t)base_lba*BLK,begin,&begin) ||
            !mul_checked((uint64_t)high-(uint64_t)low+1u,
-                        cyl_bytes,&length)) {
+                        cyl_bytes,&length) || !add_checked(begin,length,&end)) {
             strcpy(out->status,"RDB partition geometry overflows byte range");
-            return -1;
-        }
-        if(begin>=r->total_bytes || length>r->total_bytes-begin) {
-            char last_lba[21],media_lbas[21];
-            /* Compute the last sector without adding byte offsets. */
-            dolly_surface_log_decimal(last_lba,begin/BLK+length/BLK-1u);
-            dolly_surface_log_decimal(media_lbas,r->total_bytes/BLK);
-            snprintf(out->status,sizeof(out->status),
-                     "RDB #%u outside media: end LBA %s, disk %s sectors",
-                     used,last_lba,media_lbas);
             return -1;
         }
         p=&out->parts[out->count++];
         memset(p,0,sizeof(*p));
+        if(end>r->total_bytes) {
+            p->outside_media=1;
+            backup_range_ok=0;
+        }
+        if(p->outside_media && !out->rdb_capacity_mismatch) {
+            char last_lba[21],media_lbas[21];
+            dolly_surface_log_decimal(last_lba,end/BLK-1u);
+            dolly_surface_log_decimal(media_lbas,r->total_bytes/BLK);
+            snprintf(out->status,sizeof(out->status),
+                     "RDB #%u outside media: end LBA %s, disk %s sectors",
+                     used,last_lba,media_lbas);
+            out->rdb_capacity_mismatch=1;
+        }
         safe_label(p->label,r->buffer+37,r->buffer[36]);
         if(!p->label[0])sprintf(p->label,"RDB %lu",(unsigned long)out->count);
         p->is_rdb=1;
@@ -271,7 +274,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
                 return -1;
             }
         }
-    strcpy(out->status,"RDB");
+    if(!out->rdb_capacity_mismatch)strcpy(out->status,"RDB");
     out->format=DOLLY_NATIVE_PARTITION_RDB;
     out->rdb_header_block=header_block;
     if(backup_range_ok)out->rdb_backup_blocks=reserved_hi+1u;
@@ -410,6 +413,7 @@ finish:
         out->count=0;
         out->format=DOLLY_NATIVE_PARTITION_NONE;
         out->rdb_backup_blocks=0;
+        out->rdb_capacity_mismatch=0;
         out->mbr_backup_available=0;
     }
     if(!opened)strcpy(out->status,"Device open failed");
@@ -490,7 +494,7 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     size=blocks*BLK;
     failure="Cannot verify current target capacity.";
     if(!dolly_amiga_device_query(driver,unit,unit_name,sizeof(unit_name),size_text,
-                                 sizeof(size_text),&live,1) ||
+                                 sizeof(size_text),&live,1,NULL,0) ||
        !live.capacity_valid || live.block_bytes!=BLK ||
        live.block_count!=geometry->block_count ||
        live.block_count>UINT64_MAX/BLK)return failure;

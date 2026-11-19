@@ -19,7 +19,7 @@ typedef struct DollyNativePartition {
     UBYTE mbr_slot;
     UBYTE mbr_active;
     UBYTE mbr_container;
-    unsigned char is_rdb;
+    unsigned char is_rdb,outside_media;
     unsigned char rdb_bootable,rdb_automount;
 } DollyNativePartition;
 typedef enum DollyNativePartitionFormat {
@@ -32,14 +32,15 @@ typedef struct DollyNativePartitionMap {
     DollyNativePartitionFormat format;
     ULONG rdb_header_block;
     ULONG rdb_backup_blocks; /* raw prefix length in 512-byte blocks */
-    unsigned char mbr_backup_available;
+    unsigned char mbr_backup_available,rdb_capacity_mismatch;
     char status[96];
     DollyNativePartition parts[DOLLY_PART_MAX];
 } DollyNativePartitionMap;
 /* Called ONLY after Query verified the specific driver/unit and geometry.
  * Reads at most 16 RDB discovery sectors and a bounded chain of 16
  * PART blocks, or an MBR boot sector; never writes a disk.
- * Returns 1 only for a fully validated, supported map.
+ * A structurally valid RDB can include flagged, unusable extents beyond
+ * the reported capacity. Callers must check outside_media before use.
  */
 int dolly_amiga_partition_scan(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionMap *out);

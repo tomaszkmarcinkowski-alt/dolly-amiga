@@ -138,7 +138,11 @@ returns a valid count and agrees with the sector size from
 TD_GETGEOMETRY. The latter remains the fallback and supplies CHS when
 available. RDB partition bounds are checked against the resulting
 sector count. An out-of-bounds diagnostic reports the partition's
-last LBA and the disk sector count.
+last LBA and the disk sector count. Partition selection and Sheep
+Inventory show structurally valid entries even if some extend beyond
+the driver's reported capacity. Affected rows are marked with ! and
+cannot be used as endpoints. Other in-range entries remain usable.
+RDB backup and restore require a map within the reported capacity.
 
 In Physical device and Partition mode, **Device** and **Unit** are
 editable. **Device**, **SCSI name** and **Geometry** or **Partition**
@@ -161,3 +165,12 @@ the checkboxes. The recessed help panel describes the control under
 the pointer. Save errors are also shown there.
 The Settings window measures labels, help text and gadget rows using
 the screen font to size its client area.
+
+### ATA IDENTIFY
+
+The physical and partition pickers, Sheep Inventory, and exported
+Surface Scan logs report the ATA geometry and LBA sector count when
+the driver returns a complete IDENTIFY DEVICE response through
+SCSI ATA PASS-THROUGH(16). Query does not access IDE registers
+directly. A driver without passthrough reports Unavailable. ATA
+values are advisory and do not change the reported I/O bounds.

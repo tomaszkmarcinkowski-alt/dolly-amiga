@@ -8,6 +8,20 @@
 | Native build | MC68000 GUI, write adapter and Restore source targets cross-compiled. | Runtime checks of the new scan dialog, Pause/Resume, the Restore timer and checkpoint save. |
 | Disk-unit enumeration | User confirmed that the disk-units test build reports the correct units and Query results for scsi.device Unit 0 with a valid RDB and two FFS partitions, and uaehf.device Units 0 and 1 with no RDB. | Additional controller and media configurations. |
 
+### 512 MiB RDB image on emulated IDE
+
+The supplied HDF contains 1,048,576 sectors of 512 bytes and two valid
+PART blocks. UDH0 spans LBA 4032–526175 and UDH1 spans LBA
+526176–1048319. In FS-UAE 3.1.66 on A600 with the supplied Kickstart
+37.350, the emulator logged translated IDE CHS of 917/9/127. The native
+probe saw TD_GETGEOMETRY fail, then received last LBA 1,048,130 from
+READ CAPACITY(10), yielding exactly 917 × 9 × 127 = 1,048,131 sectors.
+
+A regression check of the native parser against the supplied RDB
+reads both entries with either capacity and flags only UDH1 when
+using the reported IDE limit. It also rejects a corrupted checksum.
+The image was attached read-only.
+
 ## Historical emulator verification through Alpha 2
 
 | Scope | Observed result | Remaining coverage |

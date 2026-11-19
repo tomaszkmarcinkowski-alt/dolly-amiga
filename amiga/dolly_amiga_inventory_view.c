@@ -3,6 +3,7 @@
  * Registered AmigaDOS entries do not guarantee usable media.
  */
 #include "dolly_amiga_inventory_view.h"
+#include "dolly_surface_log.h"
 #include "dolly_amiga_device_query.h"
 #include "dolly_amiga_clipboard.h"
 #include "dolly_amiga_destructive.h"
@@ -32,7 +33,7 @@
 #define INV_HEIGHT 246
 #define INV_MIN_HEIGHT 230
 #define INV_MARGIN 16
-#define INV_LIST_TOP 65
+#define INV_LIST_TOP 76
 #define INV_BUTTON_WIDTH 136
 #define INV_STATUS_HEIGHT 16
 extern struct Library *AslBase;
@@ -88,6 +89,7 @@ static void populate_header(DollyNativeInventoryView *v) {
     sprintf(v->header_text[1],"Device Name: %s",v->device_info);
     sprintf(v->header_text[2],"Geometry: %s",v->chs_info);
     sprintf(v->header_text[3],"Capacity: %s",v->geometry_info);
+    snprintf(v->header_text[4],sizeof(v->header_text[4]),"ATA IDENTIFY: %s",v->ata_identify);
     for(i=0;i<DOLLY_INVENTORY_HEADER_ROWS;++i) {
         v->header_nodes[i].ln_Name=v->header_text[i];
         AddTail(&v->header_rows,&v->header_nodes[i]);
@@ -260,6 +262,13 @@ static void populate_details(DollyNativeInventoryView *v) {
     sprintf(line,"Partition: %s",p->label);
     add_detail(v,line);
     if(p->is_rdb) {
+        if(p->outside_media) {
+            add_detail(v,"Outside capacity reported by driver");
+            char last[21];
+            dolly_surface_log_decimal(last,(p->start_bytes+p->length_bytes)/512u-1u);
+            snprintf(line,sizeof(line),"Last LBA: %s",last);
+            add_detail(v,line);
+        }
         if(p->dos_type_present) {
             char ascii[17];
             dos_type_ascii(ascii,p->dos_type);
@@ -418,7 +427,7 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     }
     last=CreateContext(&v->gadgets);
     if(!last)return 0;
-    last=create_list(last,v,screen,left,(LONG)w->BorderTop+5,right-left,46,
+    last=create_list(last,v,screen,left,(LONG)w->BorderTop+5,right-left,57,
                      INV_HEADER_ID,&v->header_rows,~0u,DOLLY_INVENTORY_HEADER_ROWS);
     if(!last)return 0;
     if(v->count) {
@@ -646,6 +655,7 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
     if(height>INV_HEIGHT)height=INV_HEIGHT;
     memset(v,0,sizeof(*v));
     init_list(&v->rows);
+    strcpy(v->ata_identify,"Not queried");
     v->selected_partition=~0u;
     copy_text(v->device_info,sizeof(v->device_info),"Unavailable");
     copy_text(v->chs_info,sizeof(v->chs_info),"CHS not reported");
@@ -655,7 +665,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
         char device_name[112],size[40],line[88];
         int queried=dolly_amiga_device_query(v->driver,v->unit,
                            device_name,sizeof(device_name),
-                           size,sizeof(size),&v->geometry,1);
+                           size,sizeof(size),&v->geometry,1,
+                           v->ata_identify,sizeof(v->ata_identify));
         if(queried && v->geometry.capacity_valid) {
             v->verified=1;
             copy_text(v->device_info,sizeof(v->device_info),device_name);
@@ -683,7 +694,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                 for(i=0;i<v->map.count && i<DOLLY_PART_MAX;++i) {
                     const DollyNativePartition *p=&v->map.parts[i];
                     if(p->is_rdb)
-                        sprintf(line,"%lu: %s",(unsigned long)(i+1u),p->label);
+                        sprintf(line,"%lu: %s%s",(unsigned long)(i+1u),
+                                p->outside_media?"! ":"",p->label);
                     else
                         sprintf(line,"MBR Partition (%s) %lu",
                                 p->mbr_type==0x76u?"RDB":mbr_role(p),
@@ -692,6 +704,8 @@ int dolly_inventory_view_open(DollyNativeInventoryView *v,
                            (unsigned long)(i+1u),p->label);
                     add_row(v,line);
                 }
+                if(v->map.rdb_capacity_mismatch)
+                    copy_text(v->status,sizeof(v->status),v->map.status);
             } else {
                 if(v->map.status[0])
                     copy_text(v->status,sizeof(v->status),v->map.status);

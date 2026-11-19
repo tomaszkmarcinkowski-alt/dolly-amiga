@@ -52,7 +52,8 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
     }
     manual=dolly_amiga_io_override(&device);
     if(!dolly_amiga_device_query(device.driver,device.unit,name,sizeof(name),
-                                size,sizeof(size),&geometry,1) ||
+                                size,sizeof(size),&geometry,1,
+                                scan->ata_identify,sizeof(scan->ata_identify)) ||
        !geometry.capacity_valid) {
         scan->failure="Cannot verify source geometry.";
         return 0;
@@ -76,7 +77,8 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
         found=dolly_amiga_partition_scan(device.driver,device.unit,&geometry,map);
         ok=endpoint->kind!=DOLLY_ENDPOINT_PARTITION;
         if(found && endpoint->kind==DOLLY_ENDPOINT_UNIT) {
-            complete_rdb=map->format==DOLLY_NATIVE_PARTITION_RDB && map->count!=0;
+            complete_rdb=map->format==DOLLY_NATIVE_PARTITION_RDB && map->count!=0 &&
+                         !map->rdb_capacity_mismatch;
             for(i=0;i<map->count;++i) {
                 if(map->parts[i].io_hints.present!=DOLLY_IO_ALL)complete_rdb=0;
                 dolly_io_hints_merge(&hints,map->parts[i].io_hints);
@@ -86,7 +88,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             DollyIoHints disk_hints={0};
             for(i=0;i<map->count;++i) {
                 const DollyNativePartition *part=&map->parts[i];
-                if(part->start_bytes==start && part->length_bytes==length)
+                if(!part->outside_media && part->start_bytes==start && part->length_bytes==length)
                     dolly_io_hints_merge(&disk_hints,part->io_hints);
             }
             hints=disk_hints;
@@ -98,7 +100,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             complete_rdb=part->is_rdb && hints.present==DOLLY_IO_ALL;
             start=part->start_bytes;
             length=part->length_bytes;
-            ok=strcmp(tail+3,part->label)==0 &&
+            ok=!part->outside_media && strcmp(tail+3,part->label)==0 &&
                start==endpoint->partition_start_bytes &&
                length==endpoint->partition_length_bytes;
         }

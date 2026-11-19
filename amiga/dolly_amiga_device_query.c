@@ -1,4 +1,5 @@
 #include "dolly_amiga_device_query.h"
+#include "dolly_surface_log.h"
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/io.h>
@@ -111,10 +112,61 @@ static const UBYTE *mode_page(struct IOExtTD *io,UBYTE *data,
        offset+(unsigned)data[offset+1]+2u>length)return NULL;
     return data+offset;
 }
+static UWORD ata_word(const UBYTE *data,unsigned word) {
+    return (UWORD)(data[2u*word] | ((UWORD)data[2u*word+1u]<<8));
+}
+static void query_ata_identify(struct IOExtTD *io,char *out,unsigned capacity) {
+    struct SCSICmd sc={0};
+    UBYTE *data=AllocMem(528,MEMF_CHIP|MEMF_CLEAR);
+    UBYTE *cdb;
+    UWORD cylinders,heads,sectors;
+    uint64_t lba=0;
+    char count[21];
+    unsigned i;
+    if(!data)return;
+    cdb=data+512;
+    cdb[0]=0x85; /* SAT ATA PASS-THROUGH(16) */
+    cdb[1]=4u<<1; /* PIO data-in */
+    cdb[2]=0x0e; /* device to host, length in blocks, sector count */
+    cdb[6]=1;
+    cdb[14]=0xec; /* IDENTIFY DEVICE */
+    sc.scsi_Data=(UWORD *)data;
+    sc.scsi_Length=512;
+    sc.scsi_Command=cdb;
+    sc.scsi_CmdLength=16;
+    sc.scsi_Flags=SCSIF_READ;
+    io->iotd_Req.io_Command=HD_SCSICMD;
+    io->iotd_Req.io_Data=&sc;
+    io->iotd_Req.io_Length=sizeof(sc);
+    io->iotd_Req.io_Offset=0;
+    io->iotd_Req.io_Flags=0;
+    if(DoIO((struct IORequest *)io)!=0 || sc.scsi_Status!=0 ||
+       sc.scsi_Actual!=512 || !ata_word(data,0) ||
+       (ata_word(data,0)&0x8000u))goto done;
+    cylinders=ata_word(data,1);heads=ata_word(data,3);sectors=ata_word(data,6);
+    if((ata_word(data,53)&1u) && ata_word(data,54) &&
+       ata_word(data,55) && ata_word(data,56)) {
+        cylinders=ata_word(data,54);heads=ata_word(data,55);sectors=ata_word(data,56);
+    }
+    if((ata_word(data,83)&0xc400u)==0x4400u)
+        for(i=0;i<4u;++i)lba|=(uint64_t)ata_word(data,100u+i)<<(16u*i);
+    if(!lba && (ata_word(data,49)&0x0200u))
+        lba=(uint32_t)ata_word(data,60)|((uint32_t)ata_word(data,61)<<16);
+    if(lba>0x0000ffffffffffffULL)lba=0;
+    if(lba)dolly_surface_log_decimal(count,lba);
+    else strcpy(count,"Unavailable");
+    if(cylinders && heads && sectors)
+        snprintf(out,capacity,"CHS %u/%u/%u | LBA sectors %s",
+                 (unsigned)cylinders,(unsigned)heads,(unsigned)sectors,count);
+    else snprintf(out,capacity,"CHS unavailable | LBA sectors %s",count);
+done:
+    FreeMem(data,528);
+}
 int dolly_amiga_device_query(const char *driver,ULONG unit,
                             char *name,unsigned name_capacity,
                             char *size,unsigned size_capacity,
-                            DollyMediaGeometry *geometry,int probe_chs) {
+                            DollyMediaGeometry *geometry,int probe_chs,
+                            char *ata,unsigned ata_capacity) {
     struct MsgPort *port=NULL;
     struct IOExtTD *io=NULL;
     struct DriveGeometry geom;
@@ -122,6 +174,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
     UBYTE *data=NULL;
     LONG rc;
     int opened=0,have_capacity=0,have_name=0,have_td_geometry=0;
+    if(ata && ata_capacity)assign_string(ata,ata_capacity,"Unavailable");
     if(!name || !size || !name_capacity || !size_capacity ||
        !driver || !*driver)return 0;
     if(geometry)memset(geometry,0,sizeof(*geometry));
@@ -238,6 +291,7 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
                 geometry->sectors_per_track=((ULONG)page[10]<<8)|page[11];
         }
     }
+    if(ata && ata_capacity && have_capacity)query_ata_identify(io,ata,ata_capacity);
     /* A successful INQUIRY alone never verifies physical media. */
     if(have_capacity && !have_name && geometry && !probe_chs) {
         char info[56];

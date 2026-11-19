@@ -9,5 +9,6 @@ const char *dolly_amiga_parse_unit(const char *path,char *driver,
 int dolly_amiga_device_query(const char *driver,ULONG unit,
                             char *name,unsigned name_capacity,
                             char *size,unsigned size_capacity,
-                            DollyMediaGeometry *geometry,int probe_chs);
+                            DollyMediaGeometry *geometry,int probe_chs,
+                            char *ata,unsigned ata_capacity);
 #endif

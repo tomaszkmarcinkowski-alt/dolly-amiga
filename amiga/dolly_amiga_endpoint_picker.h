@@ -17,7 +17,7 @@ typedef struct DollyEndpointPicker {
     struct Gadget *logical_list,*choose_button,*file_text;
     struct Gadget *format_cycle,*file_info,*selection_text,*disk_info_text;
     struct Gadget *disk_size_text,*partition_info_text;
-    struct Gadget *geometry_info_text,*unit_text,*partition_number;
+    struct Gadget *geometry_info_text,*ata_info_text,*unit_text,*partition_number;
     struct List devices,units,logical_devices;
     /* Query builds an inactive bank and then swaps the LISTVIEW
      * pointer. Never modify the nodes/strings of its active bank.
@@ -52,6 +52,7 @@ typedef struct DollyEndpointPicker {
     char unit_display[11];
     char disk_info_display[160];
     char disk_size_display[40];
+    char ata_identify[88];
     char geometry_info_display[96];
     char partition_info_display[160];
     DollyImageFormat output_format;

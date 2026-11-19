@@ -15,6 +15,7 @@ typedef struct DollySurfaceScan {
     const char *failure;
     DollySurfaceLog log;
     DollyMediaGeometry geometry;
+    char ata_identify[88];
     DollyIoHints effective_io;
     DollyPhysicalEntry device;
     char device_name[112];

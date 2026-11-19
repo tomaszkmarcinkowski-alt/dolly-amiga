@@ -14,7 +14,7 @@
 #define DOLLY_INVENTORY_ROWS (DOLLY_PART_MAX + 1u)
 #define DOLLY_INVENTORY_DETAILS 10u
 #define DOLLY_INVENTORY_DETAIL_BYTES 96u
-#define DOLLY_INVENTORY_HEADER_ROWS 4u
+#define DOLLY_INVENTORY_HEADER_ROWS 5u
 #define DOLLY_INVENTORY_HEADER_BYTES 176u
 typedef struct DollyNativeInventoryView {
     struct Window *window;
@@ -25,6 +25,7 @@ typedef struct DollyNativeInventoryView {
     struct Node nodes[DOLLY_INVENTORY_ROWS];
     char row_text[DOLLY_INVENTORY_ROWS][88];
     struct List header_rows;
+    char ata_identify[88];
     struct Node header_nodes[DOLLY_INVENTORY_HEADER_ROWS];
     char header_text[DOLLY_INVENTORY_HEADER_ROWS][DOLLY_INVENTORY_HEADER_BYTES];
     const char *clipboard_row;
