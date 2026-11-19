@@ -55,3 +55,22 @@ length or destination path. The future write-side format must also carry
 target identity, write verification mode and the potentially modified
 range at a failed batch. Require destructive confirmation and repeat
 destination checks before writing after resume.
+
+## Version 2 device-write checkpoints
+
+Copy and Restore use HEAD version 2 and operation codes 3 and 4.
+Chunk order is HEAD, SRC2, DST2, SRCE, DEST, DRVR, TDRV, NAME, TNAM,
+CR32. Version 1 Create Image continues to use the format above.
+
+| Chunk | Fields in order |
+|---|---|
+| HEAD (56 bytes) | Six u32 values: version, operation, sector bytes, batch bytes, verify flag, terminal transfer state. Three u64 values: committed bytes, potentially modified bytes beginning at that cursor, total bytes. Two u32 values: read status and write status. |
+| SRC2 / DST2 (76 bytes each) | Four u32 values: endpoint kind, unit, partition index, effective Mask. Three u64 values: absolute byte start, length, capacity. Seven u32 values: BufMemType, MaxTransfer, image format (source file only), first and last sector CRC32, capacity source, cylinders. Two u32 values: heads and sectors per track. |
+| SRCE / DEST | Source and destination selection paths. A file source uses the canonical path when its lock can resolve it. |
+| DRVR / TDRV / NAME / TNAM | Source driver, target driver, source device name, target device name. The source driver and name are empty for a file. |
+| CR32 | Same checksum coverage as version 1. |
+
+The target CRC anchors describe the media **before** the transfer. A
+future resume reader must verify the already-written prefix against
+the source and account for the potentially modified range before
+trusting the cursor. That reader is still planned.

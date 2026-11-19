@@ -9,7 +9,7 @@ typedef struct RestoreInfo {
     DollyRestoreKind kind;
     DollyRdb *rdb;
     uint32_t fs;
-    int unavailable;
+    int unavailable,unsupported;
 } RestoreInfo;
 
 static DollyBlockReadResult read_span(void *context,uint64_t offset,void *data,
@@ -55,8 +55,14 @@ static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info) {
         info->unavailable=1;
         return "Cannot read the boot sector.";
     }
-    if(boot[510]==0x55 && boot[511]==0xaa)
-        return "MBR or boot signature present. Object kind is uncertain.";
+    if(boot[510]==0x55 && boot[511]==0xaa) {
+        info->unsupported=1;
+        return "MBR or PC boot signature is unsupported for Restore.";
+    }
+    if(!memcmp(boot,"FORM",4) && !memcmp(boot+8,"DOLY",4)) {
+        info->unsupported=1;
+        return "IFF DOLY decoding is unavailable for Restore.";
+    }
     if((memcmp(boot,"DOS",3)==0 && boot[3]<=7) ||
        (memcmp(boot,"PFS",3)==0 && (boot[3]==1 || boot[3]==2 || boot[3]==3)) ||
        (memcmp(boot,"SFS",3)==0 && (boot[3]==0 || boot[3]==2))) {
@@ -112,9 +118,10 @@ DollyRestoreAssessment dolly_restore_assess(const DollyRestoreExtent *image,
     }
     source_error=inspect(image,&source);
     dest_error=inspect(target,&dest);
-    result.decision=source.unavailable || dest.unavailable?
+    result.decision=source.unavailable || dest.unavailable ||
+                    source.unsupported || dest.unsupported?
                     DOLLY_RESTORE_BLOCKED:DOLLY_RESTORE_MISMATCH;
-    if(dest.unavailable && !source.unavailable)
+    if((dest.unavailable || dest.unsupported) && !source.unavailable && !source.unsupported)
         snprintf(result.reason,sizeof(result.reason),"Target: %s",dest_error);
     else if(source_error)
         snprintf(result.reason,sizeof(result.reason),"Image: %s",source_error);

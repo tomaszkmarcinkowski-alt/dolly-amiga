@@ -26,12 +26,12 @@ Dolly is a free, community-developed disk imaging, disk cloning, backup/restore 
 | Native GadTools | Compact main window with in-frame progress, Source/Destination pickers, Sheep Inventory and resizable Sheep Counter. Settings offers an ASL font selector. |
 | Surface Scan | Read-only scans using validated RDB settings and per-unit I/O overrides, selectable LBA/CHS ranges and retries, progress, error map and text logs with LBA and CHS when reported geometry permits. |
 | Create Image | Whole unit, partition or logical volume to RAW, HDF or IFF DOLY. Staged output and DLRP checkpoints after supported unexpected failures. |
-| Restore and Copy/Clone | Restore runs read-only RAW/HDF preflight. Raw device writes in the GUI, Copy/Clone and resizing remain in development. |
+| Restore and Copy/Clone | Sector-to-sector Copy and flat RAW/HDF Restore use bounded writes to eligible offline targets. Smart Clone, resizing and IFF DOLY Restore remain in development. |
 | IFF DOLY | Single-file v1 raw and v2 Fast (PackBits) or Compact (LZSS/PackBits) with per-chunk CRC32. |
 
 MC68000 builds and FS-UAE A600 / AmigaOS 2.05 checks have passed for the
 prototypes. See the [test matrix](docs/TEST_MATRIX.md) for exact coverage.
-Physical-controller qualification, Restore execution, Smart Clone and repair
+Native runtime qualification of the new write paths, Smart Clone and repair
 remain open.
 
 ```sh

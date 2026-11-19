@@ -51,6 +51,16 @@ static void check_assessment(void) {
     target.expected_kind=DOLLY_RESTORE_PARTITION;
     result=dolly_restore_assess(&source,&target);
     assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"whole RDB disk"));
+    memset(a,0,sizeof(a));
+    a[510]=0x55;
+    a[511]=0xaa;
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_BLOCKED && strstr(result.reason,"MBR"));
+    memset(a,0,sizeof(a));
+    memcpy(a,"FORM",4);
+    memcpy(a+8,"DOLY",4);
+    result=dolly_restore_assess(&source,&target);
+    assert(result.decision==DOLLY_RESTORE_BLOCKED && strstr(result.reason,"IFF DOLY"));
     source.bytes=512;
     result=dolly_restore_assess(&source,&target);
     assert(result.decision==DOLLY_RESTORE_BLOCKED && result.size==DOLLY_RESTORE_SIZE_SMALLER);

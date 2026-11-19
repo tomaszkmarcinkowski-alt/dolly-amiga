@@ -21,6 +21,12 @@ int main(void){
      0x00fffffeu,2u,1u,1u,report_dma,&dma_report_count,0,0,0,0,0
  };
  unsigned char buf[2048];unsigned i;
+ struct IOStdReq request={0};
+ dolly_mock_set_nsd(3);
+ assert(dolly_amiga_device_advertises_write(&request));
+ dolly_mock_set_nsd(4);
+ assert(!dolly_amiga_device_advertises_write(&request));
+ assert(request.io_Data==NULL);
  /* Fail closed before opening anything if DMA limits are unknown. */
  opt.dma_profile_verified=0;
  assert(dolly_amiga_open_device(&opt,&s)==DOLLY_BLOCK_EINVAL && s==NULL);

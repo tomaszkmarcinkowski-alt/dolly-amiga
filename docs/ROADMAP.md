@@ -22,9 +22,9 @@ Dolly pozostaje darmowym projektem **MIT + dobrowolne Retroware**. Każda faza w
 - **Zakres M3** ma jednoplikowy zapis [IFF DOLY](IFF_FORMAT.md): v1 bez kompresji i v2 z PackBits/LZSS. Weryfikacja na hoście porównała dane z obrazów emulowanych ze źródłem. Segmentacja, wznowienie i odtwarzanie pozostają otwarte.
 
 - **Alpha 3** dodaje zakres LBA/CHS i ponowienia do Surface Scan, pauzę,
-  podgląd Restore oraz checkpoint Create Image po awarii. Następne
-  etapy obejmują parser i GUI DLRP, kwalifikację celu oraz kontrolowany
-  zapis Restore i Copy/Clone. Zmiana rozmiaru pozostaje w planie.
+  kopiowanie sektorowe i Restore RAW/HDF na zweryfikowanym celu offline.
+  DLRP rejestruje stan po awarii. Następne etapy obejmują testy zapisu pod
+  AmigaOS, wznowienie DLRP, Restore IFF DOLY i Smart Clone.
 
 - **GUI Alpha 3** ma kompaktowe okno główne, pasek postępu i przycisk Details
   otwierający Sheep Counter podczas operacji oraz wybór czcionki przez ASL.

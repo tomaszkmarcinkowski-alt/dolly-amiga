@@ -18,6 +18,14 @@
   a proportional font, and applying a font choice without restarting.
 - [Download the test executable](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/main-window-test-20261119).
 
+### Sector copy and RAW/HDF Restore
+
+- Host coverage includes bounded batches, flush/readback failure, refusal
+  of missing NSD flush support, and rejection of MBR and renamed IFF DOLY images.
+- Pending native runtime checks on disposable media: copy and restore byte
+  comparison, offline/busy rejection, Stop, optional verify and DLRP capture
+  after a forced failure.
+
 ### 512 MiB RDB image on emulated IDE
 
 The supplied HDF contains 1,048,576 sectors of 512 bytes and two valid

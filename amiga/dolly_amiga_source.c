@@ -70,30 +70,36 @@ static void close_ctx(void *opaque) {
     if(ctx->port)DeleteMsgPort(ctx->port);
     free(ctx);
 }
-static int verify_nsd64(DollyAmigaContext *ctx){
+static int nsd_has_commands(struct IOStdReq *request,UWORD first,UWORD second) {
     struct DollyNsdQuery q;
-    ULONG actual;
-    ULONG i;
+    ULONG actual,i;
     LONG err;
-    UWORD *cmd;
+    int has_first=0,has_second=second==0;
     memset(&q,0,sizeof(q));
-    ctx->request->io_Command=DOLLY_NSCMD_DEVICEQUERY;
-    ctx->request->io_Flags=0;
-    ctx->request->io_Offset=0;
-    ctx->request->io_Actual=0;
-    ctx->request->io_Length=sizeof(q);
-    ctx->request->io_Data=(APTR)&q;
-    err=DoIO((struct IORequest *)ctx->request);
-    actual=ctx->request->io_Actual;
-    if(err || ctx->request->io_Error || actual!=sizeof(q) ||
+    request->io_Command=DOLLY_NSCMD_DEVICEQUERY;
+    request->io_Flags=0;
+    request->io_Offset=0;
+    request->io_Actual=0;
+    request->io_Length=sizeof(q);
+    request->io_Data=(APTR)&q;
+    err=DoIO((struct IORequest *)request);
+    request->io_Data=NULL;
+    actual=request->io_Actual;
+    if(err || request->io_Error || actual!=sizeof(q) ||
        q.SizeAvailable!=actual || q.DevQueryFormat!=0 ||
-       q.DeviceType!=DOLLY_NSD_TRACKDISK || !q.SupportedCommands) return 0;
-    cmd=q.SupportedCommands;
-    for(i=0;i<DOLLY_NSD_COMMAND_LIST_MAX;i++){
-        if(!cmd[i])break;
-        if(cmd[i]==DOLLY_NSCMD_TD_READ64)return 1;
+       q.DeviceType!=DOLLY_NSD_TRACKDISK || !q.SupportedCommands)return 0;
+    for(i=0;i<DOLLY_NSD_COMMAND_LIST_MAX;++i) {
+        UWORD command=q.SupportedCommands[i];
+        if(!command)break;
+        if(command==first)has_first=1;
+        if(command==second)has_second=1;
+        if(has_first && has_second)return 1;
     }
     return 0;
+}
+
+int dolly_amiga_device_advertises_write(struct IOStdReq *request) {
+    return nsd_has_commands(request,CMD_WRITE,CMD_UPDATE);
 }
 static DollyBlockStatus request_error(const struct IOStdReq *request) {
 #ifndef DOLLY_AMIGA_MOCK
@@ -303,7 +309,7 @@ DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opt,
 #endif
     ctx->supports_nsd64=(!version || version>=43u || opt->verified_uae_ide ||
                          opt->bypass_legacy_scsi_limit) &&
-                        verify_nsd64(ctx);
+                        nsd_has_commands(ctx->request,DOLLY_NSCMD_TD_READ64,0);
     if(opt->required_read_end>LEGACY_READ_END && !ctx->supports_nsd64) {
         if(opt->verified_uae_ide!=1 ||
            opt->required_read_end/sector>UAE_IDE_SECTOR_LIMIT) {

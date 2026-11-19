@@ -8,6 +8,8 @@ static uint64_t g_dma_address=UINT64_C(0x00100000);
 static ULONG g_last_alloc_flags;
 static UWORD g_commands[]={2,0xc000,0};
 static UWORD g_legacy_commands[]={2,0};
+static UWORD g_write_commands[]={CMD_READ,CMD_WRITE,CMD_UPDATE,0};
+static UWORD g_no_flush_commands[]={CMD_READ,CMD_WRITE,0};
 static int g_read_count,g_fault_number,g_fault_mode;
 struct NSQueryMock {ULONG format,size;UWORD type,subtype;UWORD *cmds;};
 void dolly_mock_set_nsd(int enabled){g_nsd=enabled;g_last_read64=0;g_read_count=0;g_last_scsi_lba=0;}
@@ -30,7 +32,8 @@ LONG DoIO(struct IORequest *r){
  if(r->io_Command==0x4000){
   struct NSQueryMock q; if(!g_nsd){r->io_Error=255;return -1;}
   q.format=0;q.size=sizeof(q);q.type=5;q.subtype=0;
-  q.cmds=g_nsd==2?g_legacy_commands:g_commands;
+  q.cmds=g_nsd==4?g_no_flush_commands:g_nsd==3?g_write_commands:
+         g_nsd==2?g_legacy_commands:g_commands;
   memcpy(r->io_Data,&q,sizeof(q));r->io_Actual=sizeof(q);r->io_Error=0;return 0;
  }
  if(r->io_Command==HD_SCSICMD) {

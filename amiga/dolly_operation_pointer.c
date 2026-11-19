@@ -8,6 +8,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <string.h>
+#include <strings.h>
 
 extern struct Library *AslBase;
 
@@ -147,30 +148,59 @@ static int write_pointer(BPTR file,const DollyEndpoint *source,
     return dolly_dlrp_chunk(sink,&file,"CR32",data,4);
 }
 
-void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *source,
-                         const DollyEndpoint *destination,DollySurfaceScan *scan,
-                         DollyAmigaImage *image) {
+typedef struct PointerStage {
+    char drawer[267],file_path[273];
+    BPTR file;
+} PointerStage;
+
+static int stage_pointer(PointerStage *stage,const char *path) {
+    size_t prefix=(size_t)((const char *)FilePart((STRPTR)path)-path);
+    BPTR lock;
+    memcpy(stage->drawer,path,prefix);
+    strcpy(stage->drawer+prefix,".dolly-dlrp");
+    strcpy(stage->file_path,stage->drawer);
+    strcat(stage->file_path,"/data");
+    lock=CreateDir((STRPTR)stage->drawer);
+    if(!lock)return 0;
+    UnLock(lock);
+    stage->file=Open((STRPTR)stage->file_path,MODE_NEWFILE);
+    if(!stage->file)DeleteFile((STRPTR)stage->drawer);
+    return stage->file!=0;
+}
+
+static int publish_pointer(PointerStage *stage,const char *path,int ok) {
+    if(!Close(stage->file))ok=0;
+    if(ok)ok=unused(path) && Rename((STRPTR)stage->file_path,(STRPTR)path);
+    if(!ok)DeleteFile((STRPTR)stage->file_path);
+    DeleteFile((STRPTR)stage->drawer);
+    return ok;
+}
+
+static int request_pointer_path(struct Window *parent,char path[256]) {
     struct EasyStruct request={sizeof(struct EasyStruct),0,
         (STRPTR)"Dolly - Operation interrupted",
         (STRPTR)"Save an Operation Restore File for later?",
         (STRPTR)"Save...|Cancel"};
-    char path[256],temp[267],file_path[273],final[256],partial[256];
-    BPTR drawer,file;
+    int choice;
+    if(EasyRequestArgs(parent,&request,NULL,NULL)!=1)return 0;
+    choice=choose_path(parent,path);
+    if(choice<0)notice(parent,"The save requester or filename is unavailable.");
+    if(choice<=0)return 0;
+    if(unused(path))return 1;
+    notice(parent,"The checkpoint destination is already in use.");
+    return 0;
+}
+
+void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *source,
+                         const DollyEndpoint *destination,DollySurfaceScan *scan,
+                         DollyAmigaImage *image) {
+    char path[256],final[256],partial[256];
+    PointerStage stage;
     LONG output=0;
-    size_t prefix;
-    int ok,choice;
+    int ok;
     if(!image || !image->failure || !image->file || !scan->source ||
        !scan->total || scan->processed>scan->total || scan->outside_range!=DOLLY_RANGE_STRICT ||
-       EasyRequestArgs(parent,&request,NULL,NULL)!=1)return;
-    choice=choose_path(parent,path);
-    if(choice<=0) {
-        if(choice<0)notice(parent,"The save requester or filename is unavailable.");
-        return;
-    }
-    if(!unused(path)) {
-        notice(parent,"The checkpoint destination is already in use.");
-        return;
-    }
+       !request_pointer_path(parent,path))return;
     if(image) {
         if(!NameFromLock(image->drawer,final,sizeof(final)))goto failed;
         strcpy(partial,final);
@@ -185,32 +215,130 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
             goto failed;
         output=(LONG)committed;
     }
-    prefix=(size_t)((const char *)FilePart((STRPTR)path)-path);
-    memcpy(temp,path,prefix);
-    strcpy(temp+prefix,".dolly-dlrp");
-    strcpy(file_path,temp);strcat(file_path,"/data");
-    drawer=CreateDir((STRPTR)temp);
-    if(!drawer)goto failed;
-    UnLock(drawer);
-    file=Open((STRPTR)file_path,MODE_NEWFILE);
-    if(!file) {
-        DeleteFile((STRPTR)temp);
-        goto failed;
-    }
-    ok=1;
-    if(image) {
-        ok=Close(image->file)!=0;
-        image->file=0;
-    }
-    if(ok)ok=write_pointer(file,source,destination,scan,image,final,partial,(uint32_t)output);
-    if(!Close(file))ok=0;
-    if(ok)ok=unused(path) && Rename((STRPTR)file_path,(STRPTR)path);
-    if(!ok)DeleteFile((STRPTR)file_path);
-    DeleteFile((STRPTR)temp);
-    if(!ok)goto failed;
+    if(!stage_pointer(&stage,path))goto failed;
+    ok=Close(image->file)!=0;
+    image->file=0;
+    if(ok)ok=write_pointer(stage.file,source,destination,scan,image,final,partial,(uint32_t)output);
+    if(!publish_pointer(&stage,path,ok))goto failed;
     if(image)image->keep_staging=1;
     notice(parent,"Operation Restore File saved.");
     return;
 failed:
     notice(parent,"Could not save the Operation Restore File.");
+}
+
+static int write_transfer_pointer(BPTR file,const DollyEndpoint *source,
+                          const DollyEndpoint *destination,const DollyAmigaTransfer *t) {
+    unsigned char head[56]={0},src[76]={0},dst[76]={0},crc[4];
+    const DollySurfaceScan *r=&t->reader;
+    char resolved[256];
+    const char *source_path=source->path;
+    const char *driver=t->restoring?"":r->device.driver;
+    const char *name=t->restoring?"":r->device_name;
+    uint64_t uncertain=0;
+    PointerSink out;
+    uint32_t body;
+    if(t->restoring && t->image.lock && NameFromLock(t->image.lock,resolved,sizeof(resolved)))
+        source_path=resolved;
+    body=8+sizeof(head)+8+sizeof(src)+8+sizeof(dst)+12+
+                  string_chunk_size(source_path)+string_chunk_size(destination->path)+
+                  string_chunk_size(driver)+string_chunk_size(t->device.driver)+
+                  string_chunk_size(name)+string_chunk_size(t->device_name);
+    if(t->job.state==DOLLY_RESTORE_WRITE_FAILED &&
+       t->job.write_status!=DOLLY_WRITE_REJECTED) {
+        uncertain=t->job.bytes-t->job.processed;
+        if(uncertain>t->job.batch_bytes)uncertain=t->job.batch_bytes;
+    }
+    dolly_dlrp_u32(head,2);
+    dolly_dlrp_u32(head+4,t->restoring?4:3);
+    dolly_dlrp_u32(head+8,t->target.sector_bytes);
+    dolly_dlrp_u32(head+12,t->job.batch_bytes);
+    dolly_dlrp_u32(head+16,t->job.verify!=0);
+    dolly_dlrp_u32(head+20,t->job.state);
+    dolly_dlrp_u64(head+24,t->job.processed);
+    dolly_dlrp_u64(head+32,uncertain);
+    dolly_dlrp_u64(head+40,t->job.bytes);
+    dolly_dlrp_u32(head+48,t->job.read_status);
+    dolly_dlrp_u32(head+52,t->job.write_status);
+    dolly_dlrp_u32(src,source->kind);
+    dolly_dlrp_u32(src+4,r->device.unit);
+    dolly_dlrp_u32(src+8,source->partition);
+    dolly_dlrp_u32(src+12,r->effective_io.mask);
+    dolly_dlrp_u64(src+16,r->first_lba*r->sector_bytes);
+    dolly_dlrp_u64(src+24,t->job.bytes);
+    dolly_dlrp_u64(src+32,t->restoring?t->job.bytes:r->geometry.block_count*r->sector_bytes);
+    dolly_dlrp_u32(src+40,r->effective_io.buffer_memory);
+    dolly_dlrp_u32(src+44,r->effective_io.max_transfer);
+    dolly_dlrp_u32(src+48,source->image_format);
+    dolly_dlrp_u32(src+52,t->source_first_crc);
+    dolly_dlrp_u32(src+56,t->source_last_crc);
+    dolly_dlrp_u32(src+60,r->geometry.capacity_source);
+    dolly_dlrp_u32(src+64,r->geometry.cylinders);
+    dolly_dlrp_u32(src+68,r->geometry.heads);
+    dolly_dlrp_u32(src+72,r->geometry.sectors_per_track);
+    dolly_dlrp_u32(dst,destination->kind);
+    dolly_dlrp_u32(dst+4,t->device.unit);
+    dolly_dlrp_u32(dst+8,destination->partition);
+    dolly_dlrp_u32(dst+12,t->io.mask);
+    dolly_dlrp_u64(dst+16,t->target.start);
+    dolly_dlrp_u64(dst+24,t->target.length);
+    dolly_dlrp_u64(dst+32,t->target.capacity);
+    dolly_dlrp_u32(dst+40,t->io.buffer_memory);
+    dolly_dlrp_u32(dst+44,t->io.max_transfer);
+    dolly_dlrp_u32(dst+52,t->target_first_crc);
+    dolly_dlrp_u32(dst+56,t->target_last_crc);
+    dolly_dlrp_u32(dst+60,t->geometry.capacity_source);
+    dolly_dlrp_u32(dst+64,t->geometry.cylinders);
+    dolly_dlrp_u32(dst+68,t->geometry.heads);
+    dolly_dlrp_u32(dst+72,t->geometry.sectors_per_track);
+    out.file=file;
+    dolly_checksum_init(&out.checksum);
+    if(!dolly_dlrp_form(checksum_sink,&out,body) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"HEAD",head,sizeof(head)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"SRC2",src,sizeof(src)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"DST2",dst,sizeof(dst)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"SRCE",source_path,strlen(source_path)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"DEST",destination->path,strlen(destination->path)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"DRVR",driver,strlen(driver)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"TDRV",t->device.driver,strlen(t->device.driver)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"NAME",name,strlen(name)) ||
+       !dolly_dlrp_chunk(checksum_sink,&out,"TNAM",t->device_name,strlen(t->device_name)))return 0;
+    dolly_dlrp_u32(crc,dolly_checksum_final(&out.checksum));
+    return dolly_dlrp_chunk(sink,&file,"CR32",crc,sizeof(crc));
+}
+
+static int checkpoint_drawer_safe(const char *path,const DollyAmigaTransfer *t) {
+    char drawer[256];
+    size_t prefix=(size_t)((const char *)FilePart((STRPTR)path)-path);
+    BPTR lock;
+    DollyPhysicalEntry device;
+    uint64_t start,length;
+    int kind;
+    memcpy(drawer,path,prefix);
+    drawer[prefix]=0;
+    lock=Lock((STRPTR)drawer,ACCESS_READ);
+    if(!lock)return 0;
+    kind=dolly_physical_from_lock(lock,&device,&start,&length);
+    UnLock(lock);
+    return kind==2 || (kind==1 && (device.unit!=t->device.unit ||
+                                  strcasecmp(device.driver,t->device.driver)));
+}
+
+void dolly_operation_pointer_offer_transfer(struct Window *parent,const DollyEndpoint *source,
+                         const DollyEndpoint *destination,const DollyAmigaTransfer *transfer) {
+    char path[256];
+    PointerStage stage;
+    int ok;
+    if(!transfer->failure || !request_pointer_path(parent,path))return;
+    if(!checkpoint_drawer_safe(path,transfer)) {
+        notice(parent,"Save on RAM: or on a verified device other than the write destination.");
+        return;
+    }
+    if(!stage_pointer(&stage,path)) {
+        notice(parent,"Could not stage the Operation Restore File.");
+        return;
+    }
+    ok=write_transfer_pointer(stage.file,source,destination,transfer);
+    notice(parent,publish_pointer(&stage,path,ok)?"Operation Restore File saved.":
+                                                 "Could not save the Operation Restore File.");
 }

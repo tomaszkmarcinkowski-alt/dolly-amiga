@@ -139,10 +139,10 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
       amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
       amiga/dolly_amiga_io_settings.c amiga/dolly_amiga_prefs.c amiga/dolly_amiga_fonts.c
-      amiga/dolly_amiga_transfer_guard.c amiga/dolly_amiga_restore_confirm.c
+      amiga/dolly_amiga_transfer_guard.c
       amiga/dolly_amiga_destructive.c amiga/dolly_operation_pointer.c src/dolly_dlrp.c
-      amiga/dolly_amiga_restore_source.c
-      src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
+      amiga/dolly_amiga_restore_source.c amiga/dolly_amiga_transfer.c
+      src/dolly_restore_transfer.c src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
       src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
     target_compile_options(dolly-two-window-demo PRIVATE

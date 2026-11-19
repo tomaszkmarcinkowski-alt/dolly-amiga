@@ -16,7 +16,7 @@
 #include "dolly_amiga_image.h"
 #include "dolly_amiga_io_settings.h"
 #include "dolly_operation_pointer.h"
-#include "dolly_amiga_restore_confirm.h"
+#include "dolly_amiga_transfer.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <intuition/intuition.h>
@@ -125,11 +125,14 @@ static struct NewMenu settings_items[]={
 static struct DrawInfo *screen_info;
 static DollyOperationSession operation;
 static DollySurfaceScan surface;
+static DollyAmigaTransfer transfer;
+static int transfer_result;
+static UWORD transfer_operation;
+static char transfer_from[72],transfer_to[72];
 static unsigned char scan_result,image_result;
 static DollyAmigaImage image;
 static char cell_result[GRID_TOTAL];
 static DollyDemoView main_view, sheep_view;
-/* SYNTHETIC device tree. This demo never opens physical media. */
 static DollyEndpoint selected_source,selected_target;
 static DollyEndpointPicker source_picker,target_picker;
 static DollyNativeInventoryView inventory_view;
@@ -348,6 +351,20 @@ static void update_main_status(void) {
                   "Operation in progress. Cannot quit.");
     else if(operation.state==DOLLY_OP_PAUSED)
         text_copy(main_view.status_label,sizeof(main_view.status_label),"Operation paused.");
+    else if(transfer_result && selected_operation==transfer_operation) {
+        if(transfer.failure)
+            text_copy(main_view.status_label,sizeof(main_view.status_label),transfer.failure);
+        else if(operation.state==DOLLY_OP_COMPLETED)
+            snprintf(main_view.status_label,sizeof(main_view.status_label),
+                     "Copy complete: %.20s -> %.23s",transfer_from,transfer_to);
+        else if(operation.state==DOLLY_OP_CANCELLED)
+            text_copy(main_view.status_label,sizeof(main_view.status_label),
+                      "Stopped. Destination may be partly overwritten.");
+        else if(operation.state==DOLLY_OP_RUNNING)
+            snprintf(main_view.status_label,sizeof(main_view.status_label),
+                     "%s: %.18s -> %.21s",
+                     transfer.restoring?"Writing image":"Copying sectors",transfer_from,transfer_to);
+    }
     else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result && image.failure)
         text_copy(main_view.status_label,sizeof(main_view.status_label),image.failure);
     else if(selected_operation==DOLLY_DEMO_CREATE_IMAGE && image_result &&
@@ -447,7 +464,7 @@ static void append_char(char **out,char *limit,char c) {
     if(*out<limit) *(*out)++=c;
 }
 static int log_available(void) {
-    return !image_result && surface.source_path[0] && !surface.source;
+    return scan_result && surface.source_path[0] && !surface.source;
 }
 static const char *log_outcome(void) {
     if(surface.failure)return surface.failure;
@@ -1109,11 +1126,13 @@ static void draw_sheep_static(void) {
     struct RastPort *rp;
     struct TagItem tags[3];
     unsigned i,completed=progress_units(GRID_TOTAL);
-    const char *heading=image_result?image_heading:counter_heading;
+    const char *heading=transfer_result?
+                       (transfer.restoring?"Restoring image...":"Copying sectors..."):
+                       image_result?image_heading:counter_heading;
     if(!sheep_view.window)return;
     rp=sheep_view.window->RPort;
     label(sheep_view.window,d->left,d->top+rp->TxBaseline,heading);
-    if((scan_result || image_result) && operation.total_blocks) {
+    if((scan_result || image_result || transfer_result) && operation.total_blocks) {
         char legend[sizeof(grid_legend_prefix)+10+sizeof(grid_legend_suffix)];
         char *p=legend+sizeof(grid_legend_prefix)-1;
         LONG width;
@@ -1307,7 +1326,8 @@ static void toggle_pause(void) {
 static void ask_stop(void) {
     char reason[580];
     snprintf(reason,sizeof(reason),"%s\nSource: \"%s\"\nDestination: \"%s\"",
-             scan_result?"Surface Scan":image_result?"Create Image":"Copy",
+             scan_result?"Surface Scan":image_result?"Create Image":
+             transfer.restoring?"Restore Image":"Copy",
              selected_source.path[0]?selected_source.path:main_view.source_label,
              scan_result?"-":selected_target.path[0]?selected_target.path:main_view.target_label);
     if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
@@ -1316,6 +1336,7 @@ static void ask_stop(void) {
     if(dolly_amiga_role_request(main_view.window,"Dolly - Operation in progress",
                                reason,"Abort","Resume",NULL)==1) {
         if(image.file)dolly_image_cancel(&image);
+        else if(transfer.opened)dolly_amiga_transfer_close(&transfer);
         else dolly_surface_close(&surface);
         (void)dolly_operation_cancel(&operation);
     } else (void)dolly_operation_resume(&operation);
@@ -1384,6 +1405,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                        id==MAIN_TARGET_MODE_ID)) {
                 if(!main_controls_busy() && !relayout && id==MAIN_OPERATION_ID && code<6u) {
                     selected_operation=code;
+                    transfer_result=0;
                     if(selected_operation==DOLLY_DEMO_CREATE_IMAGE)
                         selected_target.image_format=selected_image_format();
                     if(selected_source.kind!=DOLLY_ENDPOINT_NONE &&
@@ -1436,24 +1458,28 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     if(!dolly_inventory_view_open(&inventory_view,
                                                    public_screen,&selected_source))
                         puts("INVENTORY WARN: unable to open Inventory");
-                } else if(selected_operation==DOLLY_DEMO_RESTORE) {
-                    dolly_amiga_restore_preview(main_view.window,&selected_source,&selected_target);
-                } else if(selected_operation==DOLLY_DEMO_COPY) {
-                    dolly_amiga_copy_preview(main_view.window,&selected_source,&selected_target);
                 } else {
-                    uint64_t total=GRID_TOTAL;
+                    uint64_t total=0;
                     scan_result=(unsigned char)(selected_operation==DOLLY_DEMO_SCAN);
                     image_result=(unsigned char)(selected_operation==DOLLY_DEMO_CREATE_IMAGE);
+                    transfer_result=selected_operation==DOLLY_DEMO_COPY ||
+                                    selected_operation==DOLLY_DEMO_RESTORE;
                     memset(cell_result,0,sizeof(cell_result));
+                    dolly_amiga_log_view_close();
+                    dolly_operation_init(&operation);
                     if(scan_result) {
-                        dolly_amiga_log_view_close();
-                        dolly_operation_init(&operation);
                         total=dolly_surface_open(&surface,&selected_source,main_view.window,DOLLY_IO_SOURCE,1)?surface.total:0;
                     } else if(image_result) {
-                        dolly_amiga_log_view_close();
-                        dolly_operation_init(&operation);
                         total=dolly_image_open(&image,&selected_source,&selected_target,main_view.window)?
                               image.reader.total:0;
+                    } else if(transfer_result) {
+                        dolly_inventory_view_close(&inventory_view);
+                        transfer_operation=selected_operation;
+                        format_endpoint(transfer_from,sizeof(transfer_from),&selected_source);
+                        format_endpoint(transfer_to,sizeof(transfer_to),&selected_target);
+                        if(dolly_amiga_transfer_open(&transfer,main_view.window,&selected_source,
+                              &selected_target,selected_operation==DOLLY_DEMO_RESTORE))
+                            total=transfer.job.bytes/transfer.target.sector_bytes;
                     }
                     if(total)(void)dolly_operation_start(&operation,total);
                     if(sheep_view.window) {
@@ -1599,6 +1625,7 @@ int main(int argc,char **argv) {
                 update_main_actions();
         }
         if(source_picker.changed) {
+            transfer_result=0;
             selected_source=source_picker.result;
             medium_modes[0]=dolly_endpoint_mode(&selected_source);
             source_picker.changed=0;
@@ -1609,6 +1636,7 @@ int main(int argc,char **argv) {
             refresh_main_selection();
         }
         if(target_picker.changed) {
+            transfer_result=0;
             selected_target=target_picker.result;
             medium_modes[1]=dolly_endpoint_mode(&selected_target);
             target_picker.changed=0;
@@ -1618,7 +1646,33 @@ int main(int argc,char **argv) {
         if(sheep_view.window)process_view(&sheep_view,0,&quit);
         dolly_inventory_view_pump(&inventory_view);
         dolly_amiga_log_view_pump();
-        if(!quit && image.file && operation.state==DOLLY_OP_RUNNING) {
+        if(!quit && transfer.opened && operation.state==DOLLY_OP_RUNNING) {
+            unsigned old=progress_units(GRID_TOTAL);
+            int finished;
+            dolly_amiga_transfer_step(&transfer);
+            finished=transfer.job.state!=DOLLY_RESTORE_TRANSFERRING;
+            if(transfer.failure && old<GRID_TOTAL)cell_result[old]='X';
+            (void)dolly_operation_progress(&operation,
+                   transfer.job.processed/transfer.target.sector_bytes,transfer.failure?1u:0u,0);
+            if(finished) {
+                if(transfer.failure) {
+                    char lba[21],reason[246];
+                    uint64_t first=(transfer.target.start+transfer.job.processed)/
+                                   transfer.target.sector_bytes;
+                    dolly_surface_log_decimal(lba,first);
+                    snprintf(reason,sizeof(reason),"%s\nDestination batch starts at LBA %s.\n"
+                             "The destination may be partly overwritten.",transfer.failure,lba);
+                    dolly_amiga_role_request(main_view.window,"Dolly - Transfer stopped",
+                                             reason,"OK",NULL,NULL);
+                    dolly_operation_pointer_offer_transfer(main_view.window,&selected_source,
+                                                            &selected_target,&transfer);
+                }
+                dolly_amiga_transfer_close(&transfer);
+                (void)dolly_operation_finish(&operation,transfer.failure==NULL);
+                refresh_main_selection();
+            }
+            progress_view_update(old,transfer.failure!=NULL);
+        } else if(!quit && image.file && operation.state==DOLLY_OP_RUNNING) {
             unsigned old=progress_units(GRID_TOTAL);
             dolly_image_step(&image);
             (void)dolly_operation_progress(&operation,image.reader.processed,0,0);
@@ -1691,6 +1745,7 @@ int main(int argc,char **argv) {
            (unsigned)operation.sheep_counter_visible);
     rc=0;
 cleanup:
+    dolly_amiga_transfer_close(&transfer);
     dolly_image_cancel(&image);
     dolly_amiga_log_view_close();
     dolly_surface_close(&surface);
