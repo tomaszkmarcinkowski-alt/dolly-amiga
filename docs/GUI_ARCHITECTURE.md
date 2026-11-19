@@ -1650,3 +1650,10 @@ failure and requests an explicit decision to proceed at the user's risk.
 Cancel aborts the operation. Any successfully unmounted destination
 partition stays unmounted for the session. Choosing Settings on a pending
 I/O warning cancels the operation and opens Settings.
+
+
+The warning review opens at a compact size and supports horizontal and
+vertical resizing. Its minimum size follows the active font and measured
+buttons. Resizing reflows the current detail text and preserves the selected
+warning and its approval state. During an operation, both endpoint fields
+stay visible and are ghosted along with the selection controls.

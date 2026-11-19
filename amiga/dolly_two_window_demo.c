@@ -71,7 +71,6 @@ static const char hide_label[]="Hide";
 #define MAIN_SOURCE_ID 212u
 #define MAIN_TARGET_ID 213u
 #define MAIN_DESC_ID 214u
-#define MAIN_SOURCE_TEXT_ID 215u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
 #define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3"
@@ -96,7 +95,7 @@ typedef struct DollyDemoView {
     struct Gadget *details, *settings, *stop;
     struct Gadget *start, *hide, *log, *pause, *count, *errors;
     const char *action_label;
-    struct Gadget *device,*target_button,*source_text;
+    struct Gadget *device,*target_button;
     struct Gadget *description,*selectors[3],*operation_options[2],*status;
     STRPTR mode_labels[2][5];
     DollyEndpointMode mode_ids[2][4];
@@ -720,7 +719,6 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         v->stop=NULL;v->start=NULL;v->hide=NULL;
         v->count=NULL;v->errors=NULL;v->log=NULL;v->pause=NULL;
         v->device=NULL;v->target_button=NULL;
-        v->source_text=NULL;
         v->description=NULL;v->status=NULL;
         memset(v->selectors,0,sizeof(v->selectors));
         memset(v->operation_options,0,sizeof(v->operation_options));
@@ -735,10 +733,6 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
                          d->selector_w[1],"Source...");
         if(!last)return 0;
         v->device=last;
-        last=make_text(last,v,MAIN_SOURCE_TEXT_ID,d->selector_x[1],d->endpoint_frame_y,
-                       d->selector_w[1],v->source_label,TRUE);
-        if(!last)return 0;
-        v->source_text=last;
         last=make_button(last,v,MAIN_TARGET_ID,d->selector_x[2],d->endpoint_button_y,
                          d->selector_w[2],"Destination...");
         if(!last)return 0;
@@ -847,7 +841,6 @@ static void destroy_view(DollyDemoView *v) {
     v->stop=NULL;v->start=NULL;v->hide=NULL;
     v->count=NULL;v->errors=NULL;
     v->device=NULL;v->target_button=NULL;
-    v->source_text=NULL;
     v->description=NULL;v->status=NULL;
         memset(v->selectors,0,sizeof(v->selectors));
 }
@@ -974,7 +967,7 @@ static void ghost_area(struct RastPort *rp,LONG x,LONG y,LONG right,LONG bottom)
     fill(rp,system_pen(BACKGROUNDPEN),x,y,right,bottom);
     SetAfPt(rp,NULL,0);
 }
-static void draw_destination_frame(void) {
+static void draw_endpoint_frame(unsigned column,const char *caption,int inactive) {
     DemoLayout *d=&main_view.l;
     struct RastPort *rp=main_view.window->RPort;
     struct TagItem tags[]={
@@ -982,18 +975,23 @@ static void draw_destination_frame(void) {
         {GTBB_Recessed,TRUE},
         {TAG_DONE,0}
     };
-    LONG x=d->selector_x[2],y=d->endpoint_frame_y;
-    LONG width=d->selector_w[2],height=d->selector_h;
-    int inactive=main_controls_busy() ||
-                 (!destination_mode_mask() && !destination_button_available());
+    LONG x=d->selector_x[column],y=d->endpoint_frame_y;
+    LONG width=d->selector_w[column],height=d->selector_h;
     SetDrMd(rp,JAM1);
     fill(rp,system_pen(BACKGROUNDPEN),x+2,y+2,x+width-3,y+height-3);
     DrawBevelBoxA(rp,x,y,width,height,tags);
     SetAPen(rp,system_pen(TEXTPEN));
     Move(rp,x+4,y+(height-rp->TxHeight)/2+rp->TxBaseline);
-    Text(rp,(STRPTR)main_view.target_label,strlen(main_view.target_label));
+    Text(rp,(STRPTR)caption,strlen(caption));
     /* This frame is painted directly, so GadTools cannot ghost it. */
     if(inactive)ghost_area(rp,x,y,x+width-1,y+height-1);
+}
+
+static void draw_endpoint_frames(void) {
+    int busy=main_controls_busy();
+    draw_endpoint_frame(1,main_view.source_label,busy || !source_mode_mask());
+    draw_endpoint_frame(2,main_view.target_label,
+                        busy || (!destination_mode_mask() && !destination_button_available()));
 }
 
 static void draw_main_start_label(void) {
@@ -1085,7 +1083,7 @@ static void draw_main_static(void) {
                   d->right-d->left+1,d->selector_h+4,tags);
     DrawBevelBoxA(main_view.window->RPort,d->left,d->main_desc_y-2,
                   d->right-d->left+1,d->selector_h+4,tags);
-    draw_destination_frame();
+    draw_endpoint_frames();
 }
 static void draw_marker(struct RastPort *rp,LONG x,LONG y,
                         LONG width,LONG height,char marker,ULONG pen) {
@@ -1259,7 +1257,7 @@ static void update_main_actions(void) {
             set_cycle_state(main_view.operation_options[0],copy_modes,copy_mode,0);
     }
     if(!main_view.gadgets_detached) {
-        draw_destination_frame();
+        draw_endpoint_frames();
         draw_main_progress();
         draw_main_start_label();
     }
@@ -1286,9 +1284,6 @@ static void sync_action_labels(void) {
 static void refresh_main_selection(void) {
     if(!main_view.window)return;
     update_main_status();
-    if(main_view.source_text)
-        GT_SetGadgetAttrs(main_view.source_text,main_view.window,NULL,
-                          GTTX_Text,(ULONG)main_view.source_label,TAG_DONE);
     if(main_view.description)
         GT_SetGadgetAttrs(main_view.description,main_view.window,NULL,
                           GTTX_Text,(ULONG)main_view.desc_label,TAG_DONE);
