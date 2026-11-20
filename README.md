@@ -2,7 +2,7 @@
 
 Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga computers. The native interface uses Intuition and GadTools and targets MC68000 and AmigaOS 2.04 or later.
 
-[Download Dolly Alpha 3.4 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.4) · [All releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+[Download Dolly Alpha 3.5 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.5) · [All releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
 
 ![Dolly Alpha 3 displaying a sector copy with Sheep Counter open](docs/screenshots/sector-copy.png)
 
@@ -16,15 +16,17 @@ Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga compu
 
 *Restore Image in progress on AmigaOS 3.2. The main window shows the overall progress, and Sheep Counter shows the sector grid, block counts and errors.*
 
-## What works in Alpha 3.4
+## What works in Alpha 3.5
 
 | Feature | Current scope |
 | --- | --- |
 | Sheep Inventory | Inspect device geometry and RDB/MBR partitions, copy details to the clipboard, export partition-table backups and restore RDB on supported offline targets. |
 | Surface Scan | Read-only scan of a selected sector range with retries, LBA/CHS reporting and an exportable log. |
 | Create Image | Write staged RAW, HDF or IFF DOLY images. DOLY offers raw, Fast (PackBits) and Compact (LZSS/PackBits) modes. |
-| Restore Image | Write flat RAW/HDF images to a whole device or in-range RDB partition. Size differences and layout discrepancies require explicit confirmation. |
+| Restore Image | Write RAW/HDF or single-file and split IFF DOLY images to a whole device or in-range RDB partition. Size differences and layout discrepancies require explicit confirmation. |
 | Sector-to-sector Copy | Copy equally sized whole devices or in-range RDB partitions, with optional read-back verification. |
+| Smart Copy | Copy allocated OFS/FFS blocks between compatible RDB partitions, including mixed Partition and Logical device selections. |
+| Clone and resize | Analyze FFS allocation and plan resize in read-only mode. |
 | Sheep Counter | Open the resizable Details window during an operation for progress, the sector grid, block and error counts, and the log when available. |
 
 Dolly reviews warnings before raw transfers and checks related AmigaDOS
@@ -33,9 +35,13 @@ Use disposable media for alpha write tests. See [device writes](docs/DEVICE_WRIT
 for size mismatch consequences and [the test matrix](docs/TEST_MATRIX.md)
 for the boundary between host tests, cross-builds and native runtime evidence.
 
+Smart Copy on AmigaOS 3.2 was verified in WinUAE by booting from the
+destination and mounting the renamed volume after reboot with RDB mode enabled.
+
 ## Getting started
 
-Download and unpack the Amiga release, then run `Dolly` on AmigaOS.
+Download the MC68000 executable from the release page, copy it to your Amiga,
+and run it on AmigaOS.
 Use the operation, source and destination selectors in the main window.
 Settings holds font and I/O options. See [installation](docs/INSTALLATION.md)
 and [AmigaOS I/O](docs/AMIGA_IO.md) for runtime details.
@@ -52,6 +58,7 @@ See [native build instructions](docs/NATIVE_SMOKE.md) for the MC68000 toolchain.
 
 ## Documentation
 
+- [Operation workflows, step by step](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/blob/v0.1.0-alpha.3.5/docs/OPERATIONS_EN.md)
 - [User and developer documentation](docs/README.md)
 - [Roadmap](docs/ROADMAP.md), [backlog](docs/BACKLOG.md) and [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues)
 - [Contributing](CONTRIBUTING.md) and [MIT License](LICENSE)
@@ -60,5 +67,5 @@ See [native build instructions](docs/NATIVE_SMOKE.md) for the MC68000 toolchain.
 
 - Support classic AmigaOS on baseline MC68000 without an FPU or MMU.
 - Fully resolution, font size and aspect ratio aware GUI with resizable windows.
-- Extend image and recovery support with IFF DOLY restore, resumable transfers,
+- Extend image and recovery support with resumable transfers,
   filesystem-aware copying and resizing, and controlled Disk Vet repair.
