@@ -44,6 +44,53 @@ This review adds no AmiPart code to Dolly.
   driver-reported write bounds.
   [Capacity probe](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/rdb.c#L181)
 
+## Addressing beyond 4 GiB
+
+AmiPart stores byte capacities and calculates device byte offsets in
+`UQUAD`. `BlockDev_ReadBlocks` and `BlockDev_WriteBlocks` split offsets
+between `io_Offset` (low 32 bits) and `io_Actual` (high 32 bits on input).
+They use NSD READ64/WRITE64 when advertised and otherwise try legacy TD64
+24/25. The single-block reader can also use SCSI READ(10), whose offset
+is a sector LBA. The NSD flags for read and write are independent.
+[Capability discovery](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/rdb.c#L240)
+· [Multi-block transfers](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/rdb.c#L831)
+
+AmiPart's legacy multi-block fallback checks only the starting offset.
+Dolly should check the entire request before using CMD_READ/CMD_WRITE,
+including a batch that starts below 4 GiB and crosses the boundary.
+Keep checked byte arithmetic and verify exact transfer lengths. Preserve
+read-back and flush policy per qualified driver. AmiPart's FFS grow
+explicitly checks the new root after writing because some setups report
+a successful 64-bit write without persisting it.
+[Root-block read-back](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/ffsresize.c#L777)
+
+The native raw image restore reads file data sequentially, which avoids
+the signed AmigaDOS Seek position. The file handler must still support
+the actual file length. The random-access native HDF adapter uses signed
+Seek, whereas the Linux adapter uses pread/pwrite with 64-bit positions.
+AmiPart also uses 32-bit LBA arguments in the block API and READ CAPACITY(10)
+for capacity discovery. For 512-byte sectors the latter reaches a sentinel
+at about 2 TiB. The legacy last-readable probe is capped near 1 TiB.
+[Sequential restore](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/imagecopy.c#L137)
+· [READ CAPACITY(10)](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/rdb.c#L99)
+
+Dolly already qualifies NSD READ64 and a UAE-IDE SCSI READ(10) fallback
+for reads. Native Copy and Restore currently reject destination extents
+past 4 GiB. A first writable implementation can qualify paired NSD
+READ64 and WRITE64, keep the ROM/device version checks, and test a
+cross-boundary write and read-back on a disposable HDF with low-offset
+canaries. Legacy TD64 needs separate driver evidence. Larger floppy or
+hardfile container support is independent of native device addressing.
+
+A Linux host test of the reviewed AmiPart revision created a sparse
+5.5 GiB HDF with a DOS3 partition starting at byte 4,587,520,000. It
+grew from 16 to 32 MiB, produced a shrink report, and shrank to 14 MiB.
+File hashes, the final RDB extent and a low-offset wraparound canary
+matched. The fixture was synthetic and used the test suite's bitmap
+revalidation between operations. This verifies the host file path and
+filesystem arithmetic above 4 GiB. Native driver operation needs
+separate coverage.
+
 ## Filesystem resize during copy
 
 AmiPart separates three operations. `RDB_GrowToDevice` extends the disk's
