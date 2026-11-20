@@ -144,7 +144,7 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_restore_source.c amiga/dolly_amiga_transfer.c
       src/dolly_restore_transfer.c src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
-      src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
+      src/dolly_dly_writer.c src/dolly_dly_reader.c src/dolly_dly_codec.c src/dolly_checksum.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
@@ -347,7 +347,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollydlyreader PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 add_executable(test-iff tests/test_iff.c src/dolly_dly_writer.c)
-target_link_libraries(test-iff PRIVATE dollyiff dollydlyreader dollychecksum)
+target_link_libraries(test-iff PRIVATE dollyiff dollydlyreader dollychecksum dollyrestoresource)
 add_test(NAME iff_form_doly COMMAND test-iff)
 add_executable(dolly-iff src/dolly_iff_inspect.c)
 target_link_libraries(dolly-iff PRIVATE dollyiff)

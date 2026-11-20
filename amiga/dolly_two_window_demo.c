@@ -341,6 +341,11 @@ static const char *image_source_name(void) {
     const char *partition=unit?strstr(unit+8," / "):NULL;
     return partition?partition+3:source;
 }
+static unsigned transfer_check_percent(void) {
+    return transfer.job.source_checked<transfer.job.source_check_bytes?
+           (unsigned)(transfer.job.source_checked*100u/transfer.job.source_check_bytes):100u;
+}
+
 static void update_main_status(void) {
     int need=dolly_demo_needs_target((DollyDemoOperation)selected_operation);
     int can=dolly_demo_can_start((DollyDemoOperation)selected_operation,
@@ -362,7 +367,11 @@ static void update_main_status(void) {
                      "Copy complete: %.20s -> %.23s",transfer_from,transfer_to);
         else if(operation.state==DOLLY_OP_CANCELLED)
             text_copy(main_view.status_label,sizeof(main_view.status_label),
-                      "Stopped. Destination may be partly overwritten.");
+                      transfer.may_have_written?"Stopped. Destination may be partly overwritten.":
+                                                "Stopped. No sectors were written.");
+        else if(operation.state==DOLLY_OP_RUNNING && transfer_check_percent()<100u)
+            snprintf(main_view.status_label,sizeof(main_view.status_label),
+                     "Validating IFF DOLY: %u%%",transfer_check_percent());
         else if(operation.state==DOLLY_OP_RUNNING)
             snprintf(main_view.status_label,sizeof(main_view.status_label),
                      "%s: %.18s -> %.21s",
@@ -1670,13 +1679,19 @@ int main(int argc,char **argv) {
         if(!quit && transfer.opened && operation.state==DOLLY_OP_RUNNING) {
             unsigned old=progress_units(GRID_TOTAL);
             int finished;
+            unsigned old_check=transfer_check_percent();
             dolly_amiga_transfer_step(&transfer);
+            if(old_check!=transfer_check_percent())refresh_main_selection();
             finished=transfer.job.state!=DOLLY_RESTORE_TRANSFERRING;
             if(transfer.failure && old<GRID_TOTAL)cell_result[old]='X';
             (void)dolly_operation_progress(&operation,
                    transfer.job.processed/transfer.target.sector_bytes,transfer.failure?1u:0u,0);
             if(finished) {
-                if(transfer.failure) {
+                if(transfer.failure &&
+                   transfer.job.source_checked<transfer.job.source_check_bytes) {
+                    dolly_amiga_role_request(main_view.window,"Dolly - Restore blocked",
+                                             transfer.failure,"OK",NULL,NULL);
+                } else if(transfer.failure) {
                     char lba[21],reason[246];
                     uint64_t first=(transfer.target.start+transfer.job.processed)/
                                    transfer.target.sector_bytes;

@@ -1,6 +1,9 @@
 #include "dolly_amiga_restore_source.h"
+#include "dolly_dly_reader.h"
 #include <proto/dos.h>
 #include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 
 typedef struct ImageFile {
     BPTR file,lock;
@@ -48,12 +51,15 @@ DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source
                          const DollyEndpoint *image,
                          uint32_t sector_bytes) {
     ImageFile *file;
+    DollyBlockSource *container=NULL;
+    unsigned char header[12];
+    const char *extension;
+    int encoded;
     DollyBlockStatus status=DOLLY_BLOCK_EIO;
     uint64_t size=0;
     if(!source || source->blocks || !image || image->kind!=DOLLY_ENDPOINT_FILE ||
        !image->path[0])return DOLLY_BLOCK_EINVAL;
-    if(image->image_format!=DOLLY_IMAGE_RAW && image->image_format!=DOLLY_IMAGE_HDF)
-        return DOLLY_BLOCK_EUNSUPPORTED;
+    if(image->image_format==DOLLY_IMAGE_ADF)return DOLLY_BLOCK_EUNSUPPORTED;
     /* Classic AmigaDOS Seek and ExamineFH use signed 32-bit positions. */
     file=calloc(1,sizeof(*file));
     if(!file)return DOLLY_BLOCK_ENOMEM;
@@ -61,11 +67,39 @@ DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source
     if(!file->file)goto fail;
     status=dolly_amiga_image_file_size(file->file,&size);
     if(status!=DOLLY_BLOCK_OK)goto fail;
-    status=dolly_restore_check_raw(size,size,sector_bytes);
-    if(status!=DOLLY_BLOCK_OK)goto fail;
+    if(size>=sizeof(header)) {
+        status=read_image(file,0,header,sizeof(header)).status;
+        if(status!=DOLLY_BLOCK_OK)goto fail;
+    }
+    encoded=size>=sizeof(header) && !memcmp(header,"FORM",4) && !memcmp(header+8,"DOLY",4);
+    extension=strrchr(image->path,'.');
+    if(!encoded) {
+        if((extension && (!strcasecmp(extension,".dly") || !strcasecmp(extension,".doly"))) ||
+           (image->image_format!=DOLLY_IMAGE_RAW && image->image_format!=DOLLY_IMAGE_HDF)) {
+            status=DOLLY_BLOCK_EUNSUPPORTED;
+            goto fail;
+        }
+        status=dolly_restore_check_raw(size,size,sector_bytes);
+        if(status!=DOLLY_BLOCK_OK)goto fail;
+    }
     file->lock=DupLockFromFH(file->file);
-    status=dolly_block_open_backend(size,read_image,close_image,file,&source->blocks);
+    status=dolly_block_open_backend(size,read_image,close_image,file,&container);
     if(status!=DOLLY_BLOCK_OK)goto fail;
+    if(encoded) {
+        DollyDlyImageInfo info;
+        status=dolly_dly_open(container,&source->blocks,&info);
+        if(status!=DOLLY_BLOCK_OK) {
+            dolly_block_close(container);
+            return status;
+        }
+        if(info.sector_bytes!=sector_bytes) {
+            dolly_amiga_restore_source_close(source);
+            return DOLLY_BLOCK_EINVAL;
+        }
+        source->is_dly=1;
+    } else {
+        source->blocks=container;
+    }
     source->lock=file->lock;
     return DOLLY_BLOCK_OK;
 fail:
@@ -77,4 +111,5 @@ void dolly_amiga_restore_source_close(DollyAmigaRestoreSource *source) {
     dolly_block_close(source->blocks);
     source->blocks=NULL;
     source->lock=0;
+    source->is_dly=0;
 }

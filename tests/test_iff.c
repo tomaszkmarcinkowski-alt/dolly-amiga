@@ -2,6 +2,7 @@
 #include "dolly_iff.h"
 #include "dolly_dly_writer.h"
 #include "dolly_dly_reader.h"
+#include "dolly_restore_transfer.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -260,6 +261,56 @@ static void verify_large_raw_read(void) {
     }
     dolly_block_close(decoded);
 }
+static DollyBlockWriteStatus write_restored_sector(void *context,uint64_t offset,
+                                                  const void *data,size_t size,int verify) {
+    Buffer *output=context;
+    assert(offset==output->used && verify);
+    assert(append(output,data,size));
+    return DOLLY_WRITE_VERIFIED;
+}
+static void verify_restore_gate(void) {
+    static Buffer image,output;
+    DollyBlockSource *decoded=NULL;
+    DollyDlyWriter writer;
+    DollyRestoreTransfer transfer;
+    unsigned char raw[1024],packed[512],scratch[512];
+    unsigned corrupt;
+    memset(raw,0x11,512);
+    memset(raw+512,0x22,512);
+    image.limit=sizeof(image.bytes);
+    output.limit=sizeof(output.bytes);
+    assert(dolly_dly_init(&writer,0,2,512,512));
+    assert(dolly_dly_compress(&writer,DOLLY_DLY_PACKBITS,packed,NULL,seek));
+    assert(dolly_dly_begin(&writer,append,&image));
+    assert(dolly_dly_append(&writer,raw,512));
+    assert(dolly_dly_append(&writer,raw+512,512));
+    assert(dolly_dly_finish(&writer));
+    for(corrupt=0;corrupt<=1;++corrupt) {
+        if(corrupt)image.bytes[image.used-1]^=1;
+        output.used=output.position=0;
+        assert(open_image(&image,&decoded,NULL)==DOLLY_BLOCK_OK);
+        assert(dolly_restore_transfer_init_prefix(&transfer,decoded,512,512,512,&output,
+                                                  write_restored_sector,1));
+        transfer.source_check_bytes=dolly_block_size(decoded);
+        assert(dolly_restore_transfer_step(&transfer,scratch,sizeof(scratch))==
+               DOLLY_RESTORE_TRANSFERRING);
+        assert(transfer.source_checked==512 && transfer.processed==0 && output.used==0);
+        if(corrupt) {
+            /* Validate even the tail excluded from a truncated restore. */
+            assert(dolly_restore_transfer_step(&transfer,scratch,sizeof(scratch))==
+                   DOLLY_RESTORE_READ_FAILED);
+            assert(transfer.read_status==DOLLY_BLOCK_EIO && output.used==0);
+        } else {
+            assert(dolly_restore_transfer_step(&transfer,scratch,sizeof(scratch))==
+                   DOLLY_RESTORE_TRANSFERRING);
+            assert(transfer.source_checked==sizeof(raw) && output.used==0);
+            assert(dolly_restore_transfer_step(&transfer,scratch,sizeof(scratch))==
+                   DOLLY_RESTORE_FINISHED);
+            assert(output.used==512 && !memcmp(output.bytes,raw,512));
+        }
+        dolly_block_close(decoded);
+    }
+}
 int main(void){
  unsigned char p[128]={0};unsigned chunks;unsigned i;
  memcpy(p,"FORM",4);wr32(p+4,4);memcpy(p+8,"DOLY",4);
@@ -284,5 +335,6 @@ int main(void){
  verify_compression();
  verify_reader_navigation();
  verify_large_raw_read();
+ verify_restore_gate();
  puts("IFF structural and DLY writer tests passed");return 0;
 }

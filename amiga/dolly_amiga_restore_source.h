@@ -10,11 +10,12 @@ DollyBlockStatus dolly_amiga_image_file_size(BPTR file,uint64_t *size);
 
 typedef struct DollyAmigaRestoreSource {
     DollyBlockSource *blocks;
+    int is_dly;
     BPTR lock; /* Borrowed from the source. Kept until close; zero if unavailable. */
 } DollyAmigaRestoreSource;
 
-/* Initialize to zero. Close before reusing. Only explicit flat RAW/HDF
- * formats are supported. The lock identifies the actual opened file. */
+/* Initialize to zero. Close before reusing. Recognizes FORM DOLY by content
+ * or opens flat RAW/HDF. The lock identifies the actual opened file. */
 DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source,
                          const DollyEndpoint *image,
                          uint32_t sector_bytes);

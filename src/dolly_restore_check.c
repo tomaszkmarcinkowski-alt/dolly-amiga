@@ -64,7 +64,7 @@ static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info,int 
     }
     if(!memcmp(boot,"FORM",4) && !memcmp(boot+8,"DOLY",4)) {
         info->encoded=1;
-        return "IFF DOLY decoding is unavailable for Restore.";
+        return "IFF DOLY container must be decoded before assessment.";
     }
     if(boot[510]==0x55 && boot[511]==0xaa)
         return "MBR or PC boot signature detected. Partition layout was not verified.";

@@ -705,7 +705,7 @@ void dolly_amiga_describe_file(const DollyEndpoint *file,char *out,size_t capaci
     else if(suffix_is(file->path,".hdf"))hint="HDF (extension)";
     else if(suffix_is(file->path,".raw") || suffix_is(file->path,".img"))
         hint="RAW (extension)";
-    else if(suffix_is(file->path,".doly") || suffix_is(file->path,".iff"))
+    else if(suffix_is(file->path,".dly") || suffix_is(file->path,".doly") || suffix_is(file->path,".iff"))
         hint="IFF? (extension)";
     snprintf(out,capacity,"Type: %s | Size: unavailable",hint);
     if(!DOSBase)return;

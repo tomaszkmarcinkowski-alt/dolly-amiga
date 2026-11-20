@@ -2,18 +2,18 @@
 
 **Copy → Sector-to-sector** copies between two whole devices or two
 in-range RDB partitions with equal byte lengths and sector sizes.
-**Restore Image** writes a flat RAW/HDF image to a whole
+**Restore Image** writes a RAW/HDF or single-file IFF DOLY image to a whole
 device or in-range RDB partition. The first write path supports 512-byte sectors
 and destination byte offsets below 4 GiB. Classic AmigaDOS file
-positions limit the RAW/HDF source to less than 2 GiB.
+positions limit the source file to less than 2 GiB. IFF DOLY also uses
+the current writer profile with a decoded size below 2 GiB.
 
 Dolly checks device geometry, the RDB extent, DMA settings, and logical
 overlap. Whole-device Copy treats both devices as raw sectors. Dolly describes
 the destination partition table, if recognized, in the warning review.
 Partition-level operations require RDB. Whole-device Restore transfers raw
-sectors regardless of the partition-table format. IFF DOLY decoding,
-filesystem-aware copying and resizing
-remain outside this path. For raw sources, Dolly uses DOS Inhibit on active filesystems within
+sectors regardless of the partition-table format. Filesystem-aware copying
+and resizing remain outside this path. For raw sources, Dolly uses DOS Inhibit on active filesystems within
 the selected range, then releases the temporary inhibits on completion,
 failure or cancellation. The file volume serving a Restore image stays
 available for reading. Restore therefore requires the image to reside
@@ -42,7 +42,10 @@ A larger image loses its tail on restore, which may leave data incomplete
 and filesystems corrupt or unreadable. Dolly does not resize partition or
 filesystem structures. An invalid write range or unreadable extent
 blocks the operation. The image file's actual open handle is
-used for the volume overlap check.
+used for the volume overlap check. IFF DOLY is recognized by its container
+signature. The decoded sector size must match the destination. After the
+warning review, Dolly validates the whole image before it writes any image
+sectors. The validation pass can be paused or cancelled.
 
 Copy and Restore collect their warnings after Start and open one review
 window. The left list shows the warnings in order. The right panel shows

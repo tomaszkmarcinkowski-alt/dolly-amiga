@@ -412,7 +412,7 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     t->parent=parent;
     if(!raw_endpoint(destination) || destination->outside_range!=DOLLY_RANGE_STRICT ||
        (!restore && (!raw_endpoint(source) || source->outside_range!=DOLLY_RANGE_STRICT))) {
-        problem="Choose a whole disk or an in-range RDB partition. Restore requires a RAW/HDF file.";
+        problem="Choose a whole disk or an in-range RDB partition. Restore requires a RAW/HDF or IFF DOLY file.";
         goto fail;
     }
     if(!restore && !dolly_surface_open(&t->reader,source,parent,DOLLY_IO_SOURCE,0,&warnings)) {
@@ -452,7 +452,7 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     if(restore) {
         DollyBlockStatus status=dolly_amiga_restore_source_open(&t->image,source,disk.sector_bytes);
         if(status!=DOLLY_BLOCK_OK) {
-            snprintf(reason,sizeof(reason),"Cannot open a flat RAW/HDF image: %s.",
+            snprintf(reason,sizeof(reason),"Cannot open the RAW/HDF or IFF DOLY image (check sector size): %s.",
                      dolly_block_status_name(status));
             problem=reason;
             goto fail;
@@ -661,7 +661,10 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     if(restore?dolly_restore_transfer_init_prefix(&t->job,input,t->target.length,
                    t->target.sector_bytes,batch,t,write_extent,verify):
                dolly_restore_transfer_init(&t->job,input,t->target.length,
-                   t->target.sector_bytes,batch,t,write_extent,verify))return 1;
+                   t->target.sector_bytes,batch,t,write_extent,verify)) {
+        if(t->image.is_dly)t->job.source_check_bytes=dolly_block_size(input);
+        return 1;
+    }
     problem="Cannot initialize the aligned transfer.";
 fail:
     if(problem)dolly_amiga_role_request(parent,restore?"Dolly - Restore blocked":"Dolly - Copy blocked",
@@ -677,7 +680,10 @@ cancel:
 
 void dolly_amiga_transfer_step(DollyAmigaTransfer *t) {
     DollyRestoreTransferState state=dolly_restore_transfer_step(&t->job,t->buffer,t->target.bounce_bytes);
-    if(state==DOLLY_RESTORE_READ_FAILED && !t->failure)t->failure=dolly_block_status_name(t->job.read_status);
+    if(state==DOLLY_RESTORE_READ_FAILED && !t->failure)
+        t->failure=t->job.source_checked<t->job.source_check_bytes?
+            "IFF DOLY validation failed. No sectors were written.":
+            dolly_block_status_name(t->job.read_status);
     else if(state==DOLLY_RESTORE_WRITE_FAILED && !t->failure) {
         switch(t->job.write_status) {
         case DOLLY_WRITE_REJECTED:t->failure="Write rejected before submission.";break;

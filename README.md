@@ -46,6 +46,9 @@ ctest --test-dir build --output-on-failure
 
 See [native build instructions](docs/NATIVE_SMOKE.md) for the MC68000 toolchain.
 
+In the development branch, Restore Image also accepts single-file IFF DOLY
+images and validates them before writing.
+
 ## Documentation
 
 - [User and developer documentation](docs/README.md)
@@ -56,5 +59,5 @@ See [native build instructions](docs/NATIVE_SMOKE.md) for the MC68000 toolchain.
 
 - Support classic AmigaOS on baseline MC68000 without an FPU or MMU.
 - Fully resolution, font size and aspect ratio aware GUI with resizable windows.
-- Extend image and recovery support with IFF DOLY restore, resumable transfers,
+- Extend image and recovery support with resumable transfers,
   filesystem-aware copying and resizing, and controlled Disk Vet repair.

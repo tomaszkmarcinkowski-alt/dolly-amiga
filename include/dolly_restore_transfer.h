@@ -19,6 +19,8 @@ typedef struct DollyRestoreTransfer {
     void *target;
     DollyRestoreWriteBatch write_batch;
     uint64_t bytes,processed;
+    /* Nonzero check limit gates writes until the entire source is read. */
+    uint64_t source_check_bytes,source_checked;
     uint32_t batch_bytes;
     int verify;
     DollyRestoreTransferState state;

@@ -28,19 +28,26 @@ int dolly_restore_transfer_init_prefix(DollyRestoreTransfer *transfer,DollyBlock
 DollyRestoreTransferState dolly_restore_transfer_step(DollyRestoreTransfer *transfer,
                                                      void *buffer,size_t buffer_bytes) {
     DollyBlockReadResult result;
-    uint64_t remaining;
+    uint64_t remaining,offset;
     size_t bytes;
+    int checking;
     if(transfer->state!=DOLLY_RESTORE_TRANSFERRING)return transfer->state;
-    remaining=transfer->bytes-transfer->processed;
+    checking=transfer->source_checked<transfer->source_check_bytes;
+    offset=checking?transfer->source_checked:transfer->processed;
+    remaining=(checking?transfer->source_check_bytes:transfer->bytes)-offset;
     bytes=remaining<transfer->batch_bytes?(size_t)remaining:transfer->batch_bytes;
     if(!buffer || buffer_bytes<bytes) {
         transfer->read_status=DOLLY_BLOCK_EINVAL;
         return transfer->state=DOLLY_RESTORE_READ_FAILED;
     }
-    result=dolly_block_read(transfer->source,transfer->processed,buffer,bytes);
+    result=dolly_block_read(transfer->source,offset,buffer,bytes);
     if(result.status!=DOLLY_BLOCK_OK || result.bytes_read!=bytes) {
         transfer->read_status=result.status;
         return transfer->state=DOLLY_RESTORE_READ_FAILED;
+    }
+    if(checking) {
+        transfer->source_checked+=bytes;
+        return transfer->state;
     }
     transfer->write_status=transfer->write_batch(transfer->target,transfer->processed,
                                                 buffer,bytes,transfer->verify);

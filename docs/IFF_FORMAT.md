@@ -85,10 +85,17 @@ The reader uses one four-byte index entry per 256 chunks. It caches one
 decoded chunk of at most 32 KiB and reserves at most another 32 KiB for
 compressed input. Version 2 follows the current writer profile with stored
 compressed data smaller than the raw chunk. Larger version 1 raw chunks use
-a 4 KiB streaming buffer. The GUI Restore Image path is unchanged.
+a 4 KiB streaming buffer.
 
-Segmentation, resume, error maps and GUI image restore are
-future format work. New codecs or layouts require an explicit schema.
+Restore Image detects FORM DOLY by signature and checks its sector size
+against the selected destination. It uses the decoded byte count in the
+normal Restore warnings. After approval, it verifies every chunk in
+cancellable steps before issuing any image writes, including chunks past
+the end of a smaller destination. The transfer continues to verify chunks
+as it reads them for writing. The stored first LBA is source metadata.
+Decoded sector zero maps to the start of the selected destination.
+
+Segmentation, resume and error maps are future format work. New codecs or layouts require an explicit schema.
 
 ## References
 
