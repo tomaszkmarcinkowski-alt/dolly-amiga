@@ -74,12 +74,12 @@ at about 2 TiB. The legacy last-readable probe is capped near 1 TiB.
 [Sequential restore](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/imagecopy.c#L137)
 · [READ CAPACITY(10)](https://github.com/ChuckyGang/AmiPart/blob/0f77f10d206415fdc5602d48a83ce412ab84322d/src/rdb.c#L99)
 
-Dolly already qualifies NSD READ64 and a UAE-IDE SCSI READ(10) fallback
-for reads. Native Copy and Restore currently reject destination extents
-past 4 GiB. A first writable implementation can qualify paired NSD
-READ64 and WRITE64, keep the ROM/device version checks, and test a
-cross-boundary write and read-back on a disposable HDF with low-offset
-canaries. Legacy TD64 needs separate driver evidence. Larger floppy or
+Dolly qualifies NSD READ64 and a UAE-IDE SCSI READ(10) fallback
+for reads. Native Copy and Restore now require paired NSD READ64
+and WRITE64 for destination extents above 4 GiB, subject to existing
+driver version checks. Mocked Exec tests exercise cross-boundary
+writes and readback. A disposable HDF with low-offset canaries remains
+the next native test. Legacy TD64 needs separate driver evidence. Larger floppy or
 hardfile container support is independent of native device addressing.
 
 A Linux host test of the reviewed AmiPart revision created a sparse
@@ -137,3 +137,60 @@ synthetic PFS/SFS volumes. Its FFS test code rebuilds the bitmap between
 operations to stand in for the AmigaOS validator. The results cover
 image-file structure and content checks rather than native handler or
 controller qualification.
+
+## Dolly read-only FFS planning
+
+Choose **Copy → Clone and resize**, select two in-range RDB partitions
+and press Start. Dolly inhibits any mounted source filesystem for the
+bitmap read and releases it after analysis. The destination is queried
+for extent and alignment. Analysis issues no block writes.
+
+Warning Review shows the bitmap report, growth or shrink assessment,
+and relevant RDB differences as separate items. The bitmap report shows
+the current partition size, occupied blocks, highest
+occupied block, minimum extent at the existing block positions and
+occupied blocks outside the planned destination. The minimum includes
+root and bitmap metadata. Moving the root and redesigning the bitmap
+are separate steps. A valid bitmap is evidence for planning, not a
+walk of the full directory and file tree. Dolly rejects unsupported
+DosTypes, a dirty bitmap, checksum errors, duplicate bitmap references,
+and bitmap pages that mark their own metadata free.
+
+For a larger target, Dolly also reports the root location calculated
+from the target geometry, whether it is already occupied, and how many
+extra bitmap and bitmap extension blocks are needed. It distinguishes an
+occupied metadata block from another allocated block. Differences in
+RDB filesystem block size, reserved block count or DosType are reported
+so they can be resolved before implementing any write path.
+
+Warning Review also lists where the planned new bitmap pages and
+extension blocks would go. Dolly assigns blocks from the start of the
+added extent, pages first, skipping the planned root. It flags when the
+added extent cannot hold all required metadata. This placement leaves
+existing bitmap blocks in their current positions and does not move
+a destination-root occupant.
+
+Where the root slot and added metadata fit the plan, Dolly generates a
+bitmap preview in memory. The preview covers the existing boundary and
+root pages and samples the first and final new pages. The generator
+preserves existing allocations, reserves the planned root and new
+metadata, clears out-of-volume tail bits and recomputes the checksum.
+It leaves the old root allocated until a later phase can safely update
+its references. Neither the preview nor the allocation plan writes
+filesystem blocks.
+
+### Smart Copy preview
+
+AmiPart's resize code uses the FFS allocation bitmap to find occupied
+blocks. Its partition clone loop copies every block. Dolly applies the
+allocation-map approach to preview copying only occupied blocks, including
+the reserved boot area, at their original partition-relative offsets.
+
+Choose **Copy → Smart Copy** and two in-range RDB partitions or two
+logical devices that each resolve to a unique in-range RDB partition.
+Both endpoints must have equal lengths and matching filesystem block
+size, reserved blocks and DosType.
+Start shows the allocated and skipped block counts and the number of
+contiguous copy ranges in Warning Review. The preview uses the same
+read-only bitmap validation and source isolation as Clone and resize.
+Writing the selected ranges is a separate step.

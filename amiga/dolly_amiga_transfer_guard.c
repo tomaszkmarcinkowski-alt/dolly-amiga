@@ -118,6 +118,21 @@ int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWar
     return 1;
 }
 
+int dolly_amiga_read_guard_isolated(DollyReadGuard *guard) {
+    unsigned i;
+    if(!dolly_amiga_read_guard_check(guard))return 0;
+    if(guard)for(i=0;i<guard->pending.count;++i)
+        if(!guard->pending.entries[i].suspended)return 0;
+    return 1;
+}
+
+int dolly_amiga_read_guard_allows_lock(const DollyReadGuard *guard,BPTR lock) {
+    unsigned i;
+    if(guard)for(i=0;i<guard->pending.count;++i)
+        if(dolly_amiga_lock_uses_mount(lock,&guard->pending.entries[i]))return 0;
+    return 1;
+}
+
 int dolly_amiga_read_guard_check(DollyReadGuard *guard) {
     unsigned i;
     if(!guard)return 1;
