@@ -66,6 +66,10 @@ int dolly_demo_needs_target(DollyDemoOperation op);
 int dolly_demo_can_start(DollyDemoOperation op,
                          const DollyEndpoint *source,
                          const DollyEndpoint *target);
+/* Selection-only checks. Resolve both endpoints and check physical ranges
+ * before analyzing or copying. */
+unsigned dolly_smart_copy_modes(void);
+int dolly_smart_copy_can_start(const DollyEndpoint *source,const DollyEndpoint *target);
 typedef enum DollyUnitRelation {
     DOLLY_UNIT_RANGE_UNKNOWN,
     DOLLY_UNIT_RANGE_OVERLAP,

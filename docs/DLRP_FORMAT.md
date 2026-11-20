@@ -1,7 +1,8 @@
 # Dolly Restore Pointer (DLRP) v1
 
 A DLRP is an operation checkpoint for unexpected failures in imaging
-and, once implemented, Restore and Copy/Clone. The live Create Image
+and supported Restore Image and sector-copy operations. Smart Copy resume
+requires a separate record of its range plan. The live Create Image
 operation offers one after a read, write or container-finalization error
 when the staged output is available. Saving preserves the committed
 prefix; any uncommitted tail must be removed before saving. Cancel

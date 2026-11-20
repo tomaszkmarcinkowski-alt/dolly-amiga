@@ -10,6 +10,16 @@ option(DOLLY_NATIVE_M68000 "Pass -m68000 for classic Motorola 68000" OFF)
 # Optional NDK compile target for the AmigaDOS preferences notification adapter.
 # This does not yet create a working GadTools event loop or plugin loader.
 option(DOLLY_NATIVE_GUI_WATCH "Compile AmigaDOS screen/font notify adapter (NDK required)" OFF)
+option(DOLLY_IMAGE_ONLY "Build only the desktop image command-line tool" OFF)
+if(DOLLY_IMAGE_ONLY)
+  if(DOLLY_NATIVE_ONLY OR DOLLY_NATIVE_M68000)
+    message(FATAL_ERROR "DOLLY_IMAGE_ONLY requires a desktop toolchain")
+  endif()
+  enable_testing()
+  include(cmake/DollyImage.cmake)
+  return()
+endif()
+
 # Portable operation state is independent of every GUI and disk adapter.
 # Both host and Amiga cross-builds compile the same C99 implementation.
 enable_testing()
@@ -139,12 +149,12 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_surface_log.c amiga/dolly_amiga_log_view.c
       amiga/dolly_amiga_clipboard.c amiga/dolly_amiga_image.c
       amiga/dolly_amiga_io_settings.c amiga/dolly_amiga_prefs.c amiga/dolly_amiga_fonts.c
-      amiga/dolly_amiga_transfer_guard.c
+      amiga/dolly_amiga_transfer_guard.c src/dolly_ffs_analyze.c src/dolly_clone_names.c
       amiga/dolly_amiga_destructive.c amiga/dolly_operation_pointer.c src/dolly_dlrp.c
       amiga/dolly_amiga_restore_source.c amiga/dolly_amiga_transfer.c
       src/dolly_restore_transfer.c src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
-      src/dolly_dly_writer.c src/dolly_dly_codec.c src/dolly_checksum.c)
+      src/dolly_dly_writer.c src/dolly_dly_reader.c src/dolly_dly_codec.c src/dolly_checksum.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
@@ -321,11 +331,12 @@ target_include_directories(test-amiga-mock PRIVATE
   ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(test-amiga-mock PRIVATE dollyblock dollyioplan dollydma)
 add_test(NAME amiga_exec_mock COMMAND test-amiga-mock)
-add_executable(test-amiga-write tests/test_amiga_write_mock.c amiga/dolly_amiga_write.c)
+add_executable(test-amiga-write tests/test_amiga_write_mock.c amiga/dolly_amiga_write.c
+  src/dolly_clone_names.c)
 target_compile_definitions(test-amiga-write PRIVATE DOLLY_AMIGA_MOCK)
 target_include_directories(test-amiga-write PRIVATE
   ${PROJECT_SOURCE_DIR}/tests/amiga_mock ${PROJECT_SOURCE_DIR}/amiga)
-target_link_libraries(test-amiga-write PRIVATE dollyblocktarget dollydma)
+target_link_libraries(test-amiga-write PRIVATE dollyblocktarget dollydma dollyioplan)
 add_test(NAME amiga_write_exec_mock COMMAND test-amiga-write)
 
 
@@ -341,8 +352,20 @@ target_link_libraries(dollyiff PUBLIC dollyblock)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyiff PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
-add_executable(test-iff tests/test_iff.c src/dolly_dly_writer.c src/dolly_dly_codec.c)
-target_link_libraries(test-iff PRIVATE dollyiff dollychecksum)
+add_library(dollydlyreader STATIC src/dolly_dly_reader.c src/dolly_dly_codec.c)
+target_link_libraries(dollydlyreader PUBLIC dollyblock PRIVATE dollychecksum)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(dollydlyreader PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+include(cmake/DollyImage.cmake)
+add_executable(test-ffs-analyze tests/test_ffs_analyze.c src/dolly_ffs_analyze.c src/dolly_clone_names.c)
+target_link_libraries(test-ffs-analyze PRIVATE dollyblock)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(test-ffs-analyze PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_test(NAME ffs_bitmap_analysis COMMAND test-ffs-analyze)
+add_executable(test-iff tests/test_iff.c src/dolly_dly_writer.c)
+target_link_libraries(test-iff PRIVATE dollyiff dollydlyreader dollychecksum dollyrestoresource)
 add_test(NAME iff_form_doly COMMAND test-iff)
 add_executable(dolly-iff src/dolly_iff_inspect.c)
 target_link_libraries(dolly-iff PRIVATE dollyiff)

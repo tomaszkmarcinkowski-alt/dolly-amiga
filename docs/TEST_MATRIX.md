@@ -1,5 +1,19 @@
 # Dolly — staged testing matrix
 
+## Restore Image development verification
+
+| Scenario | Result |
+| --- | --- |
+| Published IFF DOLY test binary | The downloaded MC68000 file matched the compiled executable by SHA-256 and opened its main window through `WBStartup` on FS-UAE / A600 / AmigaOS 2.05. Manual ASL selection, Warning Review and Pause/Stop interaction in WinUAE remain to be checked. [Test build](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/iff-doly-restore-test-20261120) |
+| Physical-device Restore Image | The maintainer reported completion without an error. Contents of that destination have not yet been compared with the source. |
+| IFF DOLY → emulated IDE disk | FS-UAE 3.1.66, A600, Kickstart and Workbench 2.05. A native test harness invoked the normal transfer and warning actions on a disposable 4 MiB HDF with write read-back enabled. All 131,072 decoded PackBits bytes matched the source, and the entire tail, including its sentinel, remained unchanged. |
+| Writer-generated IFF DOLY v1 and v2 Compact | Two additional A600 / AmigaOS 2.05 FS-UAE sessions restored writer-generated images to separate 4 MiB IDE HDFs with write read-back enabled. The v1 image contained eight raw chunks. The Compact image contained seven LZSS chunks and one raw fallback chunk. Each restored all 131,072 decoded bytes correctly and preserved the entire destination tail. The subsequent corrupt-image attempt in each session wrote zero bytes. |
+| Corrupt IFF DOLY | A separate emulator session rejected a CRC error in the middle of the same-sized image. The transfer reported zero bytes written, and the entire target matched its pre-test copy. |
+| Reopen in the same session | FS-UAE 3.1.66 reproduced corrupt INQUIRY and READ CAPACITY responses after a multi-sector transfer, including with cycle-exact enabled. With the ROM V37 retry, both queries reported 8,064 sectors. The second transfer rejected the corrupt image before writing. A host comparison confirmed the entire HDF still matched the previously restored prefix and untouched tail. |
+
+The harness acknowledged warning actions programmatically. These runs establish
+native disk I/O and byte integrity for the tested virtual media.
+
 ## Alpha 3.3 verification
 
 | Scope | Result |
@@ -1154,3 +1168,323 @@ With click-to-copy enabled, clicking the geometry row, the extended
 partition and its Last LBA detail separately put each full row on
 clipboard unit 0 without a keyboard shortcut. The partition and
 details lists aligned above the shared recessed status box.
+
+### NSD writes across 4 GiB
+
+A MC68000 test program called Dolly's destination adapter under FS-UAE
+on an emulated A600 with Kickstart 37.350 and a disposable sparse 5 GiB
+hardfile on `uaehf.device` unit 0. The driver advertised the required
+commands. A verified 1 KiB write at 0xfffffe00 and a verified 512-byte
+write at 0x100000200 both succeeded. On the host, the three written
+sectors matched their patterns and the first two sectors retained their
+canary. This exercises the actual driver and Dolly's block write adapter.
+The complete Copy and Restore workflows across the boundary still need
+end-to-end coverage.
+
+The classic image size check was also exercised through the FS-UAE
+directory filesystem on the same A600 configuration. It reported a
+1,024-byte RAW file correctly and rejected both a sparse 5 GiB file
+and a sparse 4 GiB + 1,024-byte file. The latter checks that a large
+file does not pass as a small image after a 32-bit wrap.
+
+### Create Image warning and split output
+
+MC68000 build and all 36 host tests passed. An A600 / Kickstart 37.350
+FS-UAE probe used the native staging and write code, with a synthetic
+source, mocked volume information and warning decisions, and reduced
+split thresholds. It published a three-part RAW image and a three-part
+compressed DOLY image. The host verified RAW bytes, DOLY FORM lengths and
+starting LBAs, and checked that cancellation left no output. The probe
+also verified that a small RAW image still publishes as a single file
+without a size or free-space warning. The full-size GUI pathway remains
+to be tested.
+
+### Restore split IFF DOLY
+
+The host manifest test covers a logical image larger than 4 GiB, the final
+partial part, incorrect order and geometry, and malformed manifests.
+A POSIX shim for AmigaDOS exercised the native source adapter with a
+three-part compressed IFF DOLY fixture. It verified cross-part reads,
+missing-part rejection, handle cleanup, and a damaged chunk stopping
+validation before the first destination write callback. All 36 host
+tests passed. The MC68000 build and end-to-end GUI Restore in UAE remain
+unverified because the build environment ran out of disk space.
+
+### Numbered multipart files
+
+The portable test covers MSET v2 writes and reads for each part, including
+the short final part, and rejection of damaged numbering metadata.
+The AmigaDOS shim exercised opening part 3/3, redirecting to the matching
+first part, resolving a missing part on another volume and reading bytes
+across part boundaries. Native MC68000 compilation and the ASL/requester
+flow in UAE remain unverified due to the full build environment.
+
+### Native build and multipart read follow-up
+
+After reclaiming workspace space, the full `dolly-two-window-demo`
+MC68000 build succeeded. The rebuilt application opened its main window
+in FS-UAE 3.1.66 on an A600 with Kickstart 37.350. A separate native
+probe ran the current Restore source adapter against the real AmigaDOS
+folder filesystem, with test substitutes for the dialog and ASL choices.
+It opened part 3/3, switched to the first part, identified missing part
+2/3, opened it from an alternate drawer and verified bytes across a
+part boundary. The probe exited with status 0. Host CTest passed 36/36.
+The interactive ASL presentation, the write-retry path in UAE and a
+complete destructive Restore to disposable media remain to be tested.
+
+### Multipart Restore to a disposable HDF
+
+A native MC68000 probe in FS-UAE 3.1.66 (A600, Kickstart 37.350)
+used the current multipart source adapter, Restore transfer engine,
+and verified device writer. ASL and confirmation choices were stubbed.
+A corrupt chunk checksum in part 2/3 blocked the source with zero
+write callbacks. A clean three-part set with part 2/3 in an alternate
+drawer was validated and restored through `uaehf.device` unit 0 in
+three 1,536-byte batches with readback verification. The host compared
+the entire destination HDF byte for byte, including both guard regions.
+The control HDF was unchanged. This exercises the native transfer
+path independently of the main window's interactive preflight.
+
+### Native retry of a split output part
+
+An MC68000 probe under FS-UAE on A600 / Kickstart 37.350 ran the
+current image staging and retry code with real AmigaDOS files and
+two mounted directory volumes. Test-only limits forced a three-part
+image from nine synthetic sectors. The probe injected a short write
+during part 2/3, selected the second volume through a scripted chooser,
+and observed a rewind to the first sector of the failed part. Part 1/3
+was published on the original volume, and parts 2/3 and 3/3 on the
+replacement volume. The host verified all payload bytes, part numbering,
+set ID, manifest and chunk checksums, and absence of incomplete files.
+The chooser and warning actions were scripted. Host CTest passed 36/36,
+including regression coverage for operation-progress rewind.
+
+### Desktop Fast compression above 4 GiB
+
+On Linux, `dolly-image split --fast` converted a sparse 4 GiB + 1 KiB
+RAW fixture into 17 IFF DOLY files occupying approximately 72 MiB.
+`dolly-image verify` decoded and verified all 4,294,968,320 bytes.
+An independent PackBits decoder verified distinct sector patterns at
+offset zero, immediately before 4 GiB, and in the two sectors above it.
+A separate three-part Fast set passed the native Restore source probe
+in FS-UAE on A600 / Kickstart 37.350. Host CTest passed 37/37.
+
+The Linux large-image fixture also completed the reverse operation
+with `dolly-image join --sparse`. The rebuilt RAW had the full logical
+size of 4,294,968,320 bytes and used 36 KiB of disk blocks on the test
+filesystem. A byte-for-byte `cmp` found no differences across the
+entire image. The CLI regression covers leading, internal and trailing
+zero runs as well as a wholly zero image. Host CTest passed 37/37.
+
+### Restore source preview
+
+The MC68000 build passed with the image-header preview. A native probe
+under FS-UAE (A600, Kickstart 37.350) reported part 16/17 and the full
+decoded size of 4,294,968,320 bytes for a real numbered file. It rejected
+the same file with a damaged manifest CRC and retained the HDF size hint
+for a flat file. The probe verified the text produced by the preview
+function. Interactive ASL selection was not part of that probe.
+
+### Incremental IFF DOLY Restore validation
+
+The MC68000 build passed. A native FS-UAE probe on A600 / Kickstart
+37.350 opened a three-part set with valid metadata and a corrupt data
+chunk in part 2/3. The Restore validation advanced by 1,536 bytes,
+identified part 2/3 and stopped with zero write callbacks. The host
+compared the writable target HDF against its original bytes and found
+no changes. A clean three-part set, with part 2/3 selected from an
+alternate drawer, passed validation and restored all 4,608 bytes in
+three verified batches.
+
+The portable regression asserts that opening a lazy reader reads one
+prefix and that sequential verification of each test chunk takes at
+most three backend reads, including a possible IFF padding read. It also
+checks seeking back across the sparse index boundary. Pause, Stop and
+the two graphical progress displays were not driven by the native probe.
+
+### Read-only FFS Clone and resize analysis
+
+The host regression uses a synthetic partition starting above 4 GiB
+with a bitmap-extension block. It checks the exact used and out-of-target
+counts and rejects invalid bitmap state, duplicate metadata, a repeating
+extension, metadata marked free and a page with a bad checksum.
+
+An independent formatted DOS/3 fixture created with AmiPart started at
+byte 4,644,864,000 in a sparse 5 GiB HDF. Dolly and AmiPart both reported
+37 of 131,040 blocks occupied and block 65,554 as the highest occupied
+block. For a target of 49,152 blocks, Dolly reported 35 occupied blocks
+outside the target and an in-place floor of 65,555 blocks. This floor
+retains current metadata positions. Host CTest passed 38/38.
+The MC68000 build passed with the analysis entry point. The interactive
+requester and source inhibit flow were not exercised in UAE for this feature.
+
+The growth planner is covered for a free root slot, a slot occupied by
+data, a slot occupied by metadata and a root in the added range. Tests
+also cover bitmap extension growth. In a comparison on a disposable
+copy of the DOS/3 fixture, AmiPart grew the partition from 131,040 to
+262,080 filesystem blocks. Its new root pointer (131,040) and bitmap
+chain (33 to 65 pages, one extension throughout) matched Dolly's plan.
+AmiPart left the bitmap marked for revalidation, and this comparison
+only inspected its resulting metadata placement.
+
+The read-only bitmap placement plan assigns the 32 new pages of the
+same DOS/3 fixture to blocks 131,041 through 131,072, skipping the planned
+root at 131,040. The host regression also checks page and extension
+ordering and rejection of a tail with only one free block when a new
+bitmap page and extension are both required.
+
+The FFS bitmap generator passed tests for a moved root in the source
+or in the added area, preservation of the old root and other allocations,
+new metadata reservations, final-page masks, in-place buffer reuse,
+and rejection of a damaged input checksum. The read-only preview also
+succeeded on the formatted DOS/3 fixture above 4 GiB.
+
+### Smart Copy write path
+
+Host regressions validate the exact bitmap ranges for DOS/0 and DOS/3
+and exercise the shared copy engine with a hole between write batches.
+The engine rejects overlapping plan entries before issuing a write.
+
+A host-side write and readback on a disposable HDF used the formatted
+DOS/3 fixture above 4 GiB. An independent bitmap walk verified all
+37 copied blocks byte for byte. All 131,003 free blocks retained their
+initial pattern, and the destination RDB bytes stayed identical.
+Native driver write, mount handling and the Warning Review flow still
+require an interactive WinUAE test.
+
+### Post-copy name conflicts
+
+Host regression checks PART and OFS/FFS root names, checksum validation,
+name mismatch and unformatted metadata. A disposable DOS/3 HDF with a
+partition above 4 GiB exercised both updates. `DH0 → DH0_0` and
+`DollyFFS → Copy_of_DollyFFS` reread with valid checksums, and bytes
+outside the name and checksum fields remained unchanged. WinUAE
+verification still needs to exercise both independent choices and the
+subsequent remount with both disks attached.
+
+
+The user confirmed Smart Copy in WinUAE on the previously tested
+system HDFs. After disconnecting the source HDF, AmigaOS booted
+successfully from the copied target. The subsequent fix for empty DOS
+nodes awaiting shutdown still needs a WinUAE regression run.
+
+### Cancel during transfer preparation
+
+In FS-UAE on an A600 configuration, the preceding published build
+opened Warning Review for a sector copy from a formatted UAE-IDE unit
+to a blank unit. After approval of destination I/O settings and one
+source inhibit, Cancel returned to the main window with
+`Transfer cancelled.` and Start enabled. Both HDF checksums matched
+the pre-test state. The reported WinUAE freeze did not reproduce in
+this narrower test.
+
+The updated path restores focus, displays the cancellation phase
+before cleanup, and suppresses DOS media requesters during uninhibit.
+WinUAE still needs a regression run that cancels the same warning
+as the original report, including the late Driver access warning if it
+appears after the destination handle opens.
+
+### Volume label write after Smart Copy
+
+The host Exec mock exercises the post-copy read/modify/write path for a
+volume root block at an offset within a destination partition. It checks
+the destination LBA, CMD_WRITE, CMD_UPDATE, CMD_READ and the new label
+with its checksum. The native MC68000 target builds with reduced
+requester stack use and distinct status messages for metadata
+validation, the verified write, and source reactivation. Reproducing
+the reported WinUAE HALT3 at the original confirmation is still open.
+
+
+### Post-copy completion and retained destination handler
+
+A WinUAE report showed Dolly stuck with Copying sectors at 99% after
+volume label confirmation while the rest of the system remained
+responsive. The test build now redraws 100% before the metadata review,
+shows each finalization phase, and avoids retrying synchronous ACTION_DIE
+on an inhibited destination handler after writing. Dormant DOS nodes
+can still be removed. If a live handler remains, the status reports that
+a reboot is needed to remount it. The original WinUAE case still needs
+verification.
+
+WinUAE confirmed successful Smart Copy finalization and an accessible
+`Copy_of_Test` destination volume on `scsi.device` unit 1 after reboot
+with RDB mode enabled. The readback with RDB mode disabled contained
+an additional 256 KiB virtual RDB, followed by the original HDF
+byte for byte.
+
+Post-Alpha 3.5 regression for the consolidated name review. Clone a
+disposable disk with both a duplicate device name and a duplicate
+volume label. Choose Rename for one group and Keep for the other.
+Check both names after reboot. Repeat with the opposite choices.
+Finally, choose Rename for the first group and Cancel on the second.
+Both names should retain their original values and the copy should
+still finish. This review does not require the future mounting backend.
+
+Development mount regression. Copy compatible OFS/FFS partitions with
+both disks attached. Test disabled mounting, accepting a new label and
+mounting, retaining the conflicting label, and leaving a handler
+registered on the same target extent. For a whole-disk copy also test
+an unformatted partition and one with RDB automount disabled.
+Check AmigaDOS device name, mounted volume label and source visibility
+after each run. A mounting failure should leave the copy result
+successful and report the skipped partition separately.
+
+The existing 100 MiB WinUAE fixture has DOS/3, an FFS 47.4 header and
+patch flags 0x190 in RDB. The target metadata passes the static
+requirements for the prototype. Verify that the running AmigaOS also
+has a matching resident DOS/3 handler and that no old target DOS entry
+remains. The runtime mount regression is pending.
+
+The Settings regression for the mount default covers Save and reopen,
+a fresh operation with the checkbox preselected, overriding that
+choice for one operation, and cancellation without changing preferences.
+PRHD version 6 is rejected according to the existing compatibility
+policy. Verify these UI cases in WinUAE.
+
+The FFS growth preview now builds a checksummed prospective root in
+memory. Host fixtures check preservation of existing bitmap references,
+creation of the first bitmap extension pointer, rejection when space
+is insufficient and in-place buffer use.
+
+The read-only FFS growth preview also generates bitmap extension blocks.
+The host test fills the last existing extension, links it to a new
+extension, and checks the new page reference, zero-filled unused
+slots and chain terminator byte for byte.
+A read-only run on the supplied DOS/3 HDF projected growth from 204,120
+to 819,200 filesystem blocks. It generated the preview with 151 added
+bitmap pages and one added extension.
+
+The FFS growth preview regression covers both 512-byte boot sectors. It
+checks root-pointer relocation, carry-aware checksum calculation, preservation
+of an invalid boot checksum and rejection of a root outside the target.
+The read-only DOS/3 HDF preview also completed for a 400 MiB target.
+
+The read-only FFS root relocation regression covers a directory and a file
+in the same hash chain, plus rejection of a cycle, a duplicate reference,
+an incorrect parent and a free block. The DOS/3 HDF preview for a 400 MiB
+target validated 27 direct root entries.
+
+The full FFS bitmap growth preview test checks the allocation bit for
+the new root on an intermediate bitmap page and the adjacent free bit.
+The DOS/3 HDF preview for a 400 MiB target built 152 affected pages,
+including 151 new pages.
+
+The FFS shrink preview tests reuse of a detached bitmap page and a
+detached bitmap extension for the new root. They check the resulting
+free-block count and verify that a retained bitmap page still blocks
+root placement.
+
+The host `resize-ffs` prototype grew the DOS/3 partition from the supplied
+HDF to 400 MiB and shrank it to 95 MiB. Amitools 0.9.1 found no errors or
+warnings in either output. All 1,178 directory entries and the file
+content hashes matched the source. The source HDF SHA-256 was unchanged.
+An independently formatted DOS/1 image also passed the shrink check and
+file readback. The host regression covers output collision protection,
+an unsupported boot payload, and the serialized root and parent pointers.
+
+The native Clone and resize integration cross-builds for MC68000.
+The host CLI exercises the same virtual resized source as the Amiga
+transfer. Its DOS/3 results at 400 MiB and 95 MiB were byte-identical
+to the independently checked images from the host patch prototype.
+Native transfer, Warning Review and remount testing in WinUAE remain
+pending.

@@ -2,6 +2,7 @@
 
 ## Use Dolly
 
+- [Operation workflows, step by step](OPERATIONS_EN.md)
 - [Installation and paths](INSTALLATION.md)
 - [Sheep Inventory and partition-table backups](SHEEP_INVENTORY.md)
 - [Surface Scan](SURFACE_SCAN.md)
@@ -23,3 +24,11 @@
 - [Roadmap](ROADMAP.md), [backlog](BACKLOG.md) and [product specification](SPECIFICATION.md)
 - [Engineering field notes](ENGINEERING_JOURNAL.md) and [M0 history](SPRINT_M0.md)
 - [GitHub release history](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+
+
+## Alpha 3.6
+
+The [operation guide](OPERATIONS_EN.md) documents the native FFS
+Clone and resize prototype. [Device writes](DEVICE_WRITE.md) covers
+eligibility, verification and the desktop resize command.
+See the [test matrix](TEST_MATRIX.md) for the verified cases.

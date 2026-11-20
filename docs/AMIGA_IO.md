@@ -1,5 +1,14 @@
 # Dolly — experimental AmigaOS native I/O
 
+On the tested FS-UAE 3.1.66 IDE configuration, ATA IDENTIFY could read from
+the previous multi-sector transfer's buffer offset. This corrupted the
+ROM V37 device's SCSI inquiry and capacity responses. When INQUIRY reports
+success with an invalid identity on the verified ROM `scsi.device` V37
+path, Dolly retries after a successful single-sector read of LBA 0 into
+Chip RAM. A failed retry discards that SCSI probe. The normal large-offset
+limits and write checks still apply.
+[FS-UAE 3.1.66 IDE implementation](https://github.com/FrodeSolheim/fs-uae/blob/f5bf0271008d6c16eb255475345ee9af1ef3ce7c/src/ide.cpp#L299-L334)
+
 **Status:** native MC68000 build and FS-UAE checks completed for the qualified UAE-IDE read path. The device backend remains read-only. Create Image writes a staged file on a separate destination.
 
 ## Architecture
@@ -74,10 +83,11 @@ ignores the entire file.
 
 The file is an Amiga IFF `FORM PREF` with a six-byte `PRHD` chunk
 and Dolly's `DOIO` and `DFNT` chunks. The first byte of PRHD is the schema
-version, currently 6. DOIO contains a 32-bit global flags field (bit 0 enables
+version, currently 7. DOIO contains a 32-bit global flags field (bit 0 enables
 the legacy-limit override, bit 1 enables write verification, bit 2 hides
-the same-device speed warning, bit 3 allows the Restore compatibility
-override, bit 4 allows source partitions outside driver capacity), a 32-bit
+the same-device speed warning, bit 3 is reserved for the retired Restore
+compatibility setting, bit 4 allows source partitions outside driver capacity,
+and bit 5 preselects **Mount destination volumes** in Warning Review), a 32-bit
 record count, and up to 64 fixed records. Each record contains a
 60-byte NUL-terminated driver name followed by five 32-bit fields:
 unit, presence flags, Mask, BufMemType and MaxTransfer. IFF integers

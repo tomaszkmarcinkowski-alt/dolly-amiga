@@ -25,27 +25,69 @@ int dolly_restore_transfer_init_prefix(DollyRestoreTransfer *transfer,DollyBlock
     return 1;
 }
 
+int dolly_restore_transfer_set_ranges(DollyRestoreTransfer *transfer,
+                                      const DollyTransferRange *ranges,size_t count,
+                                      uint32_t sector_bytes) {
+    size_t i;
+    uint64_t end=0,total=0;
+    if(!transfer || !ranges || !count || !sector_bytes || transfer->ranges ||
+       transfer->state!=DOLLY_RESTORE_TRANSFERRING || transfer->processed ||
+       transfer->source_check_bytes || transfer->batch_bytes%sector_bytes)return 0;
+    for(i=0;i<count;++i) {
+        const DollyTransferRange *r=&ranges[i];
+        if(!r->length || r->offset<end || r->offset>transfer->bytes ||
+           r->length>transfer->bytes-r->offset ||
+           r->offset%sector_bytes || r->length%sector_bytes)return 0;
+        end=r->offset+r->length;
+        total+=r->length;
+    }
+    transfer->ranges=ranges;
+    transfer->range_count=count;
+    transfer->bytes=total;
+    return 1;
+}
+
 DollyRestoreTransferState dolly_restore_transfer_step(DollyRestoreTransfer *transfer,
                                                      void *buffer,size_t buffer_bytes) {
     DollyBlockReadResult result;
-    uint64_t remaining;
+    uint64_t remaining,offset;
     size_t bytes;
+    int checking;
     if(transfer->state!=DOLLY_RESTORE_TRANSFERRING)return transfer->state;
-    remaining=transfer->bytes-transfer->processed;
+    checking=transfer->source_checked<transfer->source_check_bytes;
+    offset=checking?transfer->source_checked:transfer->processed;
+    remaining=(checking?transfer->source_check_bytes:transfer->bytes)-offset;
+    if(transfer->ranges) {
+        const DollyTransferRange *range=&transfer->ranges[transfer->range_index];
+        offset=range->offset+transfer->range_processed;
+        remaining=range->length-transfer->range_processed;
+    }
+    transfer->batch_offset=offset;
     bytes=remaining<transfer->batch_bytes?(size_t)remaining:transfer->batch_bytes;
     if(!buffer || buffer_bytes<bytes) {
         transfer->read_status=DOLLY_BLOCK_EINVAL;
         return transfer->state=DOLLY_RESTORE_READ_FAILED;
     }
-    result=dolly_block_read(transfer->source,transfer->processed,buffer,bytes);
+    result=dolly_block_read(transfer->source,offset,buffer,bytes);
     if(result.status!=DOLLY_BLOCK_OK || result.bytes_read!=bytes) {
         transfer->read_status=result.status;
         return transfer->state=DOLLY_RESTORE_READ_FAILED;
     }
-    transfer->write_status=transfer->write_batch(transfer->target,transfer->processed,
+    if(checking) {
+        transfer->source_checked+=bytes;
+        return transfer->state;
+    }
+    transfer->write_status=transfer->write_batch(transfer->target,offset,
                                                 buffer,bytes,transfer->verify);
     if(transfer->write_status!=(transfer->verify?DOLLY_WRITE_VERIFIED:DOLLY_WRITE_COMPLETE))
         return transfer->state=DOLLY_RESTORE_WRITE_FAILED;
+    if(transfer->ranges) {
+        transfer->range_processed+=bytes;
+        if(transfer->range_processed==transfer->ranges[transfer->range_index].length) {
+            ++transfer->range_index;
+            transfer->range_processed=0;
+        }
+    }
     transfer->processed+=bytes;
     if(transfer->processed==transfer->bytes)transfer->state=DOLLY_RESTORE_FINISHED;
     return transfer->state;

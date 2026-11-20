@@ -1,0 +1,33 @@
+name: Desktop image tool
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  image-tool:
+    name: dolly-image on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure desktop tool
+        run: cmake -S . -B build-image -DDOLLY_IMAGE_ONLY=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build-image --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build-image -C Release --output-on-failure --no-tests=error
+      - name: Stage executable
+        run: cmake --install build-image --config Release --prefix image-artifact
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dolly-image-${{ matrix.os }}-${{ runner.arch }}
+          path: image-artifact/bin/
+          if-no-files-found: error

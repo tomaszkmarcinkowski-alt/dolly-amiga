@@ -73,8 +73,29 @@ envelope may still contain missing, invalid or corrupt image data.
 The CLI currently does not validate version-1 field values, enforce
 coverage, check payload CRCs or implement image restore.
 
-Segmentation, resume, error maps and image restore are
-future format work. New codecs or layouts require an explicit schema.
+The read-only `dolly_dly_open()` API exposes a decoded `DollyBlockSource`
+starting at offset zero and reports the original geometry separately. It
+validates the current writer's version 1 and version 2 layout, flags, chunk
+bounds, codec IDs, zero padding and complete sector coverage on open. Reads
+check each touched chunk's CRC before reporting its bytes as valid. An
+untouched payload has not been verified. The source must stay stable while
+the decoded view is open.
+
+The reader uses one four-byte index entry per 256 chunks. It caches one
+decoded chunk of at most 32 KiB and reserves at most another 32 KiB for
+compressed input. Version 2 follows the current writer profile with stored
+compressed data smaller than the raw chunk. Larger version 1 raw chunks use
+a 4 KiB streaming buffer.
+
+Restore Image detects FORM DOLY by signature and checks its sector size
+against the selected destination. It uses the decoded byte count in the
+normal Restore warnings. After approval, it verifies every chunk in
+cancellable steps before issuing any image writes, including chunks past
+the end of a smaller destination. The transfer continues to verify chunks
+as it reads them for writing. The stored first LBA is source metadata.
+Decoded sector zero maps to the start of the selected destination.
+
+Segmentation, resume and error maps are future format work. New codecs or layouts require an explicit schema.
 
 ## References
 
@@ -82,3 +103,29 @@ future format work. New codecs or layouts require an explicit schema.
 
 Operation checkpoints are described separately in [Dolly Restore Pointer
 (DLRP)](DLRP_FORMAT.md).
+
+## Multipart manifest
+
+New multipart output stores an `MSET` chunk immediately after `GEOM`
+in every part. For a stem `disk`, the first part is `disk.dly`, followed
+by `disk.001`, `disk.002` and so on. The suffix is the zero-based index
+with a minimum width of three decimal digits. The embedded part number
+is one-based. `GEOM` describes the individual part and supplies its sector
+size. The `FORM` length includes the `MSET` chunk.
+
+| Payload offset | Bytes | Meaning |
+| ---: | ---: | --- |
+| 0 | 4 | Manifest version, 2 |
+| 4 | 4 | Number of parts |
+| 8 | 4 | Sectors in every part except the last |
+| 12 | 4 | CRC-32/ISO-HDLC over the full payload with this field zero |
+| 16 | 8 | First LBA of the set |
+| 24 | 8 | Total sectors in the set |
+| 32 | 4 | Part number, starting at 1 |
+| 36 | 8 | Nonzero set identifier shared by all parts |
+
+Integers are big-endian. The v2 payload occupies 44 bytes. The reader
+also accepts v1, a 32-byte payload with no part number or set identifier
+stored only in `part00000001.dly`, and the older `manifest.txt` layout.
+Parts use independently checked `CHNK` CRCs. The set identifier prevents
+accidental mixing of different numbered sets and is not cryptographic.
