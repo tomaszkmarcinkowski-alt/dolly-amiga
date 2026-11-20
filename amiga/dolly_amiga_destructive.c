@@ -300,7 +300,7 @@ typedef struct WarningView {
     struct List labels;
     APTR visual;
     LONG x,y,width,height,row,button_y,list_min,detail_min;
-    unsigned selected,page,lines_per_page;
+    unsigned selected,page,lines_per_page,linked_warnings;
 } WarningView;
 
 static struct Gadget *warning_button(WarningView *v,struct Gadget *last,UWORD id,
@@ -324,6 +324,11 @@ static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWa
         RemoveGList(v->window,v->gadgets,-1);
         FreeGadgets(v->gadgets);
         v->gadgets=NULL;
+    }
+    /* GadTools must release the old list before nodes are appended. */
+    while(v->linked_warnings<warnings->count) {
+        AddTail(&v->labels,&warnings->items[v->linked_warnings]->node);
+        ++v->linked_warnings;
     }
     for(i=0;i<warnings->count;++i)
         warnings->items[i]->row[0]=warnings->items[i]->confirmed?'+':' ';
@@ -425,7 +430,7 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     const DollyEndpoint *settings=NULL;
     struct RastPort measure=screen->RastPort;
     LONG inner_width,inner_height,min_width,min_height,max_width,max_height;
-    unsigned i,count=0,pending=0,line_capacity=0;
+    unsigned count=0,pending=0,line_capacity=0;
     int result=0,done=0,rebuild=1;
     char (*lines)[97]=NULL;
     if(!warnings->count)return 1;
@@ -460,7 +465,6 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     if(!v.visual || !v.info)goto out;
     v.labels.lh_Head=(struct Node *)&v.labels.lh_Tail;
     v.labels.lh_TailPred=(struct Node *)&v.labels.lh_Head;
-    for(i=0;i<warnings->count;++i)AddTail(&v.labels,&warnings->items[i]->node);
     while(!done) {
         struct IntuiMessage *msg;
         DollyWarning *warning=warnings->items[v.selected];

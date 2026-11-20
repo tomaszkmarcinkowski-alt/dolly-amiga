@@ -192,6 +192,7 @@ typedef struct WriteApproval {
     DollyAmigaTransfer *transfer;
     DollySurfaceScan *disk;
     DollyBlockSource *input;
+    DollyWarnings *warnings;
     int known_driver;
 } WriteApproval;
 
@@ -236,8 +237,12 @@ static int approve_write_warning(DollyWarning *warning) {
              "Other handles can belong to any unit. Dolly cannot confirm exclusive "
              "access to this unit. Proceed at your own risk.",
              t->device.driver,(unsigned long)t->device.unit,open_count,t->expected_opens);
+    if(!dolly_warning_add(approval->warnings,"Driver access",message,"Proceed")) {
+        t->failure="Cannot add the driver access warning. Transfer blocked.";
+        return -1;
+    }
     t->expected_opens=open_count;
-    return dolly_warning_risk(warning,message);
+    return 1;
 }
 static void release_inhibited_mounts(DollyAmigaTransfer *t,DollyMountList *list,int keep_inhibited) {
     unsigned i;
@@ -566,7 +571,7 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         goto fail;
     }
     write_warning->action=approve_write_warning;
-    write_approval=(WriteApproval){t,&disk,input,known_driver};
+    write_approval=(WriteApproval){t,&disk,input,&warnings,known_driver};
     write_warning->context=&write_approval;
 
     t->port=CreateMsgPort();

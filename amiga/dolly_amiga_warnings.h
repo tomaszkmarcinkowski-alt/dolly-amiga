@@ -5,7 +5,8 @@
 
 struct Window;
 typedef struct DollyWarning DollyWarning;
-/* 1 acknowledges the item, 0 shows its updated details, -1 cancels review. */
+/* 1 acknowledges the item, 0 shows its updated details, -1 cancels review.
+ * An action can append another item to the active review before returning 1. */
 typedef int (*DollyWarningAction)(DollyWarning *warning);
 struct DollyWarning {
     struct Node node;
