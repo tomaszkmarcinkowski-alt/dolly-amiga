@@ -12,6 +12,10 @@ Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga compu
 
 *Dolly on AmigaOS 3.2 with a scalable font and square pixels. The main window and Warning Review adapt to the font. The selected warning explains what happens when the image is smaller than the destination.*
 
+![Dolly Alpha 3.4 restoring a RAW image with both progress views at 11 percent](docs/screenshots/amigaos32-restore-progress.png)
+
+*Restore Image in progress on AmigaOS 3.2. The main window shows the overall progress, and Sheep Counter shows the sector grid, block counts and errors.*
+
 ## What works in Alpha 3.4
 
 | Feature | Current scope |
