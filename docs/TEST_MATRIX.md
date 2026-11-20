@@ -1,5 +1,17 @@
 # Dolly — staged testing matrix
 
+## Restore Image development verification
+
+| Scenario | Result |
+| --- | --- |
+| Physical-device Restore Image | The maintainer reported completion without an error. Contents of that destination have not yet been compared with the source. |
+| IFF DOLY → emulated IDE disk | FS-UAE 3.1.66, A600, Kickstart and Workbench 2.05. A native test harness invoked the normal transfer and warning actions on a disposable 4 MiB HDF with write read-back enabled. All 131,072 decoded PackBits bytes matched the source, and the entire tail, including its sentinel, remained unchanged. |
+| Corrupt IFF DOLY | A separate emulator session rejected a CRC error in the middle of the same-sized image. The transfer reported zero bytes written, and the entire target matched its pre-test copy. |
+| Reopen in the same session | After the successful restore, a second attempt on the same emulated unit reported “Driver has no supported large-offset read” at device-open preflight. The reason is unconfirmed. The corrupt-image result above comes from a fresh session. |
+
+The harness acknowledged warning actions programmatically. These runs establish
+native disk I/O and byte integrity for the tested virtual media.
+
 ## Alpha 3.3 verification
 
 | Scope | Result |
