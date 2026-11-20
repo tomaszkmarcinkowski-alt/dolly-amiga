@@ -73,7 +73,21 @@ envelope may still contain missing, invalid or corrupt image data.
 The CLI currently does not validate version-1 field values, enforce
 coverage, check payload CRCs or implement image restore.
 
-Segmentation, resume, error maps and image restore are
+The read-only `dolly_dly_open()` API exposes a decoded `DollyBlockSource`
+starting at offset zero and reports the original geometry separately. It
+validates the current writer's version 1 and version 2 layout, flags, chunk
+bounds, codec IDs, zero padding and complete sector coverage on open. Reads
+check each touched chunk's CRC before reporting its bytes as valid. An
+untouched payload has not been verified. The source must stay stable while
+the decoded view is open.
+
+The reader uses one four-byte index entry per 256 chunks. It caches one
+decoded chunk of at most 32 KiB and reserves at most another 32 KiB for
+compressed input. Version 2 follows the current writer profile with stored
+compressed data smaller than the raw chunk. Larger version 1 raw chunks use
+a 4 KiB streaming buffer. The GUI Restore Image path is unchanged.
+
+Segmentation, resume, error maps and GUI image restore are
 future format work. New codecs or layouts require an explicit schema.
 
 ## References
