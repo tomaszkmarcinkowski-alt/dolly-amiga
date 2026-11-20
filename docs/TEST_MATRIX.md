@@ -4,6 +4,7 @@
 
 | Scenario | Result |
 | --- | --- |
+| Published IFF DOLY test binary | The downloaded MC68000 file matched the compiled executable by SHA-256 and opened its main window through `WBStartup` on FS-UAE / A600 / AmigaOS 2.05. Manual ASL selection, Warning Review and Pause/Stop interaction in WinUAE remain to be checked. [Test build](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/iff-doly-restore-test-20261120) |
 | Physical-device Restore Image | The maintainer reported completion without an error. Contents of that destination have not yet been compared with the source. |
 | IFF DOLY → emulated IDE disk | FS-UAE 3.1.66, A600, Kickstart and Workbench 2.05. A native test harness invoked the normal transfer and warning actions on a disposable 4 MiB HDF with write read-back enabled. All 131,072 decoded PackBits bytes matched the source, and the entire tail, including its sentinel, remained unchanged. |
 | Writer-generated IFF DOLY v1 and v2 Compact | Two additional A600 / AmigaOS 2.05 FS-UAE sessions restored writer-generated images to separate 4 MiB IDE HDFs with write read-back enabled. The v1 image contained eight raw chunks. The Compact image contained seven LZSS chunks and one raw fallback chunk. Each restored all 131,072 decoded bytes correctly and preserved the entire destination tail. The subsequent corrupt-image attempt in each session wrote zero bytes. |
