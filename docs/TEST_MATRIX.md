@@ -7,7 +7,7 @@
 | Physical-device Restore Image | The maintainer reported completion without an error. Contents of that destination have not yet been compared with the source. |
 | IFF DOLY → emulated IDE disk | FS-UAE 3.1.66, A600, Kickstart and Workbench 2.05. A native test harness invoked the normal transfer and warning actions on a disposable 4 MiB HDF with write read-back enabled. All 131,072 decoded PackBits bytes matched the source, and the entire tail, including its sentinel, remained unchanged. |
 | Corrupt IFF DOLY | A separate emulator session rejected a CRC error in the middle of the same-sized image. The transfer reported zero bytes written, and the entire target matched its pre-test copy. |
-| Reopen in the same session | After the successful restore, a second attempt on the same emulated unit reported “Driver has no supported large-offset read” at device-open preflight. The reason is unconfirmed. The corrupt-image result above comes from a fresh session. |
+| Reopen in the same session | FS-UAE 3.1.66 reproduced corrupt INQUIRY and READ CAPACITY responses after a multi-sector transfer, including with cycle-exact enabled. With the ROM V37 retry, both queries reported 8,064 sectors. The second transfer rejected the corrupt image before writing. A host comparison confirmed the entire HDF still matched the previously restored prefix and untouched tail. |
 
 The harness acknowledged warning actions programmatically. These runs establish
 native disk I/O and byte integrity for the tested virtual media.

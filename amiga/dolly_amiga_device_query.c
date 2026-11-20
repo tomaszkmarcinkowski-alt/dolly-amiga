@@ -1,8 +1,10 @@
 #include "dolly_amiga_device_query.h"
+#include "dolly_amiga_source.h"
 #include "dolly_surface_log.h"
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/io.h>
+#include <exec/devices.h>
 #include <devices/trackdisk.h>
 #include <devices/scsidisk.h>
 #include <proto/exec.h>
@@ -81,6 +83,48 @@ static void capacity_string(char *out,unsigned cap,uint64_t bytes) {
     sprintf(buffer,"%lu MiB",(unsigned long)(bytes/1048576u));
     assign_string(out,cap,buffer);
 }
+static int inquiry(struct IOExtTD *io,UBYTE *data) {
+    struct SCSICmd sc={0};
+    memset(data,0,64);
+    data[40]=0x12u;
+    data[44]=36u;
+    sc.scsi_Data=(UWORD *)data;
+    sc.scsi_Length=36;
+    sc.scsi_Command=data+40;
+    sc.scsi_CmdLength=6;
+    sc.scsi_Flags=SCSIF_READ;
+    io->iotd_Req.io_Command=HD_SCSICMD;
+    io->iotd_Req.io_Data=&sc;
+    io->iotd_Req.io_Length=sizeof(sc);
+    io->iotd_Req.io_Offset=0;
+    io->iotd_Req.io_Flags=0;
+    return DoIO((struct IORequest *)io)==0 && sc.scsi_Status==0 && sc.scsi_Actual>=36;
+}
+static int inquiry_identity_valid(const UBYTE *data) {
+    unsigned i;
+    int visible=0;
+    for(i=8;i<32u;++i) {
+        UBYTE ch=data[i];
+        if(ch && (ch<32u || ch>126u))return 0;
+        if(ch>32u && ch!='?')visible=1;
+    }
+    return visible;
+}
+static int read_legacy_ide_sector(struct IOExtTD *io) {
+    UBYTE *block=AllocMem(512,MEMF_CHIP);
+    int ok;
+    if(!block)return 0;
+    io->iotd_Req.io_Command=CMD_READ;
+    io->iotd_Req.io_Data=block;
+    io->iotd_Req.io_Length=512;
+    io->iotd_Req.io_Offset=0;
+    io->iotd_Req.io_Actual=0;
+    io->iotd_Req.io_Flags=0;
+    ok=DoIO((struct IORequest *)io)==0 && io->iotd_Req.io_Actual==512;
+    FreeMem(block,512);
+    return ok;
+}
+
 /* MODE SENSE(6), current values. The DMA buffer also holds the CDB. */
 static const UBYTE *mode_page(struct IOExtTD *io,UBYTE *data,
                               UBYTE page,unsigned minimum) {
@@ -218,20 +262,18 @@ int dolly_amiga_device_query(const char *driver,ULONG unit,
     data=(UBYTE *)AllocMem(64,MEMF_CHIP|MEMF_CLEAR);
     if(data) {
         char vendor[9],product[17],combined[32];
-        memset(&sc,0,sizeof(sc));
-        data[40]=0x12u;data[44]=36u;
-        sc.scsi_Data=(UWORD *)data;
-        sc.scsi_Length=36;
-        sc.scsi_Command=data+40;
-        sc.scsi_CmdLength=6;
-        sc.scsi_Flags=SCSIF_READ;
-        io->iotd_Req.io_Command=HD_SCSICMD;
-        io->iotd_Req.io_Data=&sc;
-        io->iotd_Req.io_Length=sizeof(sc);
-        io->iotd_Req.io_Offset=0;
-        io->iotd_Req.io_Flags=0;
-        rc=DoIO((struct IORequest *)io);
-        if(rc==0 && sc.scsi_Status==0 && sc.scsi_Actual>=36) {
+        int answered=inquiry(io,data);
+        if(answered && !inquiry_identity_valid(data) &&
+           (!have_td_geometry || geom.dg_SectorSize==512u) &&
+           io->iotd_Req.io_Device &&
+           io->iotd_Req.io_Device->dd_Library.lib_Version==37u &&
+           !strcmp(driver,"scsi.device") && dolly_amiga_probe_rom_scsi(unit)) {
+            /* FS-UAE 3.1.66 may retain its IDE buffer offset after a
+             * multi-block transfer. READ resets it before IDENTIFY. */
+            if(!read_legacy_ide_sector(io) || !inquiry(io,data) ||
+               !inquiry_identity_valid(data))goto cleanup;
+        }
+        if(answered) {
             ascii_trim(vendor,sizeof(vendor),data+8,8);
             ascii_trim(product,sizeof(product),data+16,16);
             if(vendor[0] && product[0]) {

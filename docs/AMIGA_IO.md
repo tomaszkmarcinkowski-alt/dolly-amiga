@@ -1,5 +1,14 @@
 # Dolly — experimental AmigaOS native I/O
 
+On the tested FS-UAE 3.1.66 IDE configuration, ATA IDENTIFY could read from
+the previous multi-sector transfer's buffer offset. This corrupted the
+ROM V37 device's SCSI inquiry and capacity responses. When INQUIRY reports
+success with an invalid identity on the verified ROM `scsi.device` V37
+path, Dolly retries after a successful single-sector read of LBA 0 into
+Chip RAM. A failed retry discards that SCSI probe. The normal large-offset
+limits and write checks still apply.
+[FS-UAE 3.1.66 IDE implementation](https://github.com/FrodeSolheim/fs-uae/blob/f5bf0271008d6c16eb255475345ee9af1ef3ce7c/src/ide.cpp#L299-L334)
+
 **Status:** native MC68000 build and FS-UAE checks completed for the qualified UAE-IDE read path. The device backend remains read-only. Create Image writes a staged file on a separate destination.
 
 ## Architecture
