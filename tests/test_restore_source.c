@@ -139,6 +139,24 @@ static void check_transfer(void) {
     assert(transfer.processed==sizeof(data) && fixture.calls==2);
     assert(memcmp(data,fixture.dest,sizeof(data))==0);
 
+    {
+        const DollyTransferRange ranges[]={{0,512},{1024,512}};
+        const DollyTransferRange invalid[]={{0,1024},{512,512}};
+        fixture=(TransferFixture){0};
+        memset(fixture.dest,0x21,sizeof(fixture.dest));
+        assert(dolly_restore_transfer_init(&transfer,source,sizeof(data),512,1024,
+                                           &fixture,write_test_batch,1));
+        assert(!dolly_restore_transfer_set_ranges(&transfer,invalid,2,512));
+        assert(dolly_restore_transfer_set_ranges(&transfer,ranges,2,512));
+        assert(transfer.bytes==1024);
+        assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_TRANSFERRING);
+        assert(transfer.batch_offset==0 && transfer.processed==512);
+        assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_FINISHED);
+        assert(transfer.batch_offset==1024 && transfer.processed==1024 && fixture.calls==2);
+        assert(!memcmp(fixture.dest,data,512) && !memcmp(fixture.dest+1024,data+1024,512));
+        for(size_t i=512;i<1024;++i)assert(fixture.dest[i]==0x21);
+    }
+
     fixture.calls=0;
     fixture.fail_at=2;
     assert(dolly_restore_transfer_init(&transfer,source,sizeof(data),512,1024,

@@ -2,18 +2,20 @@
 
 **Copy → Sector-to-sector** copies between two whole devices or two
 in-range RDB partitions with equal byte lengths and sector sizes.
-**Restore Image** writes a RAW/HDF or single-file IFF DOLY image to a whole
-device or in-range RDB partition. The first write path supports 512-byte sectors
-and destination byte offsets below 4 GiB. Classic AmigaDOS file
-positions limit the source file to less than 2 GiB. IFF DOLY also uses
-the current writer profile with a decoded size below 2 GiB.
+**Restore Image** writes a RAW/HDF or single-file IFF DOLY image, or a split IFF DOLY set selected through its first part, to a whole
+device or in-range RDB partition. The write path supports 512-byte sectors.
+A destination extent ending above 4 GiB requires the opened driver to
+advertise both NSD READ64 and WRITE64. Classic AmigaDOS file
+positions limit each source file to less than 2 GiB. A split set can
+represent a larger decoded extent. See [large image files](LARGE_IMAGE_FILES.md).
 
 Dolly checks device geometry, the RDB extent, DMA settings, and logical
 overlap. Whole-device Copy treats both devices as raw sectors. Dolly describes
 the destination partition table, if recognized, in the warning review.
 Partition-level operations require RDB. Whole-device Restore transfers raw
 sectors regardless of the partition-table format. Filesystem-aware copying
-and resizing remain outside this path. For raw sources, Dolly uses DOS Inhibit on active filesystems within
+is available through Smart Copy for matching OFS/FFS RDB partitions.
+Clone and resize is read-only. For raw sources, Dolly automatically uses DOS Inhibit on active filesystems within
 the selected range, then releases the temporary inhibits on completion,
 failure or cancellation. The file volume serving a Restore image stays
 available for reading. Restore therefore requires the image to reside
@@ -28,7 +30,7 @@ table. A failure adds a decision to the same review before proceeding at the use
 The Exec open count is shared across units on the driver. Extra opens at
 preflight add a separate **Driver access** item after overwrite approval, even
 if the destination has no registered mounts. Dolly checks the selected units' mounts separately and stops if the
-approved driver count or the relevant mount state changes.
+driver count increases beyond the approved count or the relevant mount state changes.
 
 ## Confirmation and transfer
 
@@ -47,8 +49,9 @@ signature. The decoded sector size must match the destination. After the
 warning review, Dolly validates the whole image before it writes any image
 sectors. The validation pass can be paused or cancelled.
 
-Copy and Restore collect their warnings after Start and open one review
-window. The left list shows the warnings in order. The right panel shows
+Copy and Restore collect their warnings after Start. Smart Copy requires verified source isolation before showing the
+validated bitmap plan.
+The write review uses one window. The left list shows the warnings in order. The right panel shows
 details and the action for the current warning. Cancel aborts the whole
 operation. The review has no countdown. After approval of every item, Dolly checks geometry and partition selection again, compares
 first- and last-sector CRCs, and checks for a busy target. A qualified
@@ -61,8 +64,13 @@ offline test setup.
 
 The application processes one bounded, sector-aligned batch per step.
 Its DMA buffer uses the applicable RDB settings, defaults and manual
-overrides. The writer sends `CMD_WRITE` followed by `CMD_UPDATE`.
-**Verify writes** adds readback and byte comparison. Progress advances
+overrides. Batches entirely within the first 4 GiB use `CMD_WRITE`.
+Batches crossing or above that boundary use `NSCMD_TD_WRITE64`.
+Both are followed by `CMD_UPDATE`. **Verify writes** adds readback through
+`CMD_READ` or `NSCMD_TD_READ64` and byte comparison. Destination rechecks
+also use the qualified read command. The legacy `scsi.device` version gate
+still applies, including the existing UAE-IDE exception and manual override.
+TD64 and direct SCSI writes are pending. Progress advances
 only after the whole batch succeeds. Pause and Stop take effect
 between requests. A failed batch is never retried automatically.
 
@@ -79,8 +87,8 @@ Resume support remains planned.
 
 Host tests cover the portable transfer engine, command selection,
 short writes, cache flush and readback failures, and Restore
-compatibility rules. The native build targets MC68000. Runtime
-validation on disposable Amiga media is still pending.
+compatibility rules. The native build targets MC68000. Runtime validation includes an AmigaOS boot from a Smart Copy target in
+WinUAE. See the [test matrix](TEST_MATRIX.md) for individual cases.
 
 
 The filesystem mapping is independent of the partition table format.
@@ -94,3 +102,36 @@ a partition beyond the driver-reported capacity. The overwrite warning shows
 the destination capacity discrepancy. The transfer writes only the common
 addressable sector range. It preserves the RDB
 as stored in the image and does not extend or repair the affected partition.
+
+### Name conflicts after copying
+
+After a whole-disk copy, Dolly can offer new device names for the
+destination RDB, starting with `DH0 → DH0_0` and checking subsequent
+suffixes against the known DOS names and other registered RDB units.
+A whole-disk image restore gets the same offer on a detected conflict.
+For full OFS/FFS volumes, including partition copies, Smart Copy, and
+image restore, Dolly can offer `Work → Copy_of_Work`. It checks the boot
+DosType and the root block type and checksum before offering a relabel.
+An unformatted partition has no verified volume name to relabel.
+
+The RDB and volume decisions are independent. Warning Review lists old
+and proposed names. Cancel retains the names in that group. Dolly
+applies accepted changes while the destination remains offline, and
+always verifies the metadata write. Reload the partition table or
+reboot before accessing the destination under its new device names.
+
+
+A DOS device with no active volume is handled without a mount warning
+when its live handler can be inhibited or the node has no handler.
+For the destination, Dolly tries to remove the DOS node. If it remains,
+only the same inhibited handler or an inactive node with no volume may
+remain during copying and the post-copy rename review. A newly active
+volume or handler blocks further writes. Dolly retries removal during cleanup for entries with no live handler.
+If a live handler remains inhibited after a write, Dolly reports that a
+reboot is needed to remount the destination. The RDB automount flag describes boot policy. The live DOS list
+determines whether the volume is mounted for this operation.
+
+The open count still covers the entire Exec driver. Unexplained
+additional opens require confirmation. A reduction in the approved
+count is accepted when the DOS mount checks still pass. New opens
+above the reduced count block subsequent writes.

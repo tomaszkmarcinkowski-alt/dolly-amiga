@@ -55,32 +55,6 @@ static const DollyMountedVolume *read_mount_match(const DollyMountList *list,
     return NULL;
 }
 
-static int inhibit_source_warning(DollyWarning *warning) {
-    DollyReadGuard *guard=warning->context;
-    DollyMountedVolume *mount=&guard->pending.entries[warning->index];
-    const DollyMountedVolume *actual;
-    char reason[240];
-    if(!dolly_amiga_mounted_extents(&guard->device,guard->start,guard->length,0,&guard->live))
-        return -1;
-    actual=read_mount_match(&guard->live,mount);
-    if(!actual || strcmp(actual->volume,mount->volume)) {
-        dolly_amiga_role_request(guard->parent,"Dolly - Source changed",
-                                 "The source filesystem changed. Start again.","OK",NULL,NULL);
-        return -1;
-    }
-    mount->suspended=dolly_amiga_inhibit_mount(mount,1);
-    if(!dolly_amiga_mounted_extents(&guard->device,guard->start,guard->length,0,&guard->live))
-        return -1;
-    actual=read_mount_match(&guard->live,mount);
-    if(mount->suspended && (!actual || !actual->volume[0]))return 1;
-    snprintf(reason,sizeof(reason),"Source: \"%s\"\nVolume: \"%s\"\n"
-            "Dolly could not verify Inhibit. Other tasks can still change the source. "
-            "Proceed at your own risk.",mount->device,
-            mount->volume[0]?mount->volume:"name unavailable");
-    mount->allow_present=1;
-    return dolly_warning_risk(warning,reason);
-}
-
 int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWarnings *warnings,
                            const DollyPhysicalEntry *device,uint64_t start,uint64_t length,
                            BPTR required_file_lock) {
@@ -97,7 +71,7 @@ int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWar
     if(!dolly_amiga_mounted_extents(device,start,length,0,&g->pending))return 0;
     for(i=0;i<g->pending.count;++i) {
         DollyMountedVolume *mount=&g->pending.entries[i];
-        DollyWarning *warning;
+        const DollyMountedVolume *live;
         char title[46],reason[240];
         if(dolly_amiga_lock_uses_mount(required_file_lock,mount)) {
             dolly_amiga_role_request(parent,"Dolly - Transfer blocked",
@@ -105,16 +79,32 @@ int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWar
                 "OK",NULL,NULL);
             return 0;
         }
+        mount->suspended=dolly_amiga_inhibit_mount(mount,1);
+        if(!dolly_amiga_mounted_extents(device,start,length,0,&g->live))return 0;
+        live=read_mount_match(&g->live,mount);
+        if(!live || (mount->suspended && !live->volume[0]))continue;
+        mount->allow_present=1;
         snprintf(title,sizeof(title),"Source %.36s",mount->device);
-        snprintf(reason,sizeof(reason),"Source: \"%s\"\nVolume: \"%s\"\n"
-                 "Temporarily inhibit filesystem access while Dolly reads these sectors?",
-                 mount->device,mount->volume[0]?mount->volume:"name unavailable");
-        warning=dolly_warning_add(warnings,title,reason,"Inhibit");
-        if(!warning)return 0;
-        warning->action=inhibit_source_warning;
-        warning->context=g;
-        warning->index=i;
+        snprintf(reason,sizeof(reason),"Source: \"%s\"\n"
+                 "Dolly could not verify Inhibit. Other tasks can still change the source. "
+                 "Proceed at your own risk.",mount->device);
+        if(!dolly_warning_add(warnings,title,reason,"Proceed"))return 0;
     }
+    return 1;
+}
+
+int dolly_amiga_read_guard_isolated(DollyReadGuard *guard) {
+    unsigned i;
+    if(!dolly_amiga_read_guard_check(guard))return 0;
+    if(guard)for(i=0;i<guard->pending.count;++i)
+        if(!guard->pending.entries[i].suspended)return 0;
+    return 1;
+}
+
+int dolly_amiga_read_guard_allows_lock(const DollyReadGuard *guard,BPTR lock) {
+    unsigned i;
+    if(guard)for(i=0;i<guard->pending.count;++i)
+        if(dolly_amiga_lock_uses_mount(lock,&guard->pending.entries[i]))return 0;
     return 1;
 }
 

@@ -9,7 +9,7 @@ typedef struct DollyNativePartition {
     char summary[160];  /* formatted from validated on-disk fields */
     uint64_t start_bytes,length_bytes;
     ULONG descriptor_block;
-    ULONG low_cyl,high_cyl,fs_block_bytes,sectors_per_block,dos_type;
+    ULONG low_cyl,high_cyl,fs_block_bytes,sectors_per_block,reserved_blocks,dos_type;
     ULONG max_transfer,dma_mask;
     DollyIoHints io_hints;
     int32_t boot_priority;

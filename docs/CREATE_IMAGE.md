@@ -2,14 +2,20 @@
 
 Select **Create Image**, choose a Physical device, Partition or Logical
 device as Source, and select a new file with the Destination ASL
-requester. Choose RAW, HDF, IFF DOLY, IFF DOLY Fast or IFF DOLY Compact,
-then press **Start**. Sheep Counter displays
+requester. Choose **RAW image** or **IFF DOLY**, then select the DOLY
+compression mode if applicable and press **Start**. Sheep Counter displays
 the number of copied sectors and the main window shows progress.
 
 RAW and HDF both contain the source sectors in order. A whole-disk HDF
 includes the partition table and any other sectors in the reported
 capacity. A partition or logical volume image contains only its extent.
-This writer supports images smaller than 2 GiB on AmigaOS 2.04.
+This writer supports files up to 2 GiB minus one byte through the classic
+AmigaDOS API. See [large image files](LARGE_IMAGE_FILES.md) for the
+filesystem reference table and the destination preflight. An oversized
+single image shows the planned count of IFF DOLY parts and offers **Confirm split**
+in Warning Review. Part boundaries follow source sectors, so compression
+changes the stored size without changing the part count. A separate warning
+shows the shortfall if the volume may run out of space.
 IFF DOLY saves the same source sectors in chunks with checksums and
 range metadata. Fast uses PackBits for repeated bytes. Compact also
 searches for repeated sequences with LZSS. Use the `.dly` extension. Its single-file
@@ -22,7 +28,8 @@ be identified, Dolly asks whether to continue at the risk of overwriting
 source data. A destination volume on the same unit is allowed
 only when its physical extent can be identified and is disjoint from the
 raw source. If the ranges overlap or cannot be compared, Dolly blocks
-the transfer and shows the reason in an OK-only requester. Dolly shows an OK-only speed warning in that case. **Hide
+the transfer and shows the reason in an OK-only requester. A disjoint range
+on the same unit generates a speed warning. **Hide
 same-device speed warning** in Settings suppresses the message; range
 checks still run. Output begins in an exclusive
 `.part` drawer in the destination directory and is published under the
@@ -58,8 +65,8 @@ emulated controller. They exclude file writes and GUI updates.
 
 Create Image opens the source through the read-only sector adapter.
 Before copying data it maps the selected driver, unit and byte range to
-active AmigaDOS filesystems and asks to inhibit every overlapping
-filesystem. It releases the suspension on completion, failure or
+active AmigaDOS filesystems and automatically inhibits their active handlers. A failure to verify
+isolation triggers a warning. It releases the suspension on completion, failure or
 cancellation. If inhibition cannot be verified, explicitly approving a
 live read can leave an image with inconsistent filesystem contents.
 

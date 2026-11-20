@@ -101,6 +101,10 @@ static int nsd_has_commands(struct IOStdReq *request,UWORD first,UWORD second) {
 int dolly_amiga_device_advertises_write(struct IOStdReq *request) {
     return nsd_has_commands(request,CMD_WRITE,CMD_UPDATE);
 }
+int dolly_amiga_device_advertises_nsd64_write(struct IOStdReq *request) {
+    return nsd_has_commands(request,DOLLY_NSCMD_TD_READ64,DOLLY_NSCMD_TD_WRITE64);
+}
+
 static DollyBlockStatus request_error(const struct IOStdReq *request) {
 #ifndef DOLLY_AMIGA_MOCK
     switch(request->io_Error) {

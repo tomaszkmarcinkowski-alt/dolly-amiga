@@ -19,8 +19,10 @@ Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga compu
 | Sheep Inventory | Inspect device geometry and RDB/MBR partitions, copy details to the clipboard, export partition-table backups and restore RDB on supported offline targets. |
 | Surface Scan | Read-only scan of a selected sector range with retries, LBA/CHS reporting and an exportable log. |
 | Create Image | Write staged RAW, HDF or IFF DOLY images. DOLY offers raw, Fast (PackBits) and Compact (LZSS/PackBits) modes. |
-| Restore Image | Write flat RAW/HDF images to a whole device or in-range RDB partition. Size differences and layout discrepancies require explicit confirmation. |
+| Restore Image | Write RAW/HDF or single-file and split IFF DOLY images to a whole device or in-range RDB partition. Size differences and layout discrepancies require explicit confirmation. |
 | Sector-to-sector Copy | Copy equally sized whole devices or in-range RDB partitions, with optional read-back verification. |
+| Smart Copy | Copy allocated OFS/FFS blocks between compatible RDB partitions, including mixed Partition and Logical device selections. |
+| Clone and resize | Analyze FFS allocation and plan resize in read-only mode. |
 | Sheep Counter | Open the resizable Details window during an operation for progress, the sector grid, block and error counts, and the log when available. |
 
 Dolly reviews warnings before raw transfers and checks related AmigaDOS
@@ -51,6 +53,7 @@ images and validates them before writing.
 
 ## Documentation
 
+- [Operation workflows, step by step](docs/OPERATIONS_EN.md) ([Polski](docs/OPERATIONS_PL.md))
 - [User and developer documentation](docs/README.md)
 - [Roadmap](docs/ROADMAP.md), [backlog](docs/BACKLOG.md) and [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues)
 - [Contributing](CONTRIBUTING.md) and [MIT License](LICENSE)

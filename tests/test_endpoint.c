@@ -2,7 +2,24 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+static void test_smart_copy_selection(void) {
+    DollyEndpoint partition={0},logical={0},other={0};
+    assert(dolly_endpoint_set_partition(&partition,0,0,0));
+    assert(dolly_endpoint_set_logical(&logical,0));
+    assert(dolly_smart_copy_can_start(&partition,&logical));
+    assert(dolly_smart_copy_can_start(&logical,&partition));
+    assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&partition,&logical));
+    assert(!dolly_demo_can_start(DOLLY_DEMO_COPY,&logical,&partition));
+    assert(!dolly_smart_copy_can_start(&logical,&logical));
+    assert(!dolly_smart_copy_can_start(&partition,&partition));
+    assert(!dolly_smart_copy_can_start(&partition,&other));
+    assert(dolly_endpoint_set_unit(&other,0,1));
+    assert(!dolly_smart_copy_can_start(&other,&partition));
+    assert(!dolly_smart_copy_can_start(&logical,&other));
+}
+
 int main(void) {
+    test_smart_copy_selection();
     assert(dolly_unit_relation(0,1024,512,512)==DOLLY_UNIT_RANGE_OVERLAP);
     assert(dolly_unit_relation(512,512,0,1024)==DOLLY_UNIT_RANGE_OVERLAP);
     assert(dolly_unit_relation(0,512,512,512)==DOLLY_UNIT_RANGE_DISJOINT);
