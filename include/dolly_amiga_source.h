@@ -33,6 +33,7 @@ int dolly_amiga_probe_rom_scsi(uint32_t unit);
 struct IOStdReq;
 /* Inspect the opened device's NSD command list. This does not write. */
 int dolly_amiga_device_advertises_write(struct IOStdReq *request);
+int dolly_amiga_device_advertises_nsd64_write(struct IOStdReq *request);
 /* Read-only. Uses advertised NSD READ64 or the qualified UAE-IDE fallback
  * for large offsets. Other controllers need independent DMA verification. */
 DollyBlockStatus dolly_amiga_open_device(const DollyAmigaDeviceOptions *opts,

@@ -203,6 +203,7 @@ static int scan_rdb(Reader *r,DollyNativePartitionMap *out,
         p->low_cyl=low;p->high_cyl=high;
         p->fs_block_bytes=blockwords*4u;
         p->sectors_per_block=be32(r->buffer+144);
+        p->reserved_blocks=be32(r->buffer+152);
         p->dos_type=dos;
         /* de_TableSize is the last available DosEnvec index.
          * Never show absent optional fields as literal zeroes. */
@@ -580,7 +581,7 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     failure="The target driver did not accept CMD_UPDATE. No RDB sectors written.";
     if(DoIO((struct IORequest *)request) || request->iotd_Req.io_Error)goto out;
     target=(DollyAmigaWriteTarget){&request->iotd_Req,reader.buffer,BLK,
-        reader.total_bytes,0,size,BLK,BLK,0x00fffffe,2};
+        reader.total_bytes,0,size,BLK,BLK,0x00fffffe,2,0};
     for(pass=0;pass<2;++pass)
         for(i=0;i<blocks;++i) {
             if((pass==1)!=(i==header) || !memcmp(previous+i*BLK,bytes+i*BLK,BLK))

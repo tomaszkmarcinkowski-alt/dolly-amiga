@@ -845,3 +845,37 @@ wbudowanego ATA A600/A1200, uruchamianą w środowisku zapewniającym
 wyłączność na kanał IDE. Porównać surowe pola CHS/LBA z ATA IDENTIFY
 z READ CAPACITY(10), wynikiem TD_GETGEOMETRY i metadanymi RDB.
 Dla natywnego SCSI ocenić potrzebę osobno dla konkretnych kontrolerów.
+
+## Aplikacja desktopowa do obsługi obrazów Dolly
+
+**Status**: dostępny prototyp CLI `dolly-image` i przygotowana macierz CI
+dla Windows, macOS i Linuksa. Test konwersji i scalenia obrazu powyżej 4 GiB
+przeszedł na Linuksie. Weryfikacja kompilacji na pozostałych platformach
+i aplikacja graficzna pozostają w planie.
+
+- Przygotować osobną aplikację na Windows, macOS i Linux do konwersji obrazów RAW/HDF i IFF DOLY, dzielenia, scalania i weryfikacji integralności.
+- Eksportować obrazy wieloczęściowe wyłącznie jako IFF DOLY ze wspólnym z Dolly manifestem. Zachować kolejność sektorów i ograniczyć rozmiar każdej zapisanej części wraz z nagłówkami do 2 GiB minus 1 bajt.
+- Sprawdzać kompletność zestawu, kolejność części, długości i sumy kontrolne. Potwierdzić zgodność w obie strony na obrazie większym niż 4 GiB, od eksportu desktopowego po odtworzenie w Dolly i od utworzenia w Dolly po scalenie na desktopie.
+
+
+### Wznowienie Smart Copy z DLRP
+
+Zapisać zatwierdzony plan zakresów i pozycję w bieżącym zakresie albo
+zweryfikować je przez ponowną analizę źródła przy otwarciu DLRP. Licznik
+skopiowanych bajtów nie wskazuje pozycji na partycji w Smart Copy.
+
+### Podsumowanie końcowe każdej operacji
+
+Po zakończeniu, przerwaniu lub błędzie pokazać operację, jej wynik,
+źródło i cel, liczbę przetworzonych sektorów i bajtów oraz dostępne
+liczniki weryfikacji, ponowień, błędów i pominiętych bloków. Dla operacji
+bez transferu pokazać miary odpowiadające danej operacji.
+
+### Czas i prędkość transferu
+
+Mierzyć czas całej operacji oraz czas aktywnego transferu osobno.
+Pokazać czas i bieżącą prędkość przy pasku postępu, a w podsumowaniu
+czas całkowity i średni transfer. Odliczać pauzy i oczekiwanie na
+decyzję użytkownika od czasu aktywnego transferu. Dla Smart Copy
+liczyć faktycznie kopiowane dane, a dla kompresji rozróżnić dane
+źródłowe od liczby zapisanych bajtów.

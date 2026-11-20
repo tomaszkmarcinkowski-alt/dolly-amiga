@@ -43,7 +43,7 @@ request at a time. The resolved MaxTransfer and a 16 KiB batch ceiling
 error or a short transfer on a multi-sector request, read its whole
 range sector by sector. Retry a failed individual sector once. If it
 still fails, mark it unreadable, write its absolute LBA and failure
-class to the Shell, and continue. Count the sector once even if
+class to the scan log, and continue. Count the sector once even if
 several requests failed. A sector recovered on retry counts as read.
 An unsupported command, invalid request, unavailable device, media
 change or backend range failure stops the scan.
@@ -57,9 +57,8 @@ selected extent. The map reflows 192 flat tiles as the window
 resizes, with tile sizes and gaps adjusted to the screen pixel aspect
 ratio. R marks a cell with a sector
 recovered by an individual retry. X marks a cell with at least one
-unreadable sector and takes precedence over R. The Shell summary
-reports retry and unreadable sector counts, and the earlier lines
-locate the unreadable LBAs.
+unreadable sector and takes precedence over R. The scan log reports
+retry and unreadable sector counts and locates unreadable LBAs.
 The parameters window defaults to the first and last sector of the
 selected object, with one retry per unreadable sector. Both limits are
 inclusive. Enter absolute decimal LBA or C/H/S (cylinder and head start

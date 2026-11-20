@@ -343,8 +343,20 @@ int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend) {
     entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
     same=entry && entry==mount->entry && entry->dol_Task==mount->handler;
     UnLockDosList(flags);
-    /* DOS may send a packet and wait for the handler. Do not hold the list lock. */
-    return same && Inhibit((STRPTR)mount->device,suspend?DOSTRUE:DOSFALSE);
+    /* DOS may send a packet and wait for the handler. Do not hold the list lock.
+     * Un-inhibiting validates the disk again. Route failures back to Dolly
+     * instead of opening an AmigaDOS requester during cleanup. */
+    if(!same)return 0;
+    if(suspend)return Inhibit((STRPTR)mount->device,DOSTRUE)!=0;
+    {
+        struct Process *process=(struct Process *)FindTask(NULL);
+        APTR old_window=process->pr_WindowPtr;
+        int resumed;
+        process->pr_WindowPtr=(APTR)-1;
+        resumed=Inhibit((STRPTR)mount->device,DOSFALSE)!=0;
+        process->pr_WindowPtr=old_window;
+        return resumed;
+    }
 }
 
 int dolly_amiga_unmount(const DollyMountedVolume *mount) {

@@ -27,6 +27,15 @@ void dolly_surface_close(DollySurfaceScan *scan) {
     dolly_amiga_read_guard_close(&scan->mount_guard);
 }
 
+static void set_rdb_metadata(DollySurfaceScan *scan,const DollyNativePartition *part) {
+    scan->is_rdb_partition=1;
+    scan->rdb_size_block=part->fs_block_bytes;
+    scan->rdb_sectors_per_block=part->sectors_per_block;
+    scan->rdb_reserved_blocks=part->reserved_blocks;
+    scan->rdb_dos_type=part->dos_type;
+    scan->rdb_io=part->io_hints;
+}
+
 int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
                        struct Window *parent,DollyIoRole role,int configure,DollyWarnings *warnings) {
     DollyPhysicalEntry device;
@@ -90,11 +99,17 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
         } else if(found && endpoint->kind==DOLLY_ENDPOINT_LOGICAL &&
                   map->format==DOLLY_NATIVE_PARTITION_RDB) {
             DollyIoHints disk_hints={0};
+            const DollyNativePartition *matched=NULL;
+            unsigned matches=0;
             for(i=0;i<map->count;++i) {
                 const DollyNativePartition *part=&map->parts[i];
-                if(!part->outside_media && part->start_bytes==start && part->length_bytes==length)
+                if(!part->outside_media && part->start_bytes==start && part->length_bytes==length) {
                     dolly_io_hints_merge(&disk_hints,part->io_hints);
+                    matched=part;
+                    ++matches;
+                }
             }
+            if(matches==1u)set_rdb_metadata(scan,matched);
             hints=disk_hints;
             complete_rdb=hints.present==DOLLY_IO_ALL;
         } else if(found && endpoint->kind==DOLLY_ENDPOINT_PARTITION &&
@@ -107,6 +122,7 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             ok=strcmp(tail+3,part->label)==0 &&
                start==endpoint->partition_start_bytes &&
                length==endpoint->partition_length_bytes;
+            if(ok && part->is_rdb)set_rdb_metadata(scan,part);
             if(ok && part->outside_media) {
                 policy=endpoint->outside_range;
                 ok=dolly_amiga_allow_outside_range() &&

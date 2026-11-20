@@ -35,7 +35,7 @@ typedef struct DollyMountedVolume {
     char device[DOLLY_MOUNT_NAME],volume[DOLLY_MOUNT_NAME];
     struct DosList *entry; /* Identity only. */
     struct MsgPort *handler; /* Identity only. Never dereference after unlocking. */
-    int suspended,allow_present;
+    int suspended,allow_present,quiet_offline;
 } DollyMountedVolume;
 typedef struct DollyMountList {
     unsigned count;

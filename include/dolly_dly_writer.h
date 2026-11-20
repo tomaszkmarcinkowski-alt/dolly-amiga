@@ -1,6 +1,7 @@
 #ifndef DOLLY_DLY_WRITER_H
 #define DOLLY_DLY_WRITER_H
 #include "dolly_dly_codec.h"
+#include "dolly_dly_set.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -20,6 +21,9 @@ typedef struct DollyDlyWriter {
     int failed,finished;
 } DollyDlyWriter;
 
+/* Container headers for sector-aligned chunks and parts. */
+uint64_t dolly_dly_overhead(uint64_t chunks,uint64_t files,int compressed);
+
 /* Plan a single, uncompressed version-1 FORM DOLY within signed DOS sizes. */
 int dolly_dly_init(DollyDlyWriter *writer,uint64_t first_lba,uint64_t sectors,
                    uint32_t sector_bytes,uint32_t batch_bytes);
@@ -28,6 +32,9 @@ int dolly_dly_init(DollyDlyWriter *writer,uint64_t first_lba,uint64_t sectors,
 int dolly_dly_compress(DollyDlyWriter *writer,DollyDlyCodec codec,
                        unsigned char *packed,uint16_t *hash,DollyDlySeek seek);
 int dolly_dly_begin(DollyDlyWriter *writer,DollyDlySink sink,void *context);
+/* Begin the first part and include the multipart manifest in its FORM. */
+int dolly_dly_begin_set(DollyDlyWriter *writer,DollyDlySink sink,void *context,
+                        const DollyDlySetInfo *set);
 /* Supply one complete batch, or the exact remaining bytes for the final batch. */
 int dolly_dly_append(DollyDlyWriter *writer,const void *data,size_t size);
 int dolly_dly_finish(DollyDlyWriter *writer);

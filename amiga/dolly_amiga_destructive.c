@@ -124,7 +124,7 @@ static int run_request(struct Window *parent,const char *title,const char *body,
     int opened=0,pending=0,done=0,result=0;
     unsigned seconds=timed?10u:0u,i,line_count=0,rows;
     LONG row,width,button_width=0,left;
-    char lines[18][97],label[40];
+    char (*lines)[97],label[40];
     if(!parent || !body || !*body || !count || count>3)return 0;
     screen=parent->WScreen;
     width=(LONG)screen->Width-24;
@@ -138,16 +138,18 @@ static int run_request(struct Window *parent,const char *title,const char *body,
         if(needed>button_width)button_width=needed;
     }
     if((LONG)count*button_width+((LONG)count-1)*6>width)return 0;
-    if(!wrap_lines(&measure,body,width,lines,&line_count,18))return 0;
+    lines=malloc(18u*sizeof(*lines));
+    if(!lines)return 0;
+    if(!wrap_lines(&measure,body,width,lines,&line_count,18))goto out;
     if(destructive && !wrap_lines(&measure,
         "You are continuing at your own risk.\n"
         "Incorrect use can cause data loss. Back up the destination first.",
-        width,lines,&line_count,18))return 0;
+        width,lines,&line_count,18))goto out;
     rows=line_count+(timed?2u:1u);
-    if((LONG)rows*row+30>screen->Height-screen->BarHeight)return 0;
+    if((LONG)rows*row+30>screen->Height-screen->BarHeight)goto out;
     if(timed) {
         port=CreateMsgPort();
-        if(!port)return 0;
+        if(!port)goto out;
         timer=(struct timerequest *)CreateIORequest(port,sizeof(*timer));
         if(!timer || OpenDevice(TIMERNAME,UNIT_VBLANK,&timer->tr_node,0))goto out;
         opened=1;
@@ -236,6 +238,7 @@ out:
     if(gadgets)FreeGadgets(gadgets);
     if(info)FreeScreenDrawInfo(screen,info);
     if(visual)FreeVisualInfo(visual);
+    free(lines);
     return result;
 }
 
@@ -495,7 +498,7 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
             GT_ReplyIMsg(msg);
             if(cls==IDCMP_CLOSEWINDOW || (cls==IDCMP_RAWKEY && code==0x45) || id==WARN_CANCEL) {
                 done=1;
-                continue;
+                break;
             }
             if(cls==IDCMP_NEWSIZE) {
                 if(!layout_warning_view(&v))done=1;
@@ -536,5 +539,6 @@ out:
     if(v.info)FreeScreenDrawInfo(screen,v.info);
     free(lines);
     if(settings)dolly_amiga_io_settings(screen,settings);
+    if(!result)ActivateWindow(parent);
     return result;
 }

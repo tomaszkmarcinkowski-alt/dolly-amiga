@@ -22,7 +22,12 @@ int main(void){
  };
  unsigned char buf[2048];unsigned i;
  struct IOStdReq request={0};
+ dolly_mock_set_nsd(5);
+ assert(dolly_amiga_device_advertises_nsd64_write(&request));
+ dolly_mock_set_nsd(1);
+ assert(!dolly_amiga_device_advertises_nsd64_write(&request));
  dolly_mock_set_nsd(3);
+ assert(!dolly_amiga_device_advertises_nsd64_write(&request));
  assert(dolly_amiga_device_advertises_write(&request));
  dolly_mock_set_nsd(4);
  assert(!dolly_amiga_device_advertises_write(&request));
