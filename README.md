@@ -53,7 +53,7 @@ images and validates them before writing.
 
 ## Documentation
 
-- [Operation workflows, step by step (Polish)](docs/OPERATIONS_PL.md)
+- [Operation workflows, step by step](docs/OPERATIONS_EN.md) ([Polski](docs/OPERATIONS_PL.md))
 - [User and developer documentation](docs/README.md)
 - [Roadmap](docs/ROADMAP.md), [backlog](docs/BACKLOG.md) and [GitHub Issues](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues)
 - [Contributing](CONTRIBUTING.md) and [MIT License](LICENSE)

@@ -1,5 +1,7 @@
 # Operacje Dolly krok po kroku
 
+[English version](OPERATIONS_EN.md)
+
 Przewodnik opisuje natywny build testowy Alpha 3.4 dla Amigi MC68000 i AmigaOS 2.04+. Nazwy kontrolek odpowiadają angielskiemu interfejsowi Dolly.
 
 ## Wybór źródła i celu
