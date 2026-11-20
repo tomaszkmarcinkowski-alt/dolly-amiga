@@ -20,8 +20,13 @@ int main(void) {
     assert(s.sheep_counter_visible == 1 && s.completed_blocks == 96);
     assert(dolly_operation_progress(&s, 95, 1, 2) == DOLLY_OP_RANGE_ERROR);
     assert(dolly_operation_progress(&s, 193, 1, 2) == DOLLY_OP_RANGE_ERROR);
+    assert(dolly_operation_rewind(&s, 97) == DOLLY_OP_RANGE_ERROR);
+    assert(dolly_operation_rewind(&s, 64) == DOLLY_OP_OK);
+    assert(s.completed_blocks == 64 && s.errors == 1 && s.retries == 2);
+    assert(dolly_operation_progress(&s, 80, 1, 2) == DOLLY_OP_OK);
     assert(dolly_operation_pause(&s) == DOLLY_OP_OK);
     assert(dolly_operation_progress(&s, 100, 1, 2) == DOLLY_OP_STATE_ERROR);
+    assert(dolly_operation_rewind(&s, 64) == DOLLY_OP_STATE_ERROR);
     assert(dolly_operation_resume(&s) == DOLLY_OP_OK);
     assert(dolly_operation_finish(&s, 1) == DOLLY_OP_RANGE_ERROR);
     assert(dolly_operation_progress(&s, 192, 1, 2) == DOLLY_OP_OK);

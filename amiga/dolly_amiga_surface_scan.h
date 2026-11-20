@@ -12,6 +12,8 @@ typedef struct DollySurfaceScan {
     void *buffer;
     uint64_t first_lba,total,processed;
     uint32_t sector_bytes,transfer_bytes,fallback,errors,retries;
+    uint32_t rdb_size_block,rdb_sectors_per_block,rdb_reserved_blocks,rdb_dos_type;
+    unsigned is_rdb_partition;
     unsigned retry_pending,max_retries;
     struct DollyReadGuard *mount_guard;
     const char *failure;
@@ -19,7 +21,7 @@ typedef struct DollySurfaceScan {
     DollyMediaGeometry geometry;
     DollyOutsideRange outside_range;
     char ata_identify[88];
-    DollyIoHints effective_io;
+    DollyIoHints effective_io,rdb_io;
     DollyPhysicalEntry device;
     char device_name[112];
     char source_path[sizeof(((DollyEndpoint *)0)->path)];

@@ -198,7 +198,7 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
     PointerStage stage;
     LONG output=0;
     int ok;
-    if(!image || !image->failure || !image->file || !scan->source ||
+    if(!image || image->split || !image->failure || !image->file || !scan->source ||
        !scan->total || scan->processed>scan->total || scan->outside_range!=DOLLY_RANGE_STRICT ||
        !request_pointer_path(parent,path))return;
     if(image) {

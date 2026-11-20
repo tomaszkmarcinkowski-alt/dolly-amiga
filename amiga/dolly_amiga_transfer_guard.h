@@ -11,6 +11,8 @@ typedef struct DollyReadGuard DollyReadGuard;
 int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWarnings *warnings,
                            const DollyPhysicalEntry *device,uint64_t start,uint64_t length,
                            BPTR required_file_lock);
+int dolly_amiga_read_guard_allows_lock(const DollyReadGuard *guard,BPTR lock);
+int dolly_amiga_read_guard_isolated(DollyReadGuard *guard);
 int dolly_amiga_read_guard_check(DollyReadGuard *guard);
 void dolly_amiga_read_guard_close(DollyReadGuard **guard);
 #endif

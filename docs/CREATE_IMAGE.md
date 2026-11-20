@@ -9,7 +9,13 @@ the number of copied sectors and the main window shows progress.
 RAW and HDF both contain the source sectors in order. A whole-disk HDF
 includes the partition table and any other sectors in the reported
 capacity. A partition or logical volume image contains only its extent.
-This writer supports images smaller than 2 GiB on AmigaOS 2.04.
+This writer supports files up to 2 GiB minus one byte through the classic
+AmigaDOS API. See [large image files](LARGE_IMAGE_FILES.md) for the
+filesystem reference table and the destination preflight. An oversized
+single image shows the planned count of IFF DOLY parts and offers **Confirm split**
+in Warning Review. Part boundaries follow source sectors, so compression
+changes the stored size without changing the part count. A separate warning
+shows the shortfall if the volume may run out of space.
 IFF DOLY saves the same source sectors in chunks with checksums and
 range metadata. Fast uses PackBits for repeated bytes. Compact also
 searches for repeated sequences with LZSS. Use the `.dly` extension. Its single-file
