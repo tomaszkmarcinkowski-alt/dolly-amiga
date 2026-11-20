@@ -225,15 +225,18 @@ static int approve_write_warning(DollyWarning *warning) {
     }
     open_count=t->request->io_Device->dd_Library.lib_OpenCnt;
     if(open_count==t->expected_opens)return 1;
-    if(open_count<t->expected_opens || !(t->source_mounts.count || t->target_mounts.count)) {
-        t->failure="Unexpected destination driver access. Transfer blocked.";
+    if(open_count<t->expected_opens) {
+        t->failure="Destination driver open count is below the expected minimum. Transfer blocked.";
         return -1;
     }
-    t->expected_opens=open_count;
+    /* Exec exposes a count for the entire device driver. Unrelated units
+     * can have open handles even when the selected unit is offline. */
     snprintf(message,sizeof(message),"Destination: \"%s / Unit %lu\"\n"
-             "The driver still has other open handles. Dolly cannot verify exclusive access. "
-             "All sectors in the selected range will be overwritten. Proceed at your own risk.",
-             t->device.driver,(unsigned long)t->device.unit);
+             "Driver-wide open count: %u. Dolly expected %u of its own. "
+             "Other handles can belong to any unit. Dolly cannot confirm exclusive "
+             "access to this unit. Proceed at your own risk.",
+             t->device.driver,(unsigned long)t->device.unit,open_count,t->expected_opens);
+    t->expected_opens=open_count;
     return dolly_warning_risk(warning,message);
 }
 static void release_inhibited_mounts(DollyAmigaTransfer *t,DollyMountList *list,int keep_inhibited) {

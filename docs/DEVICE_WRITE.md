@@ -25,7 +25,10 @@ removes the device entry only when the handler has released it. A
 successful unmount persists for the session, including after a
 cancelled transfer. Reboot to load the current destination partition
 table. A failure adds a decision to the same review before proceeding at the user's risk.
-Unexpected changes in mounts or raw opens stop the write.
+The Exec open count is shared across units on the driver. Extra opens at
+preflight require explicit approval even if the destination has no registered
+mounts. Dolly checks the selected units' mounts separately and stops if the
+approved driver count or the relevant mount state changes.
 
 ## Confirmation and transfer
 
