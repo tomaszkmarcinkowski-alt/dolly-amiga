@@ -845,3 +845,14 @@ wbudowanego ATA A600/A1200, uruchamianą w środowisku zapewniającym
 wyłączność na kanał IDE. Porównać surowe pola CHS/LBA z ATA IDENTIFY
 z READ CAPACITY(10), wynikiem TD_GETGEOMETRY i metadanymi RDB.
 Dla natywnego SCSI ocenić potrzebę osobno dla konkretnych kontrolerów.
+
+## Aplikacja desktopowa do obsługi obrazów Dolly
+
+**Status**: dostępny prototyp CLI `dolly-image` i przygotowana macierz CI
+dla Windows, macOS i Linuksa. Test konwersji i scalenia obrazu powyżej 4 GiB
+przeszedł na Linuksie. Weryfikacja kompilacji na pozostałych platformach
+i aplikacja graficzna pozostają w planie.
+
+- Przygotować osobną aplikację na Windows, macOS i Linux do konwersji obrazów RAW/HDF i IFF DOLY, dzielenia, scalania i weryfikacji integralności.
+- Eksportować obrazy wieloczęściowe wyłącznie jako IFF DOLY ze wspólnym z Dolly manifestem. Zachować kolejność sektorów i ograniczyć rozmiar każdej zapisanej części wraz z nagłówkami do 2 GiB minus 1 bajt.
+- Sprawdzać kompletność zestawu, kolejność części, długości i sumy kontrolne. Potwierdzić zgodność w obie strony na obrazie większym niż 4 GiB, od eksportu desktopowego po odtworzenie w Dolly i od utworzenia w Dolly po scalenie na desktopie.

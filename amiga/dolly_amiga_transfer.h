@@ -26,8 +26,11 @@ typedef struct DollyAmigaTransfer {
     int check_source_mounts,check_target_mounts,may_have_written;
     int opened,restoring;
     const char *failure;
+    char validation_failure[112];
 } DollyAmigaTransfer;
 
+void dolly_amiga_analyze_copy(struct Window *parent,const DollyEndpoint *source,
+                              const DollyEndpoint *destination,int smart_copy);
 int dolly_amiga_transfer_open(DollyAmigaTransfer *transfer,struct Window *parent,
                      const DollyEndpoint *source,const DollyEndpoint *destination,int restore);
 void dolly_amiga_transfer_step(DollyAmigaTransfer *transfer);

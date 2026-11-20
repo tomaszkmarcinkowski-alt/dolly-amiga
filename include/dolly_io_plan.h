@@ -6,6 +6,7 @@
 #include <stddef.h>
 #define DOLLY_CMD_READ UINT16_C(2)
 #define DOLLY_NSCMD_TD_READ64 UINT16_C(0xc000)
+#define DOLLY_NSCMD_TD_WRITE64 UINT16_C(0xc001)
 typedef struct DollyIoReadPlan {
     uint16_t command;
     uint32_t offset_low;

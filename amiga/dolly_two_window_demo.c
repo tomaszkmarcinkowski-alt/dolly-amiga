@@ -105,7 +105,7 @@ typedef struct DollyDemoView {
     unsigned mode_count[2],mode_active[2];
     char source_label[72],target_label[72],desc_label[96];
     char status_label[64];
-    char block_label[40];
+    char block_label[48];
     char percent_label[8];
     APTR visual;
     unsigned char gadgets_detached;
@@ -318,8 +318,11 @@ static void clip_main(char *value,LONG width) {
         value[--len]='\0';
 }
 static int can_start_operation(void) {
-    return (selected_operation!=DOLLY_DEMO_COPY || copy_mode==0) &&
-           dolly_demo_can_start((DollyDemoOperation)selected_operation,
+    if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0)
+        return selected_source.kind==DOLLY_ENDPOINT_PARTITION &&
+               selected_target.kind==DOLLY_ENDPOINT_PARTITION &&
+               dolly_demo_can_start(DOLLY_DEMO_COPY,&selected_source,&selected_target);
+    return dolly_demo_can_start((DollyDemoOperation)selected_operation,
                                 &selected_source,&selected_target);
 }
 static int operation_active(void) {
@@ -341,9 +344,17 @@ static const char *image_source_name(void) {
     const char *partition=unit?strstr(unit+8," / "):NULL;
     return partition?partition+3:source;
 }
+static int validating_restore(void) {
+    return transfer.opened && transfer.job.source_checked<transfer.job.source_check_bytes;
+}
+
 static unsigned transfer_check_percent(void) {
-    return transfer.job.source_checked<transfer.job.source_check_bytes?
-           (unsigned)(transfer.job.source_checked*100u/transfer.job.source_check_bytes):100u;
+    if(validating_restore()) {
+        uint32_t sector=transfer.target.sector_bytes;
+        return (unsigned)((transfer.job.source_checked/sector)*100u/
+                          (transfer.job.source_check_bytes/sector));
+    }
+    return 100u;
 }
 
 static void update_main_status(void) {
@@ -352,7 +363,7 @@ static void update_main_status(void) {
                                 &selected_source,&selected_target);
     text_copy(main_view.desc_label,sizeof(main_view.desc_label),
               selected_operation==DOLLY_DEMO_COPY && copy_mode?
-              (copy_mode==1?"Smart Copy is planned.":"Clone and resize is planned."):
+              (copy_mode==1?"Preview FFS allocated-block copy (read only).":"Analyze FFS partition sizes (read only)."):
               demo_descriptions[selected_operation]);
     if(quit_blocked && operation_active())
         text_copy(main_view.status_label,sizeof(main_view.status_label),
@@ -435,9 +446,9 @@ static void update_main_status(void) {
                                     dolly_endpoint_mode(&selected_target)))
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Destination incompatible. Choose again.");
-    else if(selected_operation==DOLLY_DEMO_COPY && copy_mode)
+    else if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
-                  "Selected copy mode is not available in this build.");
+                  can_start_operation()?"Ready for read-only FFS analysis.":"Choose two RDB partitions.");
     else if(!can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Check source/destination identity or overlap.");
@@ -475,9 +486,6 @@ static void append_u32(char **out,char *limit,unsigned long n) {
     while(p && *out<limit)
         *(*out)++=digits[--p];
 }
-static void append_char(char **out,char *limit,char c) {
-    if(*out<limit) *(*out)++=c;
-}
 static int log_available(void) {
     return scan_result && surface.source_path[0] && !surface.source;
 }
@@ -491,21 +499,27 @@ static int counter_available(void) {
             ((scan_result && selected_operation==DOLLY_DEMO_SCAN) ||
              (image_result && selected_operation==DOLLY_DEMO_CREATE_IMAGE)));
 }
+static void progress_counts(uint64_t *current,uint64_t *total) {
+    *current=operation.completed_blocks;
+    *total=operation.total_blocks;
+    if(validating_restore()) {
+        uint32_t sector=transfer.target.sector_bytes;
+        *current=transfer.job.source_checked/sector;
+        *total=transfer.job.source_check_bytes/sector;
+    }
+}
 static ULONG progress_units(ULONG units) {
-    return operation.total_blocks?
-           (ULONG)(operation.completed_blocks*units/operation.total_blocks):0;
+    uint64_t current,total;
+    progress_counts(&current,&total);
+    return total?(ULONG)(current*units/total):0;
 }
 static void update_labels(DollyDemoView *v) {
-    char *p=v->block_label;
-    char *limit=v->block_label+sizeof(v->block_label)-1;
-    unsigned long current=(unsigned long)operation.completed_blocks;
-    unsigned long total=(unsigned long)operation.total_blocks;
-    append_u32(&p,limit,current);
-    append_char(&p,limit,' ');
-    append_char(&p,limit,'/');
-    append_char(&p,limit,' ');
-    append_u32(&p,limit,total);
-    *p='\0';
+    uint64_t current,total;
+    char reached[21],count[21];
+    progress_counts(&current,&total);
+    dolly_surface_log_decimal(reached,current);
+    dolly_surface_log_decimal(count,total);
+    snprintf(v->block_label,sizeof(v->block_label),"%s / %s",reached,count);
 }
 static void fill(struct RastPort *rp,UWORD pen,
                  LONG x1,LONG y1,LONG x2,LONG y2) {
@@ -1138,7 +1152,8 @@ static void draw_sheep_static(void) {
     struct TagItem tags[3];
     unsigned i,completed=progress_units(GRID_TOTAL);
     const char *heading=transfer_result?
-                       (transfer.restoring?"Restoring image...":"Copying sectors..."):
+                       (validating_restore()?"Validating IFF DOLY...":
+                        transfer.restoring?"Restoring image...":"Copying sectors..."):
                        image_result?image_heading:counter_heading;
     if(!sheep_view.window)return;
     rp=sheep_view.window->RPort;
@@ -1149,7 +1164,8 @@ static void draw_sheep_static(void) {
         LONG width;
         /* Proportional cells may differ by one sector. Show the upper
          * bound, rounded up so that even a small scan shows one sector. */
-        uint64_t total=operation.total_blocks;
+        uint64_t shown,total;
+        progress_counts(&shown,&total);
         memcpy(legend,grid_legend_prefix,sizeof(grid_legend_prefix)-1);
         append_u32(&p,p+10,(unsigned long)(total/GRID_TOTAL+
                    (total%GRID_TOTAL!=0)));
@@ -1312,7 +1328,7 @@ static void progress_view_update(unsigned old,int cell_changed) {
     if(running && percent!=main_view.displayed_percent)draw_main_progress();
     if(!sheep_view.window)return;
     if(old!=now || cell_changed || !running)
-        for(cell=old;cell<=now && cell<GRID_TOTAL;++cell)
+        for(cell=old<now?old:now;cell<GRID_TOTAL && cell<=(old>now?old:now);++cell)
             draw_cell(cell,now,running);
     /* For lengthy scans, keep the exact sector count moving even
      * while the integer percentage stays the same. */
@@ -1466,7 +1482,10 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                       !source_picker.changed && !target_picker.changed &&
                       !relayout && can_start_operation()) {
                 quit_blocked=0;
-                if(selected_operation==DOLLY_DEMO_INVENTORY) {
+                if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0) {
+                    dolly_amiga_analyze_copy(v->window,&selected_source,&selected_target,copy_mode==1);
+                    refresh_main_selection();
+                } else if(selected_operation==DOLLY_DEMO_INVENTORY) {
                     if(!dolly_inventory_view_open(&inventory_view,
                                                    public_screen,&selected_source))
                         dolly_amiga_role_request(v->window,"Dolly","Could not open Sheep Inventory.","OK",NULL,NULL);
@@ -1678,7 +1697,7 @@ int main(int argc,char **argv) {
         dolly_amiga_log_view_pump();
         if(!quit && transfer.opened && operation.state==DOLLY_OP_RUNNING) {
             unsigned old=progress_units(GRID_TOTAL);
-            int finished;
+            int finished,was_validating=validating_restore();
             unsigned old_check=transfer_check_percent();
             dolly_amiga_transfer_step(&transfer);
             if(old_check!=transfer_check_percent())refresh_main_selection();
@@ -1707,11 +1726,18 @@ int main(int argc,char **argv) {
                 (void)dolly_operation_finish(&operation,transfer.failure==NULL);
                 refresh_main_selection();
             }
+            if(sheep_view.window && was_validating!=validating_restore()) {
+                draw_full(&sheep_view,0);
+                update_numbers(&sheep_view);
+            }
             progress_view_update(old,transfer.failure!=NULL);
         } else if(!quit && image.file && operation.state==DOLLY_OP_RUNNING) {
             unsigned old=progress_units(GRID_TOTAL);
             dolly_image_step(&image);
-            (void)dolly_operation_progress(&operation,image.reader.processed,0,0);
+            if(image.reader.processed<operation.completed_blocks)
+                (void)dolly_operation_rewind(&operation,image.reader.processed);
+            else
+                (void)dolly_operation_progress(&operation,image.reader.processed,0,0);
             if(image.failure && image.file) {
                 dolly_operation_pointer_offer(main_view.window,&selected_source,&selected_target,
                                               &image.reader,&image);

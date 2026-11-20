@@ -2,9 +2,13 @@
 #include "dolly_checksum.h"
 #include <string.h>
 
-#define DLY_PREFIX_BYTES 60u
+#define DLY_PREFIX_BYTES DOLLY_DLY_GEOM_END
 #define DLY_CHUNK_OVERHEAD 24u
 #define DLY_MAX_DATA_CHUNKS 999998u
+
+uint64_t dolly_dly_overhead(uint64_t chunks,uint64_t files,int compressed) {
+    return files*DLY_PREFIX_BYTES+chunks*(DLY_CHUNK_OVERHEAD+(compressed?4u:0u));
+}
 
 static void put32(unsigned char *out,uint32_t value) {
     out[0]=(unsigned char)(value>>24);
@@ -27,7 +31,7 @@ int dolly_dly_init(DollyDlyWriter *writer,uint64_t first_lba,uint64_t sectors,
        sectors>INT32_MAX/sector_bytes)return 0;
     data_bytes=sectors*sector_bytes;
     chunks=(data_bytes+batch_bytes-1u)/batch_bytes;
-    file_bytes=DLY_PREFIX_BYTES+chunks*DLY_CHUNK_OVERHEAD+data_bytes;
+    file_bytes=dolly_dly_overhead(chunks,1,0)+data_bytes;
     if(chunks>DLY_MAX_DATA_CHUNKS || file_bytes>INT32_MAX)return 0;
     writer->first_lba=first_lba;
     writer->sectors=sectors;
@@ -52,9 +56,44 @@ int dolly_dly_compress(DollyDlyWriter *writer,DollyDlyCodec codec,
     writer->seek=seek;
     return 1;
 }
-int dolly_dly_begin(DollyDlyWriter *writer,DollyDlySink sink,void *context) {
-    unsigned char header[DLY_PREFIX_BYTES]={0};
+static int begin(DollyDlyWriter *writer,DollyDlySink sink,void *context,
+                 const DollyDlySetInfo *set) {
+    unsigned char header[DLY_PREFIX_BYTES+DOLLY_DLY_NUMBERED_MSET_BYTES]={0};
+    size_t header_bytes=DLY_PREFIX_BYTES;
     if(!writer->file_bytes || writer->sink || !sink)return 0;
+    if(set) {
+        unsigned char *chunk=header+DLY_PREFIX_BYTES;
+        const unsigned chunk_bytes=set->part?DOLLY_DLY_NUMBERED_MSET_BYTES:DOLLY_DLY_MSET_BYTES;
+        const uint64_t index=set->part?set->part-1u:0;
+        const uint64_t start=index*set->sectors_per_part;
+        uint64_t remaining;
+        DollyChecksum checksum;
+        if(writer->file_bytes>INT32_MAX-chunk_bytes ||
+           set->sector_bytes!=writer->sector_bytes || !set->sectors_per_part ||
+           set->sectors>UINT64_MAX/set->sector_bytes || start>=set->sectors ||
+           set->first_lba>UINT64_MAX-(set->sectors-1u) ||
+           set->parts<2u || set->part>set->parts || (set->part && !set->set_id) ||
+           set->parts!=(set->sectors-1u)/set->sectors_per_part+1u)return 0;
+        remaining=set->sectors-start;
+        if(remaining>set->sectors_per_part)remaining=set->sectors_per_part;
+        if(writer->first_lba!=set->first_lba+start || writer->sectors!=remaining)return 0;
+        memcpy(chunk,"MSET",4);
+        put32(chunk+4,chunk_bytes-8u);
+        put32(chunk+8,set->part?2u:1u);
+        put32(chunk+12,set->parts);
+        put32(chunk+16,set->sectors_per_part);
+        put64(chunk+24,set->first_lba);
+        put64(chunk+32,set->sectors);
+        if(set->part) {
+            put32(chunk+40,set->part);
+            put64(chunk+44,set->set_id);
+        }
+        dolly_checksum_init(&checksum);
+        if(dolly_checksum_update(&checksum,chunk+8,chunk_bytes-8u)!=0)return 0;
+        put32(chunk+20,dolly_checksum_final(&checksum));
+        header_bytes+=chunk_bytes;
+        writer->file_bytes+=chunk_bytes;
+    }
     memcpy(header,"FORM",4);
     put32(header+4,writer->file_bytes-8u);
     memcpy(header+8,"DOLYHEAD",8);
@@ -68,9 +107,16 @@ int dolly_dly_begin(DollyDlyWriter *writer,DollyDlySink sink,void *context) {
     put32(header+56,writer->batch_bytes);
     writer->sink=sink;
     writer->context=context;
-    writer->failed=!sink(context,header,sizeof(header));
-    writer->emitted=sizeof(header);
+    writer->failed=!sink(context,header,header_bytes);
+    writer->emitted=(uint32_t)header_bytes;
     return !writer->failed;
+}
+int dolly_dly_begin(DollyDlyWriter *writer,DollyDlySink sink,void *context) {
+    return begin(writer,sink,context,NULL);
+}
+int dolly_dly_begin_set(DollyDlyWriter *writer,DollyDlySink sink,void *context,
+                        const DollyDlySetInfo *set) {
+    return set && begin(writer,sink,context,set);
 }
 int dolly_dly_append(DollyDlyWriter *writer,const void *data,size_t size) {
     unsigned char header[DLY_CHUNK_OVERHEAD+4u];

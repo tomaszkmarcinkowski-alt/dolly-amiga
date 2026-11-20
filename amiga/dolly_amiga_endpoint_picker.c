@@ -1,4 +1,5 @@
 #include "dolly_amiga_restore_source.h"
+#include "dolly_dly_reader.h"
 #include "dolly_amiga_fonts.h"
 /* Native AmigaOS 2.04 endpoint picker, synthetic device tree.
  * Mode-first workflow: Physical device, Logical device, Partition, File.
@@ -693,8 +694,47 @@ static int suffix_is(const char *name,const char *ext) {
     }
     return 1;
 }
+static int describe_dly_header(const unsigned char *header,size_t bytes,uint64_t file_bytes,
+                               char *out,size_t capacity) {
+    DollyDlySetInfo set;
+    uint32_t form_length;
+    int embedded;
+    char total[21];
+    if(bytes>=sizeof(DOLLY_DLY_SET_MAGIC)-1u &&
+       !memcmp(header,DOLLY_DLY_SET_MAGIC,sizeof(DOLLY_DLY_SET_MAGIC)-1u)) {
+        if(bytes!=file_bytes ||
+           dolly_dly_set_parse((const char *)header,bytes,&set)!=DOLLY_BLOCK_OK)
+            snprintf(out,capacity,"Invalid IFF DOLY manifest.");
+        else {
+            dolly_surface_log_decimal(total,set.sectors*set.sector_bytes);
+            snprintf(out,capacity,"IFF DOLY: %lu parts, %s bytes decoded.",
+                     (unsigned long)set.parts,total);
+        }
+        return 1;
+    }
+    if(bytes<12u || memcmp(header,"FORM",4) || memcmp(header+8,"DOLY",4))return 0;
+    form_length=((uint32_t)header[4]<<24)|((uint32_t)header[5]<<16)|
+                ((uint32_t)header[6]<<8)|header[7];
+    embedded=bytes>=DOLLY_DLY_GEOM_END+4u &&
+             !memcmp(header+DOLLY_DLY_GEOM_END,"MSET",4);
+    if((uint64_t)form_length+8u!=file_bytes || bytes<DOLLY_DLY_GEOM_END ||
+       (embedded && dolly_dly_set_unpack(header,bytes,&set)!=DOLLY_BLOCK_OK)) {
+        snprintf(out,capacity,"Invalid IFF DOLY header.");
+        return 1;
+    }
+    if(!embedded) {
+        snprintf(out,capacity,"IFF DOLY: %lu file bytes.",(unsigned long)file_bytes);
+        return 1;
+    }
+    dolly_surface_log_decimal(total,set.sectors*set.sector_bytes);
+    snprintf(out,capacity,"IFF DOLY part %lu/%lu: %s bytes decoded.",
+             (unsigned long)(set.part?set.part:1u),(unsigned long)set.parts,total);
+    return 1;
+}
+
 void dolly_amiga_describe_file(const DollyEndpoint *file,char *out,size_t capacity) {
     const char *hint="unknown";
+    unsigned char header[256];
     BPTR handle;
     uint64_t size;
     if(file->kind!=DOLLY_ENDPOINT_FILE) {
@@ -711,8 +751,12 @@ void dolly_amiga_describe_file(const DollyEndpoint *file,char *out,size_t capaci
     if(!DOSBase)return;
     handle=Open((STRPTR)file->path,MODE_OLDFILE);
     if(!handle)return;
-    if(dolly_amiga_image_file_size(handle,&size)==DOLLY_BLOCK_OK)
-        snprintf(out,capacity,"Type: %s | Size: %lu bytes",hint,(unsigned long)size);
+    if(dolly_amiga_image_file_size(handle,&size)==DOLLY_BLOCK_OK) {
+        LONG length=(LONG)(size<sizeof(header)?size:sizeof(header));
+        if(Read(handle,header,length)!=length ||
+           !describe_dly_header(header,(size_t)length,size,out,capacity))
+            snprintf(out,capacity,"Type: %s | Size: %lu bytes",hint,(unsigned long)size);
+    }
     Close(handle);
 }
 
@@ -1021,7 +1065,8 @@ static int rebuild(DollyEndpointPicker *p) {
     captions(p);
     return 1;
 }
-int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination) {
+static int pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination,
+                     const char *title,const char *name) {
     struct FileRequester *fr;
     char path[256];
     size_t dn,fn;
@@ -1029,7 +1074,9 @@ int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned d
     if(!AslBase)return 0;
     fr=(struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest,ASL_FuncFlags,(ULONG)(destination?FILF_SAVE:0),
-        ASLFR_Window,(ULONG)parent,TAG_DONE);
+        ASLFR_Window,(ULONG)parent,
+        title?ASLFR_TitleText:TAG_IGNORE,(ULONG)title,
+        name?ASLFR_InitialFile:TAG_IGNORE,(ULONG)name,TAG_DONE);
     if(!fr)return 0;
     if(AslRequest(fr,NULL) && fr->fr_File) {
         /* ASL may return an empty drawer for a file in the current
@@ -1051,7 +1098,15 @@ int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned d
     FreeAslRequest(fr);
     return ok;
 }
-int dolly_amiga_pick_drawer(struct Window *parent,char path[256]) {
+int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination) {
+    return pick_file(parent,result,destination,NULL,NULL);
+}
+int dolly_amiga_pick_named_file(struct Window *parent,DollyEndpoint *result,const char *name) {
+    char title[312];
+    snprintf(title,sizeof(title),"Locate image part: %s",name);
+    return pick_file(parent,result,0,title,name);
+}
+int dolly_amiga_pick_titled_drawer(struct Window *parent,char path[256],const char *title) {
     struct FileRequester *fr;
     char selected[256];
     int ok=0;
@@ -1059,7 +1114,7 @@ int dolly_amiga_pick_drawer(struct Window *parent,char path[256]) {
     fr=(struct FileRequester *)AllocAslRequestTags(
         ASL_FileRequest,ASLFR_Flags2,(ULONG)FRF_DRAWERSONLY,
         ASLFR_Window,(ULONG)parent,
-        ASLFR_TitleText,(ULONG)"Select recovery destination drawer",TAG_DONE);
+        ASLFR_TitleText,(ULONG)title,TAG_DONE);
     if(!fr)return 0;
     if(AslRequest(fr,NULL)) {
         BPTR lock=Lock(fr->fr_Drawer?fr->fr_Drawer:(STRPTR)"",ACCESS_READ);
@@ -1071,6 +1126,9 @@ int dolly_amiga_pick_drawer(struct Window *parent,char path[256]) {
     }
     FreeAslRequest(fr);
     return ok;
+}
+int dolly_amiga_pick_drawer(struct Window *parent,char path[256]) {
+    return dolly_amiga_pick_titled_drawer(parent,path,"Select recovery destination drawer");
 }
 static LONG picker_initial_width(struct Screen *screen,unsigned role) {
     struct RastPort measure=screen->RastPort;

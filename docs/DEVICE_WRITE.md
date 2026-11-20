@@ -2,11 +2,12 @@
 
 **Copy → Sector-to-sector** copies between two whole devices or two
 in-range RDB partitions with equal byte lengths and sector sizes.
-**Restore Image** writes a RAW/HDF or single-file IFF DOLY image to a whole
-device or in-range RDB partition. The first write path supports 512-byte sectors
-and destination byte offsets below 4 GiB. Classic AmigaDOS file
-positions limit the source file to less than 2 GiB. IFF DOLY also uses
-the current writer profile with a decoded size below 2 GiB.
+**Restore Image** writes a RAW/HDF or single-file IFF DOLY image, or a split IFF DOLY set selected through its first part, to a whole
+device or in-range RDB partition. The write path supports 512-byte sectors.
+A destination extent ending above 4 GiB requires the opened driver to
+advertise both NSD READ64 and WRITE64. Classic AmigaDOS file
+positions limit each source file to less than 2 GiB. A split set can
+represent a larger decoded extent. See [large image files](LARGE_IMAGE_FILES.md).
 
 Dolly checks device geometry, the RDB extent, DMA settings, and logical
 overlap. Whole-device Copy treats both devices as raw sectors. Dolly describes
@@ -61,8 +62,13 @@ offline test setup.
 
 The application processes one bounded, sector-aligned batch per step.
 Its DMA buffer uses the applicable RDB settings, defaults and manual
-overrides. The writer sends `CMD_WRITE` followed by `CMD_UPDATE`.
-**Verify writes** adds readback and byte comparison. Progress advances
+overrides. Batches entirely within the first 4 GiB use `CMD_WRITE`.
+Batches crossing or above that boundary use `NSCMD_TD_WRITE64`.
+Both are followed by `CMD_UPDATE`. **Verify writes** adds readback through
+`CMD_READ` or `NSCMD_TD_READ64` and byte comparison. Destination rechecks
+also use the qualified read command. The legacy `scsi.device` version gate
+still applies, including the existing UAE-IDE exception and manual override.
+TD64 and direct SCSI writes are pending. Progress advances
 only after the whole batch succeeds. Pause and Stop take effect
 between requests. A failed batch is never retried automatically.
 

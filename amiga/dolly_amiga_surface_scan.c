@@ -107,6 +107,13 @@ int dolly_surface_open(DollySurfaceScan *scan,const DollyEndpoint *endpoint,
             ok=strcmp(tail+3,part->label)==0 &&
                start==endpoint->partition_start_bytes &&
                length==endpoint->partition_length_bytes;
+            if(ok && part->is_rdb) {
+                scan->is_rdb_partition=1;
+                scan->rdb_size_block=part->fs_block_bytes;
+                scan->rdb_sectors_per_block=part->sectors_per_block;
+                scan->rdb_reserved_blocks=part->reserved_blocks;
+                scan->rdb_dos_type=part->dos_type;
+            }
             if(ok && part->outside_media) {
                 policy=endpoint->outside_range;
                 ok=dolly_amiga_allow_outside_range() &&

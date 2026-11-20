@@ -16,6 +16,7 @@ typedef struct DollyBlockTarget {
                               const void *data,size_t bytes,size_t *written);
     DollyBlockStatus (*flush)(void *context);
     DollyBlockReadFn readback;
+    int supports_large_offsets;
 } DollyBlockTarget;
 
 typedef enum DollyBlockWriteStatus {

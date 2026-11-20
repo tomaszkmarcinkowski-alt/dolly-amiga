@@ -103,3 +103,29 @@ Segmentation, resume and error maps are future format work. New codecs or layout
 
 Operation checkpoints are described separately in [Dolly Restore Pointer
 (DLRP)](DLRP_FORMAT.md).
+
+## Multipart manifest
+
+New multipart output stores an `MSET` chunk immediately after `GEOM`
+in every part. For a stem `disk`, the first part is `disk.dly`, followed
+by `disk.001`, `disk.002` and so on. The suffix is the zero-based index
+with a minimum width of three decimal digits. The embedded part number
+is one-based. `GEOM` describes the individual part and supplies its sector
+size. The `FORM` length includes the `MSET` chunk.
+
+| Payload offset | Bytes | Meaning |
+| ---: | ---: | --- |
+| 0 | 4 | Manifest version, 2 |
+| 4 | 4 | Number of parts |
+| 8 | 4 | Sectors in every part except the last |
+| 12 | 4 | CRC-32/ISO-HDLC over the full payload with this field zero |
+| 16 | 8 | First LBA of the set |
+| 24 | 8 | Total sectors in the set |
+| 32 | 4 | Part number, starting at 1 |
+| 36 | 8 | Nonzero set identifier shared by all parts |
+
+Integers are big-endian. The v2 payload occupies 44 bytes. The reader
+also accepts v1, a 32-byte payload with no part number or set identifier
+stored only in `part00000001.dly`, and the older `manifest.txt` layout.
+Parts use independently checked `CHNK` CRCs. The set identifier prevents
+accidental mixing of different numbered sets and is not cryptographic.

@@ -1,5 +1,6 @@
 #include "dolly_amiga_transfer.h"
 #include "dolly_restore_check.h"
+#include "dolly_ffs_analyze.h"
 #include "dolly_checksum.h"
 #include "dolly_amiga_destructive.h"
 #include "dolly_amiga_transfer_guard.h"
@@ -169,9 +170,14 @@ static int collect_mount_warnings(DollyAmigaTransfer *t,DollyWarnings *warnings,
         DollyWarning *warning;
         char message[250],title[46];
         if(source && find_mount(&t->target_mounts,mount))continue;
-        if(!source && dolly_amiga_lock_uses_mount(t->image.lock,mount)) {
-            t->failure="The image file uses a filesystem that must be unmounted.";
-            return 0;
+        if(!source) {
+            uint32_t n;
+            BPTR lock;
+            for(n=0;(lock=dolly_amiga_restore_volume(&t->image,n))!=0;++n)
+                if(dolly_amiga_lock_uses_mount(lock,mount)) {
+                    t->failure="An image part uses a filesystem that must be unmounted.";
+                    return 0;
+                }
         }
         snprintf(title,sizeof(title),"%s %.29s",source?"Source":"Destination",mount->device);
         snprintf(message,sizeof(message),"%s: \"%s\"\nMounted volume: \"%s\"\n%s",
@@ -205,7 +211,9 @@ static int approve_write_warning(DollyWarning *warning) {
     DollySurfaceScan *disk=approval->disk;
     unsigned open_count;
     char message[330];
-    if(!extent_anchors(approval->input,0,dolly_block_size(approval->input),disk->sector_bytes,disk->buffer,
+    if(!extent_anchors(approval->input,0,
+                       t->image.is_dly?disk->sector_bytes:dolly_block_size(approval->input),
+                       disk->sector_bytes,disk->buffer,
                        &t->source_first_crc,&t->source_last_crc) ||
        !extent_anchors(disk->source,t->target.start,t->target.length,disk->sector_bytes,
                        disk->buffer,&t->target_first_crc,&t->target_last_crc)) {
@@ -223,6 +231,17 @@ static int approve_write_warning(DollyWarning *warning) {
        (!approval->known_driver && !dolly_amiga_device_advertises_write(t->request))) {
         t->failure="No qualified driver write or flush support.";
         return -1;
+    }
+    if(t->target.start+t->target.length>UINT64_C(0x100000000)) {
+        const int legacy_scsi=!strcasecmp(t->device.driver,"scsi.device") &&
+            t->request->io_Device->dd_Library.lib_Version<43u &&
+            strncmp(t->device_name,"UAE-IDE ",8) && strcmp(t->device_name,"UAE-IDE");
+        if((legacy_scsi && !dolly_amiga_legacy_override()) ||
+           !dolly_amiga_device_advertises_nsd64_write(t->request)) {
+            t->failure="Destination extends beyond 4 GiB and the driver has no qualified NSD READ64/WRITE64 support.";
+            return -1;
+        }
+        t->target.nsd64=1;
     }
     open_count=t->request->io_Device->dd_Library.lib_OpenCnt;
     if(open_count==t->expected_opens)return 1;
@@ -350,27 +369,7 @@ static DollyRestoreAssessment assess_image(const DollyAmigaTransfer *t,
 static DollyBlockReadResult read_target(void *context,uint64_t offset,
                                        void *buffer,size_t bytes) {
     DollyAmigaTransfer *t=context;
-    DollyBlockReadResult result={DOLLY_BLOCK_EIO,0};
-    if(!bytes || bytes>t->target.bounce_bytes || offset>=UINT64_C(0x100000000) ||
-       bytes>UINT64_C(0x100000000)-offset || offset%t->target.sector_bytes ||
-       bytes%t->target.sector_bytes)return result;
-    t->request->io_Command=CMD_READ;
-    t->request->io_Flags=0;
-    t->request->io_Error=0;
-    t->request->io_Offset=(ULONG)offset;
-    t->request->io_Actual=0;
-    t->request->io_Data=t->target.bounce;
-    t->request->io_Length=(ULONG)bytes;
-    if(DoIO((struct IORequest *)t->request) || t->request->io_Error)return result;
-    result.bytes_read=t->request->io_Actual;
-    if(result.bytes_read!=bytes) {
-        result.bytes_read=0;
-        result.status=DOLLY_BLOCK_ESHORT;
-        return result;
-    }
-    memcpy(buffer,t->target.bounce,bytes);
-    result.status=DOLLY_BLOCK_OK;
-    return result;
+    return dolly_amiga_write_target_read(&t->target,offset,buffer,bytes);
 }
 
 static int extent_anchors(DollyBlockSource *blocks,uint64_t start,uint64_t length,
@@ -380,11 +379,197 @@ static int extent_anchors(DollyBlockSource *blocks,uint64_t start,uint64_t lengt
     dolly_checksum_init(&checksum);
     dolly_checksum_update(&checksum,buffer,sector);
     *first=dolly_checksum_final(&checksum);
+    if(length==sector) {
+        *last=*first;
+        return 1;
+    }
     if(dolly_block_read(blocks,start+length-sector,buffer,sector).status!=DOLLY_BLOCK_OK)return 0;
     dolly_checksum_init(&checksum);
     dolly_checksum_update(&checksum,buffer,sector);
     *last=dolly_checksum_final(&checksum);
     return 1;
+}
+
+static int add_grow_metadata_plan(DollyWarnings *results,const DollyFfsReport *report) {
+    char message[460],available[21],page_first[21],page_last[21],ext_first[21],ext_last[21];
+    uint64_t first,last;
+    uint64_t count=(uint64_t)report->grow_bitmap_pages+report->grow_bitmap_extensions;
+    dolly_surface_log_decimal(available,report->grow_tail_available);
+    if(!count)return 1;
+    if(count>report->grow_tail_available) {
+        char needed[21];
+        dolly_surface_log_decimal(needed,count);
+        snprintf(message,sizeof(message),
+                 "The bitmap needs %s new metadata blocks. The added range has %s after "
+                 "reserving the planned root. This layout needs space elsewhere.",
+                 needed,available);
+        return dolly_warning_add(results,"FFS bitmap placement blocked",message,"OK")!=NULL;
+    }
+    if(report->grow_bitmap_pages) {
+        if(!dolly_ffs_grow_metadata_block(report,0,0,&first) ||
+           !dolly_ffs_grow_metadata_block(report,0,report->grow_bitmap_pages-1u,&last))return 0;
+        dolly_surface_log_decimal(page_first,first);
+        dolly_surface_log_decimal(page_last,last);
+        snprintf(message,sizeof(message),"New bitmap pages: blocks %s to %s in order.\n"
+                 "The planned root block is excluded from the assignment.",page_first,page_last);
+        if(!dolly_warning_add(results,"FFS bitmap page placement",message,"OK"))return 0;
+    }
+    if(report->grow_bitmap_extensions) {
+        if(!dolly_ffs_grow_metadata_block(report,1,0,&first) ||
+           !dolly_ffs_grow_metadata_block(report,1,report->grow_bitmap_extensions-1u,&last))return 0;
+        dolly_surface_log_decimal(ext_first,first);
+        dolly_surface_log_decimal(ext_last,last);
+        snprintf(message,sizeof(message),"New bitmap extension blocks: %s to %s in order.\n"
+                 "The planned root block is excluded from the assignment.",ext_first,ext_last);
+        if(!dolly_warning_add(results,"FFS bitmap extension placement",message,"OK"))return 0;
+    }
+    return 1;
+}
+
+void dolly_amiga_analyze_copy(struct Window *parent,const DollyEndpoint *source,
+                              const DollyEndpoint *destination,int smart_copy) {
+    DollySurfaceScan *disk=NULL,*target=NULL;
+    DollyWarnings warnings={0},results={0};
+    DollyFfsReport report;
+    uint64_t block_bytes;
+    const char *problem="Choose two in-range RDB partitions.";
+    char message[360],total[21],used[21],highest[21],minimum[21],limit[21],outside[21];
+    if(source->kind!=DOLLY_ENDPOINT_PARTITION || destination->kind!=DOLLY_ENDPOINT_PARTITION ||
+       source->outside_range!=DOLLY_RANGE_STRICT ||
+       destination->outside_range!=DOLLY_RANGE_STRICT)goto done;
+    problem="Not enough memory for FFS analysis.";
+    disk=calloc(1,sizeof(*disk));
+    target=calloc(1,sizeof(*target));
+    if(!disk || !target)goto done;
+    if(!dolly_surface_open(disk,source,parent,DOLLY_IO_SOURCE,0,&warnings)) {
+        problem=disk->failure;
+        goto done;
+    }
+    if(!dolly_surface_open(target,destination,parent,DOLLY_IO_DESTINATION,0,&warnings)) {
+        problem=target->failure;
+        goto done;
+    }
+    problem="FFS copy analysis requires two validated RDB partitions.";
+    if(!disk->is_rdb_partition || !target->is_rdb_partition)goto done;
+    block_bytes=(uint64_t)disk->rdb_size_block*disk->rdb_sectors_per_block;
+    problem="Unsupported FFS source geometry or unaligned destination extent.";
+    if(!disk->rdb_dos_type || block_bytes<512u || block_bytes>32768u ||
+       (block_bytes&(block_bytes-1u)) || length_of(target)%block_bytes)goto done;
+    if(smart_copy) {
+        problem="Smart Copy requires source and destination partitions of equal size.";
+        if(length_of(disk)!=length_of(target))goto done;
+        problem="Smart Copy requires matching RDB filesystem block size, reserved blocks and DosType.";
+        if(block_bytes!=(uint64_t)target->rdb_size_block*target->rdb_sectors_per_block ||
+           disk->rdb_reserved_blocks!=target->rdb_reserved_blocks ||
+           disk->rdb_dos_type!=target->rdb_dos_type)goto done;
+    }
+    /* The target is opened for read-only inspection. No target mount changes. */
+    problem="Cannot prepare the source filesystem for bitmap analysis.";
+    if(!dolly_amiga_guard_read(&disk->mount_guard,parent,&warnings,&disk->device,
+                              start_of(disk),length_of(disk),0))goto done;
+    if(!dolly_warnings_review(parent,&warnings)) {
+        problem=NULL;
+        goto done;
+    }
+    problem="The source filesystem could not be isolated for bitmap analysis.";
+    if(!dolly_amiga_read_guard_isolated(disk->mount_guard))goto done;
+    problem=dolly_ffs_analyze(disk->source,start_of(disk),length_of(disk),(uint32_t)block_bytes,
+                              disk->rdb_reserved_blocks,disk->rdb_dos_type,length_of(target),&report);
+    if(problem)goto done;
+    if(!dolly_amiga_read_guard_isolated(disk->mount_guard)) {
+        problem="The source filesystem changed during bitmap analysis.";
+        goto done;
+    }
+    dolly_surface_log_decimal(total,report.blocks);
+    dolly_surface_log_decimal(used,report.used);
+    dolly_surface_log_decimal(highest,report.highest_used);
+    dolly_surface_log_decimal(minimum,report.minimum_blocks);
+    dolly_surface_log_decimal(limit,report.target_blocks);
+    dolly_surface_log_decimal(outside,report.used_outside_target);
+    problem="Cannot collect FFS analysis results.";
+    snprintf(message,sizeof(message),
+             "Read-only FFS bitmap analysis (DOS/%lu).\n"
+             "Filesystem block: %lu bytes. Source: %s blocks, %s occupied.\n"
+             "Highest occupied block: %s. Minimum in place: %s blocks.\n"
+             "Destination: %s blocks. Occupied blocks outside it: %s.",
+             (unsigned long)(report.dos_type&255u),(unsigned long)report.block_bytes,
+             total,used,highest,minimum,limit,outside);
+    if(!dolly_warning_add(&results,"FFS bitmap analysis",message,"OK"))goto done;
+
+    if(smart_copy) {
+        char skipped[21],ranges[21];
+        dolly_surface_log_decimal(skipped,report.blocks-report.used);
+        dolly_surface_log_decimal(ranges,report.copy_runs);
+        snprintf(message,sizeof(message),
+                 "Copy %s occupied or reserved blocks in %s contiguous ranges.\n"
+                 "Skip %s free blocks. Keep the original partition-relative block positions.\n"
+                 "Preview only. No data was written.",
+                 used,ranges,skipped);
+        if(!dolly_warning_add(&results,"Smart Copy plan",message,"OK"))goto done;
+    } else if(report.grow_added_blocks) {
+        static const char *const placements[]={
+            "current root", "free in the source", "in the added range",
+            "occupied by FFS metadata", "occupied by a data or directory block"
+        };
+        char added[21],root[21];
+        dolly_surface_log_decimal(added,report.grow_added_blocks);
+        dolly_surface_log_decimal(root,report.grow_root_block);
+        snprintf(message,sizeof(message),
+                 "Grow by %s blocks. Planned root: %s (%s).\n"
+                 "Additional bitmap blocks: %lu. Extension blocks: %lu.\n"
+                 "Actual resizing also needs filesystem metadata changes.",
+                 added,root,placements[report.grow_root_placement],
+                 (unsigned long)report.grow_bitmap_pages,
+                 (unsigned long)report.grow_bitmap_extensions);
+        if(!dolly_warning_add(&results,"FFS growth plan",message,"OK") ||
+           !add_grow_metadata_plan(&results,&report))goto done;
+        if(report.grow_root_placement<=DOLLY_FFS_ROOT_NEW_SPACE &&
+           (uint64_t)report.grow_bitmap_pages+report.grow_bitmap_extensions<=report.grow_tail_available &&
+           !dolly_warning_add(&results,"FFS bitmap preview",
+               "Sample bitmap pages were generated in memory with new checksums. "
+               "The old root remains allocated until references can be updated.","OK"))
+            goto done;
+    } else if(report.target_blocks<report.blocks) {
+        if(report.used_outside_target) {
+            char first[21];
+            dolly_surface_log_decimal(first,report.first_outside_target);
+            snprintf(message,sizeof(message),
+                     "First occupied block outside destination: %s.\n"
+                     "Occupied blocks outside the selected extent require relocation.",
+                     first);
+        } else {
+            snprintf(message,sizeof(message),
+                     "All occupied blocks fit inside the destination extent.\n"
+                     "Actual resizing also needs filesystem metadata changes.");
+        }
+        if(!dolly_warning_add(&results,"FFS shrink assessment",message,"OK"))goto done;
+    }
+
+    if(block_bytes!=(uint64_t)target->rdb_size_block*target->rdb_sectors_per_block ||
+       disk->rdb_reserved_blocks!=target->rdb_reserved_blocks ||
+       disk->rdb_dos_type!=target->rdb_dos_type) {
+        if(!dolly_warning_add(&results,"Destination RDB settings",
+             "Destination FFS block size, reserved blocks or DosType differ from the source.",
+             "OK"))goto done;
+    }
+    problem=NULL;
+done:
+    dolly_warnings_clear(&warnings);
+    if(target) {
+        dolly_surface_close(target);
+        free(target);
+    }
+    if(disk) {
+        dolly_surface_close(disk);
+        free(disk);
+    }
+    if(problem) {
+        dolly_warnings_clear(&results);
+        if(!dolly_warning_add(&results,"FFS analysis blocked",problem,"OK"))
+            dolly_amiga_role_request(parent,"Dolly - FFS analysis blocked",problem,"OK",NULL,NULL);
+    }
+    (void)dolly_warnings_review(parent,&results);
+    dolly_warnings_clear(&results);
 }
 
 int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
@@ -431,11 +616,6 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     t->target.length=length_of(&disk);
     t->target.capacity=disk.geometry.block_count*disk.sector_bytes;
     t->target.sector_bytes=disk.sector_bytes;
-    if(t->target.start>=UINT64_C(0x100000000) ||
-       t->target.length>UINT64_C(0x100000000)-t->target.start) {
-        problem="Destination extends beyond the legacy writer's 4 GiB address range.";
-        goto fail;
-    }
     if(whole_copy || whole_restore)describe_partition_table(&disk,table);
     if(!whole_copy && !whole_restore &&
        (!rdb_or_empty(&disk,destination,"Destination",reason,sizeof(reason)) ||
@@ -450,9 +630,9 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     t->check_source_mounts=!restore;
     batch=disk.transfer_bytes;
     if(restore) {
-        DollyBlockStatus status=dolly_amiga_restore_source_open(&t->image,source,disk.sector_bytes);
+        DollyBlockStatus status=dolly_amiga_restore_source_open(&t->image,source,disk.sector_bytes,parent);
         if(status!=DOLLY_BLOCK_OK) {
-            snprintf(reason,sizeof(reason),"Cannot open the RAW/HDF or IFF DOLY image (check sector size): %s.",
+            snprintf(reason,sizeof(reason),"Cannot open the image or split manifest. Check sector size and required parts: %s.",
                      dolly_block_status_name(status));
             problem=reason;
             goto fail;
@@ -489,19 +669,26 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
                 goto fail;
             }
         }
-        if(t->check_target_mounts) {
-            DollyPhysicalEntry image_device;
-            uint64_t file_start,file_length;
-            if(dolly_physical_from_lock(t->image.lock,&image_device,&file_start,&file_length)==1 &&
-               image_device.unit==t->device.unit &&
-               !strcasecmp(image_device.driver,t->device.driver)) {
-                problem="The image is on the device that must be unmounted. Move it to another device.";
-                goto fail;
-            }
+        {
+            uint32_t n=0;
+            BPTR lock=t->image.lock;
+            do {
+                if(t->check_target_mounts) {
+                    DollyPhysicalEntry image_device;
+                    uint64_t file_start,file_length;
+                    if(dolly_physical_from_lock(lock,&image_device,&file_start,&file_length)==1 &&
+                       image_device.unit==t->device.unit &&
+                       !strcasecmp(image_device.driver,t->device.driver)) {
+                        problem="An image file is on the device that must be unmounted.";
+                        goto fail;
+                    }
+                }
+                problem=dolly_amiga_guard_file_transfer(&warnings,lock,&disk.device,
+                                                         t->target.start,t->target.length);
+                if(problem)goto fail;
+                lock=dolly_amiga_restore_volume(&t->image,++n);
+            } while(lock);
         }
-        problem=dolly_amiga_guard_file_transfer(&warnings,t->image.lock,&disk.device,
-                                                 t->target.start,t->target.length);
-        if(problem)goto fail;
         input=t->image.blocks;
     } else {
         if(length_of(&t->reader)!=t->target.length || t->reader.sector_bytes!=disk.sector_bytes) {
@@ -625,7 +812,10 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
         problem="Cannot allocate the destination assessment reader.";
         goto fail;
     }
-    if(!extent_anchors(input,0,dolly_block_size(input),t->target.sector_bytes,t->buffer,&first,&last) ||
+    /* The validation pass will read the full DOLY source, including its
+     * last sector. Avoid indexing a large final part just to read its tail. */
+    if(!extent_anchors(input,0,t->image.is_dly?t->target.sector_bytes:dolly_block_size(input),
+                       t->target.sector_bytes,t->buffer,&first,&last) ||
        first!=t->source_first_crc || last!=t->source_last_crc ||
        !extent_anchors(locked_reader,t->target.start,t->target.length,t->target.sector_bytes,
                        t->buffer,&first,&last) ||
@@ -680,10 +870,17 @@ cancel:
 
 void dolly_amiga_transfer_step(DollyAmigaTransfer *t) {
     DollyRestoreTransferState state=dolly_restore_transfer_step(&t->job,t->buffer,t->target.bounce_bytes);
-    if(state==DOLLY_RESTORE_READ_FAILED && !t->failure)
-        t->failure=t->job.source_checked<t->job.source_check_bytes?
-            "IFF DOLY validation failed. No sectors were written.":
-            dolly_block_status_name(t->job.read_status);
+    if(state==DOLLY_RESTORE_READ_FAILED && !t->failure) {
+        if(t->job.source_checked<t->job.source_check_bytes) {
+            uint32_t parts,part=dolly_amiga_restore_failed_part(&t->image,&parts);
+            if(part) {
+                snprintf(t->validation_failure,sizeof(t->validation_failure),
+                         "IFF DOLY part %lu/%lu failed validation. No sectors were written.",
+                         (unsigned long)part,(unsigned long)parts);
+                t->failure=t->validation_failure;
+            } else t->failure="IFF DOLY validation failed. No sectors were written.";
+        } else t->failure=dolly_block_status_name(t->job.read_status);
+    }
     else if(state==DOLLY_RESTORE_WRITE_FAILED && !t->failure) {
         switch(t->job.write_status) {
         case DOLLY_WRITE_REJECTED:t->failure="Write rejected before submission.";break;

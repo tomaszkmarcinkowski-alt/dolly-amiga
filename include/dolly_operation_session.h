@@ -38,6 +38,8 @@ DollyOperationResult dolly_operation_progress(DollyOperationSession *session,
                                              uint64_t completed_blocks,
                                              uint32_t errors,
                                              uint32_t retries);
+/* Explicitly discard in-progress blocks when retrying an output part. */
+DollyOperationResult dolly_operation_rewind(DollyOperationSession *session,uint64_t completed);
 DollyOperationResult dolly_operation_pause(DollyOperationSession *session);
 DollyOperationResult dolly_operation_resume(DollyOperationSession *session);
 DollyOperationResult dolly_operation_finish(DollyOperationSession *session,
