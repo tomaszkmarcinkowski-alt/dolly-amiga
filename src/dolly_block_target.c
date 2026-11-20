@@ -15,8 +15,8 @@ DollyBlockWriteStatus dolly_block_write(const DollyBlockTarget *target,
        !target->sector_bytes || !target->length ||
        target->start>target->capacity ||
        target->length>target->capacity-target->start ||
-       target->start>=WRITE_END_LIMIT ||
-       target->length>WRITE_END_LIMIT-target->start ||
+       (!target->supports_large_offsets &&
+        (target->start>=WRITE_END_LIMIT || target->length>WRITE_END_LIMIT-target->start)) ||
        target->start%target->sector_bytes || target->length%target->sector_bytes ||
        offset%target->sector_bytes || bytes%target->sector_bytes ||
        offset>target->length || bytes>target->length-offset ||

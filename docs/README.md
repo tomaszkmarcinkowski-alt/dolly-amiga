@@ -2,6 +2,7 @@
 
 ## Use Dolly
 
+- [Operation workflows, step by step (Polish)](OPERATIONS_PL.md)
 - [Installation and paths](INSTALLATION.md)
 - [Sheep Inventory and partition-table backups](SHEEP_INVENTORY.md)
 - [Surface Scan](SURFACE_SCAN.md)

@@ -20,7 +20,7 @@ static DollyIffStatus probe(const unsigned char *p,size_t n,unsigned *chunks){
 }
 typedef struct Buffer {
     unsigned char bytes[144 * 1024];
-    size_t used,limit,position;
+    size_t used,limit,position,reads;
 } Buffer;
 
 static int append(void *context,const void *data,size_t size) {
@@ -37,6 +37,7 @@ static uint32_t rd32(const unsigned char *p) {
 static DollyBlockReadResult read_buffer(void *context,uint64_t pos,void *out,size_t bytes) {
     Buffer *buffer=context;
     assert(pos<=buffer->used && bytes<=buffer->used-pos);
+    ++buffer->reads;
     memcpy(out,buffer->bytes+pos,bytes);
     return (DollyBlockReadResult){DOLLY_BLOCK_OK,bytes};
 }
@@ -214,7 +215,7 @@ static void verify_compression(void) {
 }
 static void verify_reader_navigation(void) {
     static Buffer buffer;
-    DollyBlockSource *decoded=NULL;
+    DollyBlockSource *container=NULL,*decoded=NULL;
     DollyDlyWriter writer;
     unsigned char sector[512],packed[512],actual[512];
     unsigned i;
@@ -231,6 +232,22 @@ static void verify_reader_navigation(void) {
     assert(open_image(&buffer,&decoded,NULL)==DOLLY_BLOCK_OK);
     assert(dolly_block_read(decoded,259u*512u,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
     assert(!memcmp(actual,sector,sizeof(actual)));
+    assert(dolly_block_read(decoded,255u*512u,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
+    assert(actual[0]==0 && actual[511]==255);
+    assert(dolly_block_read(decoded,256u*512u,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
+    assert(actual[0]==1 && actual[511]==0);
+    dolly_block_close(decoded);
+    assert(dolly_block_open_backend(buffer.used,read_buffer,close_buffer,&buffer,&container)
+           ==DOLLY_BLOCK_OK);
+    buffer.reads=0;
+    assert(dolly_dly_open_lazy(container,&decoded,NULL)==DOLLY_BLOCK_OK);
+    assert(buffer.reads==1);
+    for(i=0;i<260;++i) {
+        size_t before=buffer.reads;
+        assert(dolly_block_read(decoded,i*512u,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
+        assert(actual[0]==(unsigned char)(i>>8) && actual[511]==(unsigned char)i);
+        assert(buffer.reads-before<=3u);
+    }
     assert(dolly_block_read(decoded,255u*512u,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
     assert(actual[0]==0 && actual[511]==255);
     assert(dolly_block_read(decoded,256u*512u,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
@@ -311,7 +328,120 @@ static void verify_restore_gate(void) {
         dolly_block_close(decoded);
     }
 }
+static void test_split_manifest(void) {
+    static const char manifest[]=
+        DOLLY_DLY_SET_MAGIC "Format: IFF DOLY\nParts: 17\nSector bytes: 512\n"
+        "First LBA: 20\nSectors: 8388609\nSectors per part: 524288\n";
+    char broken[sizeof(manifest)];
+    DollyDlySetInfo set;
+    DollyDlyImageInfo part={20,524288,512,16384,2};
+    assert(dolly_dly_set_parse(manifest,sizeof(manifest)-1u,&set)==DOLLY_BLOCK_OK);
+    assert(set.parts==17 && set.sectors*set.sector_bytes==UINT64_C(4294967808));
+    assert(dolly_dly_set_matches(&set,0,&part));
+    assert(!dolly_dly_set_matches(&set,1,&part));
+    part.first_lba=20+8388608;
+    part.sectors=1;
+    assert(dolly_dly_set_matches(&set,16,&part));
+    assert(!dolly_dly_set_matches(&set,17,&part));
+    part.sector_bytes=1024;
+    assert(!dolly_dly_set_matches(&set,16,&part));
+    assert(dolly_dly_set_parse(manifest,sizeof(manifest)-2u,&set)==DOLLY_BLOCK_EINVAL);
+    memcpy(broken,manifest,sizeof(broken));
+    broken[sizeof(DOLLY_DLY_SET_MAGIC "Format: IFF DOLY\nParts: 1")-1u]='8';
+    assert(dolly_dly_set_parse(broken,sizeof(broken)-1u,&set)==DOLLY_BLOCK_EINVAL);
+}
+
+static void test_embedded_manifest(void) {
+    static Buffer buffer;
+    const DollyDlySetInfo set={20,3,512,2,2,0,0};
+    DollyDlySetInfo parsed;
+    DollyDlyWriter writer;
+    DollyBlockSource *decoded=NULL;
+    unsigned char raw[1024],actual[1024],packed[1024];
+    unsigned compressed;
+    memset(raw,0x43,sizeof(raw));
+    buffer.limit=sizeof(buffer.bytes);
+    for(compressed=0;compressed<=1;++compressed) {
+        buffer.used=buffer.position=0;
+        assert(dolly_dly_init(&writer,20,2,512,1024));
+        if(compressed)assert(dolly_dly_compress(&writer,DOLLY_DLY_PACKBITS,packed,NULL,seek));
+        assert(dolly_dly_begin_set(&writer,append,&buffer,&set));
+        assert(dolly_dly_append(&writer,raw,sizeof(raw)));
+        assert(dolly_dly_finish(&writer));
+        assert(rd32(buffer.bytes+4)==buffer.used-8u);
+        assert(dolly_dly_set_unpack(buffer.bytes,buffer.used,&parsed)==DOLLY_BLOCK_OK);
+        assert(parsed.first_lba==20 && parsed.sectors==3 && parsed.parts==2 &&
+               parsed.sector_bytes==512 && parsed.sectors_per_part==2);
+        assert(open_image(&buffer,&decoded,NULL)==DOLLY_BLOCK_OK);
+        assert(dolly_block_read(decoded,0,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
+        assert(!memcmp(actual,raw,sizeof(raw)));
+        dolly_block_close(decoded);
+        buffer.bytes[DOLLY_DLY_GEOM_END+39]^=1;
+        assert(open_image(&buffer,&decoded,NULL)==DOLLY_BLOCK_EIO);
+    }
+}
+
+static void test_numbered_members(void) {
+    static Buffer buffer;
+    DollyDlyWriter writer;
+    DollyDlySetInfo set={20,5,512,3,2,0,UINT64_C(0x1234567812345678)},parsed;
+    DollyBlockSource *decoded=NULL;
+    unsigned char raw[1024]={0},actual[512];
+    uint32_t part;
+    buffer.limit=sizeof(buffer.bytes);
+    for(part=1;part<=3;++part) {
+        uint32_t sectors=part<3?2u:1u;
+        set.part=part;
+        buffer.used=buffer.position=0;
+        assert(dolly_dly_init(&writer,20+(part-1u)*2u,sectors,512,1024));
+        assert(dolly_dly_begin_set(&writer,append,&buffer,&set));
+        assert(dolly_dly_append(&writer,raw,sectors*512u));
+        assert(dolly_dly_finish(&writer));
+        assert(dolly_dly_set_unpack(buffer.bytes,buffer.used,&parsed)==DOLLY_BLOCK_OK);
+        assert(parsed.part==part && parsed.parts==3 && parsed.set_id==set.set_id);
+        assert(open_image(&buffer,&decoded,NULL)==DOLLY_BLOCK_OK);
+        assert(dolly_block_read(decoded,0,actual,sizeof(actual)).status==DOLLY_BLOCK_OK);
+        dolly_block_close(decoded);
+        buffer.bytes[DOLLY_DLY_GEOM_END+51]^=1;
+        assert(open_image(&buffer,&decoded,NULL)==DOLLY_BLOCK_EIO);
+    }
+}
+
+static void test_lazy_validation(void) {
+    static Buffer image,output;
+    DollyBlockSource *container=NULL,*decoded=NULL;
+    DollyDlyWriter writer;
+    DollyDlyImageInfo info;
+    DollyRestoreTransfer transfer;
+    unsigned char raw[512]={0},buffer[512];
+    image.limit=sizeof(image.bytes);
+    output.limit=sizeof(output.bytes);
+    assert(dolly_dly_init(&writer,0,2,512,512));
+    assert(dolly_dly_begin(&writer,append,&image));
+    assert(dolly_dly_append(&writer,raw,sizeof(raw)));
+    assert(dolly_dly_append(&writer,raw,sizeof(raw)));
+    assert(dolly_dly_finish(&writer));
+    /* Damage the last chunk header without disturbing FORM or GEOM. */
+    image.bytes[60+24+512]='X';
+    assert(open_image(&image,&decoded,NULL)==DOLLY_BLOCK_EINVAL);
+    assert(dolly_block_open_backend(image.used,read_buffer,close_buffer,&image,&container)
+           ==DOLLY_BLOCK_OK);
+    assert(dolly_dly_probe_header(container,&info)==DOLLY_BLOCK_OK && info.sectors==2);
+    assert(dolly_dly_open_lazy(container,&decoded,&info)==DOLLY_BLOCK_OK);
+    assert(dolly_restore_transfer_init(&transfer,decoded,1024,512,512,&output,write_restored_sector,1));
+    transfer.source_check_bytes=dolly_block_size(decoded);
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_TRANSFERRING);
+    assert(transfer.source_checked==512 && !output.used);
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_READ_FAILED);
+    assert(!output.used && !transfer.processed);
+    dolly_block_close(decoded);
+}
+
 int main(void){
+ test_split_manifest();
+ test_embedded_manifest();
+ test_numbered_members();
+ test_lazy_validation();
  unsigned char p[128]={0};unsigned chunks;unsigned i;
  memcpy(p,"FORM",4);wr32(p+4,4);memcpy(p+8,"DOLY",4);
  assert(probe(p,12,&chunks)==DOLLY_IFF_OK&&chunks==0);

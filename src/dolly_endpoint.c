@@ -159,6 +159,17 @@ int dolly_demo_can_start(DollyDemoOperation op,
     return 1;
 }
 
+unsigned dolly_smart_copy_modes(void) {
+    return DOLLY_MODE_BIT(DOLLY_MODE_PARTITION)|DOLLY_MODE_BIT(DOLLY_MODE_LOGICAL);
+}
+
+int dolly_smart_copy_can_start(const DollyEndpoint *source,const DollyEndpoint *target) {
+    unsigned modes=dolly_smart_copy_modes();
+    if(!dolly_mode_allowed(modes,dolly_endpoint_mode(source)) ||
+       !dolly_mode_allowed(modes,dolly_endpoint_mode(target)))return 0;
+    return source->kind!=target->kind || dolly_demo_can_start(DOLLY_DEMO_COPY,source,target);
+}
+
 DollyUnitRelation dolly_unit_relation(uint64_t first,uint64_t first_length,
                                     uint64_t second,uint64_t second_length) {
     if(!first_length || !second_length ||

@@ -38,7 +38,7 @@ static DollyBlockReadResult read_blocks(void *context,uint64_t offset,void *data
 
 int main(void) {
     Fixture f={0};
-    DollyBlockTarget target={2048,512,1024,512,512,&f,write_blocks,flush_blocks,read_blocks};
+    DollyBlockTarget target={2048,512,1024,512,512,&f,write_blocks,flush_blocks,read_blocks,0};
     unsigned char image[2048],data[1024],scratch[1024];
     size_t i;
     f.file=tmpfile();

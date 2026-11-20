@@ -36,6 +36,14 @@ DollyOperationResult dolly_operation_progress(DollyOperationSession *s,
     return DOLLY_OP_OK;
 }
 
+DollyOperationResult dolly_operation_rewind(DollyOperationSession *s,uint64_t completed) {
+    if (!s) return DOLLY_OP_INVALID;
+    if (s->state != DOLLY_OP_RUNNING) return DOLLY_OP_STATE_ERROR;
+    if (completed > s->completed_blocks) return DOLLY_OP_RANGE_ERROR;
+    s->completed_blocks = completed;
+    return DOLLY_OP_OK;
+}
+
 DollyOperationResult dolly_operation_pause(DollyOperationSession *s) {
     if (!s) return DOLLY_OP_INVALID;
     if (s->state != DOLLY_OP_RUNNING) return DOLLY_OP_STATE_ERROR;

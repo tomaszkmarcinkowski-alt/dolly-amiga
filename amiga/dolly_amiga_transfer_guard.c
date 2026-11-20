@@ -105,6 +105,10 @@ int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWar
                 "OK",NULL,NULL);
             return 0;
         }
+        if(!mount->volume[0] && dolly_amiga_inhibit_mount(mount,1)) {
+            mount->suspended=1;
+            continue;
+        }
         snprintf(title,sizeof(title),"Source %.36s",mount->device);
         snprintf(reason,sizeof(reason),"Source: \"%s\"\nVolume: \"%s\"\n"
                  "Temporarily inhibit filesystem access while Dolly reads these sectors?",
@@ -115,6 +119,21 @@ int dolly_amiga_guard_read(DollyReadGuard **guard,struct Window *parent,DollyWar
         warning->context=g;
         warning->index=i;
     }
+    return 1;
+}
+
+int dolly_amiga_read_guard_isolated(DollyReadGuard *guard) {
+    unsigned i;
+    if(!dolly_amiga_read_guard_check(guard))return 0;
+    if(guard)for(i=0;i<guard->pending.count;++i)
+        if(!guard->pending.entries[i].suspended)return 0;
+    return 1;
+}
+
+int dolly_amiga_read_guard_allows_lock(const DollyReadGuard *guard,BPTR lock) {
+    unsigned i;
+    if(guard)for(i=0;i<guard->pending.count;++i)
+        if(dolly_amiga_lock_uses_mount(lock,&guard->pending.entries[i]))return 0;
     return 1;
 }
 
