@@ -30,6 +30,13 @@ static int mark_roles(const char *text,char marked[768]) {
     int quoted=0;
     while(*text) {
         size_t word=0;
+        if(!quoted && (!strncmp(text,"**Rename**",10) || !strncmp(text,"**Keep**",8))) {
+            if(n+1>=768)return 0;
+            int rename=text[2]=='R';
+            marked[n++]=rename?3:4;
+            text+=rename?10:8;
+            continue;
+        }
         while(isalpha((unsigned char)text[word]))++word;
         if(*text=='"')quoted=!quoted;
         if(!quoted && ((word==6 && !strncasecmp(text,"source",6)) ||
@@ -54,12 +61,17 @@ static LONG role_text(struct RastPort *rp,const char *text,size_t n,int draw) {
     while(n) {
         const char *span=text;
         size_t length=1,used=1;
-        int bold=*text==1 || *text==2;
+        static const char *const bold_words[]={
+            "** SOURCE **","** DESTINATION **","Rename","Keep"
+        };
+        unsigned token=(unsigned char)*text;
+        int bold=token>=1u && token<=4u;
         if(bold) {
-            span=*text==1?"** SOURCE **":"** DESTINATION **";
+            span=bold_words[token-1u];
             length=strlen(span);
         } else {
-            while(used<n && text[used]!=1 && text[used]!=2)++used;
+            while(used<n && ((unsigned char)text[used]<1u ||
+                            (unsigned char)text[used]>4u))++used;
             length=used;
         }
         SetSoftStyle(rp,bold?FSF_BOLD:0,FSF_BOLD);
@@ -375,7 +387,7 @@ static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWa
     last=warning_button(v,last,WARN_CANCEL,v->x+v->width-cancel_width,
                          v->y+v->height+5,cancel_width,"Cancel");
     if(!last)return 0;
-    if(warnings->mount_destination) {
+    if(warnings->mount_destination && warning==warnings->mount_summary) {
         ng.ng_LeftEdge=(WORD)left;
         ng.ng_TopEdge=(WORD)(v->y+v->height+5);
         ng.ng_Width=26;

@@ -25,7 +25,8 @@ On a raw destination, Warning Review identifies recognized volumes and
 allows their overwrite confirmation after ten seconds. The final Proceed
 automatically takes the DOS filesystems on the destination unit offline.
 A handler that refuses shutdown or an entry that remains active blocks
-the write. A completed unmount persists for the session. The existing
+the write with a diagnostic identifying that stage. After a successful
+shutdown reply, Dolly briefly waits for the volume to disappear. A completed unmount persists for the session. The existing
 post-copy mount option can mount eligible partitions again.
 
 Dolly holds the appropriate DOS list write locks when removing a stopped
@@ -146,19 +147,21 @@ names. Dolly applies approved groups after the whole review succeeds.
 **Cancel** discards the staged name changes. The data copy has already
 finished at this point.
 
-**Mount destination volumes** is available in the write review. If a
-post-copy name review appears, it carries the same choice. It is off by default on a fresh installation. **Mount destination
-volumes by default** in Settings changes the initial choice for new
-operations. The checkbox applies only after the data and approved name changes
+**Mount destination volumes** appears in the final transfer summary
+for eligible volumes. It is off by default on a fresh installation.
+**Mount destination volumes by default** in Settings changes the
+initial choice. The checkbox applies only after the data and approved name changes
 finish. Dolly closes its transfer handles, restores source access,
 then rereads the destination geometry, PART descriptor and OFS/FFS
 root block. It checks their identity, the partition's automount flag,
 and the live DOS namespace before installing a node with
 MakeDosNode and AddDosNode.
 
-The first implementation requires a compatible resident handler for
-the exact DosType, a verified volume within the first 4 GiB and a
-free DOS name and range. It skips unformatted volumes, conflicting
+Dolly prefers a compatible resident handler for the exact DosType.
+For DOS/0 through DOS/3 it can also use a compatible resident OFS/FFS
+handler or let AmigaOS select the standard ROM filesystem handler.
+Runtime mounting still requires a verified volume within the first
+4 GiB and a free DOS name and range. It skips unformatted volumes, conflicting
 names, partitions with automount disabled and ranges still owned by
 an old DOS handler. No handler is loaded from the copied disk. Mount
 results are reported separately from copying.

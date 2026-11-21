@@ -18,7 +18,7 @@ This guide covers the native Dolly Alpha 3.6 prerelease for the MC68000 and Amig
 2. Dolly automatically isolates mounted source volumes with `INHIBIT`. It inspects the destination range for existing filesystems.
 3. **Warning Review** shows overwrite, size and other compatibility warnings. When Dolly recognizes an existing destination volume, the warning names it, recommends a backup and enables **Proceed** after ten seconds. The final write confirmation also identifies the destination whose data will be overwritten.
 4. After the final approval, Dolly automatically unmounts the destination unit. A changed or busy DOS entry blocks the write. Dolly rechecks the device and partition geometry and compares the first and last sector fingerprints. It records the driver-wide open count and stops further writes if access increases or the mount state changes.
-5. Dolly writes bounded batches and flushes the driver. **Verify writes** adds a readback and byte comparison for each batch. After a successful transfer, Dolly may offer name changes. It releases source inhibits and retries removal of inactive destination entries. Eligible destination partitions can be mounted after final verification. The default is configurable in Settings.
+5. Dolly writes bounded batches and flushes the driver. **Verify writes** adds a readback and byte comparison for each batch. After a successful transfer, Dolly may offer name changes. It releases source inhibits and retries removal of inactive destination entries. The final transfer summary offers to mount eligible destination partitions after verification. The default is configurable in Settings.
 
 See [Device writes](DEVICE_WRITE.md) and [AmigaOS I/O](AMIGA_IO.md) for driver requirements.
 

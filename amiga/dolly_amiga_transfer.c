@@ -311,10 +311,15 @@ static int unmount_transfer_destination(DollyAmigaTransfer *t) {
             t->failure="A destination mount changed during confirmation.";
             return 0;
         }
-        if(!dolly_amiga_unmount(current)) {
-            snprintf(t->validation_failure,sizeof(t->validation_failure),
-                     "Cannot unmount %.40s. Close files and Workbench windows on that device.",
-                     current->device);
+        LONG dos_error;
+        const char *problem=dolly_amiga_unmount_checked(current,&dos_error);
+        if(problem) {
+            if(dos_error)
+                snprintf(t->validation_failure,sizeof(t->validation_failure),
+                         "%.40s: %s DOS error %ld.",current->device,problem,(long)dos_error);
+            else
+                snprintf(t->validation_failure,sizeof(t->validation_failure),
+                         "%.40s: %s",current->device,problem);
             t->failure=t->validation_failure;
             return 0;
         }
@@ -1195,8 +1200,6 @@ int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,
     write_warning->action=approve_write_warning;
     write_approval=(WriteApproval){t,disk,input,known_driver};
     write_warning->context=&write_approval;
-    t->mount_destination=dolly_amiga_mount_destination_default();
-    warnings.mount_destination=&t->mount_destination;
 
     t->port=CreateMsgPort();
     if(t->port)t->request=CreateIORequest(t->port,sizeof(*t->request)+128u);
@@ -1562,7 +1565,7 @@ static int collect_clone_name_group(DollyAmigaTransfer *t,CloneName *entries,uns
     int ok=1;
     if(!message)return 0;
     snprintf(message,1600,"%s\n"
-             "Rename applies the names below. Keep preserves this group. "
+             "Click **Rename** to apply the proposed names and avoid conflicts, or **Keep** to preserve the original names. "
              "Cancel skips all proposed name changes.\n",
              kind==DOLLY_CLONE_PART_NAME?
              "Duplicate RDB device names can make AmigaDOS use a different partition than intended.":
@@ -1645,25 +1648,35 @@ static void mount_dma_failure(DollyDmaStatus reason,const char *message,void *us
     (void)user;
 }
 
+/* Prefer an exact resident handler. For classic OFS/FFS, AmigaOS 2.04
+ * and newer can select the ROM filesystem with an unpatched DOS node.
+ * A resident DOS-family handler can likewise read the variant from DosEnvec. */
 static int fill_mount_node(struct DeviceNode *node,ULONG type) {
     struct FileSysResource *resource=(struct FileSysResource *)OpenResource("FileSystem.resource");
     const struct FileSysEntry *entry;
     struct FileSysEntry selected={0};
-    int found=0;
-    if(!resource)return 0;
-    Forbid();
-    for(entry=(const struct FileSysEntry *)resource->fsr_FileSysEntries.lh_Head;
-        entry->fse_Node.ln_Succ;
-        entry=(const struct FileSysEntry *)entry->fse_Node.ln_Succ) {
-        if(entry->fse_DosType==type && entry->fse_SegList &&
-           (entry->fse_PatchFlags&128u) && !(entry->fse_PatchFlags&0x47u) &&
-           (!found || entry->fse_Version>selected.fse_Version)) {
-            selected=*entry;
-            found=1;
+    int found=0,exact=0;
+    const int classic=(type&UINT32_C(0xfffffffc))==UINT32_C(0x444f5300);
+    if(resource) {
+        Forbid();
+        for(entry=(const struct FileSysEntry *)resource->fsr_FileSysEntries.lh_Head;
+            entry->fse_Node.ln_Succ;
+            entry=(const struct FileSysEntry *)entry->fse_Node.ln_Succ) {
+            const int match=entry->fse_DosType==type;
+            const int family=classic &&
+                (entry->fse_DosType&UINT32_C(0xfffffff8))==UINT32_C(0x444f5300) &&
+                (entry->fse_Version>>16)>=37u;
+            if((match || family) && entry->fse_SegList &&
+               (entry->fse_PatchFlags&128u) && !(entry->fse_PatchFlags&0x47u) &&
+               (!found || match>exact || (match==exact && entry->fse_Version>selected.fse_Version))) {
+                selected=*entry;
+                found=1;
+                exact=match;
+            }
         }
+        Permit();
     }
-    Permit();
-    if(!found)return 0;
+    if(!found)return classic;
     if(selected.fse_PatchFlags&16u)node->dn_StackSize=selected.fse_StackSize;
     if(selected.fse_PatchFlags&32u)node->dn_Priority=selected.fse_Priority;
     node->dn_SegList=selected.fse_SegList;
@@ -1709,10 +1722,12 @@ static const char *mount_clone_partition(DollyAmigaTransfer *t,DollyBlockSource 
     for(i=0;i<=words;++i)packet[4+i]=clone_long(buffer+128+4u*i);
     node=MakeDosNode(packet);
     if(!node)return "MakeDosNode failed.";
-    node->dn_SegList=handler.dn_SegList;
-    node->dn_GlobalVec=handler.dn_GlobalVec;
-    if(handler.dn_StackSize)node->dn_StackSize=handler.dn_StackSize;
-    if(handler.dn_Priority)node->dn_Priority=handler.dn_Priority;
+    if(handler.dn_SegList) {
+        node->dn_SegList=handler.dn_SegList;
+        node->dn_GlobalVec=handler.dn_GlobalVec;
+        if(handler.dn_StackSize)node->dn_StackSize=handler.dn_StackSize;
+        if(handler.dn_Priority)node->dn_Priority=handler.dn_Priority;
+    }
     if(!AddDosNode(0,ADNF_STARTPROC,node))
         return "AmigaDOS rejected the device entry.";
     snprintf(path,sizeof(path),"%s:",name);
@@ -1822,11 +1837,6 @@ void dolly_amiga_transfer_review_names(DollyAmigaTransfer *t,const DollyEndpoint
     if(!map || !devices || !volumes)goto done;
     if(!dolly_amiga_partition_scan(t->device.driver,t->device.unit,&t->geometry,map) ||
        map->format!=DOLLY_NATIVE_PARTITION_RDB) {
-        if(t->mount_destination) {
-            t->mount_skipped=1;
-            dolly_amiga_role_request(t->parent,"Dolly - Destination volumes",
-                "Could not find a validated destination RDB to mount.","OK",NULL,NULL);
-        }
         goto done;
     }
     /* Smart Copy describes the bytes written; its validated bitmap covers
@@ -1849,7 +1859,20 @@ void dolly_amiga_transfer_review_names(DollyAmigaTransfer *t,const DollyEndpoint
     }
     if(!collect_clone_name_group(t,volumes,map->count,DOLLY_CLONE_VOLUME_NAME,NULL,
                                  &warnings,&volume_decision))goto report;
-    warnings.mount_destination=&t->mount_destination;
+    int eligible=0;
+    for(i=0;i<map->count;++i)
+        if(volumes[i].bytes && map->parts[i].rdb_automount)eligible=1;
+    if(eligible && clone_destination_offline(t)) {
+        char copied[40],summary[300];
+        format_ffs_amount(copied,t->job.processed/t->target.sector_bytes,t->target.sector_bytes);
+        snprintf(summary,sizeof(summary),
+                 "Destination: %.160s\nCopied: %s.\nChoose whether to mount the destination volumes.",
+                 destination->path,copied);
+        warnings.mount_summary=dolly_warning_add(&warnings,"Transfer complete",summary,"OK");
+        if(!warnings.mount_summary)goto report;
+        t->mount_destination=dolly_amiga_mount_destination_default();
+        warnings.mount_destination=&t->mount_destination;
+    }
     if(!dolly_warnings_review(t->parent,&warnings))goto done;
     if(device_decision && !device_decision->kept &&
        !apply_clone_name_group(t,devices,map->count,DOLLY_CLONE_PART_NAME,show_status))goto done;

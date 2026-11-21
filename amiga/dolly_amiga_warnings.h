@@ -23,6 +23,7 @@ struct DollyWarning {
 typedef struct DollyWarnings {
     DollyWarning *items[DOLLY_WARNING_MAX];
     unsigned count;
+    const DollyWarning *mount_summary;
     int *mount_destination; /* Optional. Updated only on approval. */
 } DollyWarnings;
 DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,

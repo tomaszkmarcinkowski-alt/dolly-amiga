@@ -359,46 +359,64 @@ int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend) {
     }
 }
 
-int dolly_amiga_unmount(const DollyMountedVolume *mount) {
+const char *dolly_amiga_unmount_checked(const DollyMountedVolume *mount,LONG *dos_error) {
     const ULONG read_flags=LDF_DEVICES|LDF_READ;
     const ULONG write_flags=LDF_DEVICES|LDF_VOLUMES|LDF_WRITE;
     struct DosList *list,*entry;
     char name[DOLLY_MOUNT_NAME];
     size_t length=strlen(mount->device);
-    int same,removed=0;
-    if(length<2 || length>=sizeof(name) || mount->device[length-1]!=':')return 0;
+    *dos_error=0;
+    if(length<2 || length>=sizeof(name) || mount->device[length-1]!=':')
+        return "The DOS device name is invalid.";
     memcpy(name,mount->device,length-1);
     name[length-1]=0;
     list=LockDosList(read_flags);
-    if(!list)return 0;
+    if(!list)return "Cannot inspect the DOS device list.";
     entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
-    same=entry && entry==mount->entry && entry->dol_Task==mount->handler;
+    int same=entry && entry==mount->entry && entry->dol_Task==mount->handler;
     UnLockDosList(read_flags);
-    if(!same)return 0;
+    if(!same)return "The DOS device changed before shutdown.";
 
-    /* Send shutdown once. After a successful reply the saved port may
-     * already be stale, even if the DOS entry still holds its address. */
-    if(mount->handler && !DoPkt(mount->handler,ACTION_DIE,0,0,0,0,0))return 0;
+    if(mount->handler && !DoPkt(mount->handler,ACTION_DIE,0,0,0,0,0)) {
+        *dos_error=IoErr();
+        return "The filesystem handler refused shutdown.";
+    }
 
-    list=LockDosList(write_flags);
-    if(!list)return 0;
-    struct DosList *volume=list;
-    int volume_active=0;
-    while(mount->handler && (volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL)
-        if(volume->dol_Task==mount->handler) {
-            volume_active=1;
-            break;
+    /* A handler can acknowledge shutdown before removing its volume.
+     * Wait briefly for that state change without reusing its port. */
+    const char *problem="The DOS device list is busy.";
+    for(unsigned attempt=0;attempt<21u;++attempt) {
+        list=AttemptLockDosList(write_flags);
+        if(list) {
+            struct DosList *volume=list;
+            int volume_active=0;
+            int removed=0;
+            while(mount->handler && (volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL)
+                if(volume->dol_Task==mount->handler) {
+                    volume_active=1;
+                    break;
+                }
+            entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
+            if(entry && (entry!=mount->entry ||
+                         (entry->dol_Task && entry->dol_Task!=mount->handler))) {
+                UnLockDosList(write_flags);
+                return "A different DOS device appeared during shutdown.";
+            }
+            if(!volume_active)removed=!entry || RemDosEntry(entry)!=0;
+            UnLockDosList(write_flags);
+            if(removed)return NULL;
+            problem=volume_active ? "The DOS volume still exists after shutdown." :
+                                    "DOS could not remove the device entry.";
         }
-    entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
-    if(!volume_active && !entry)removed=1;
-    else if(!volume_active && entry==mount->entry &&
-            (!entry->dol_Task || entry->dol_Task==mount->handler))
-        removed=RemDosEntry(entry)!=0;
-    UnLockDosList(write_flags);
-    /* The DOS node and startup resources belong to its original owner. */
-    return removed;
+        if(attempt<20u)Delay(5);
+    }
+    return problem;
 }
 
+int dolly_amiga_unmount(const DollyMountedVolume *mount) {
+    LONG dos_error;
+    return dolly_amiga_unmount_checked(mount,&dos_error)==NULL;
+}
 
 int dolly_amiga_lock_uses_mount(BPTR lock,const DollyMountedVolume *mount) {
     const struct FileLock *opened;

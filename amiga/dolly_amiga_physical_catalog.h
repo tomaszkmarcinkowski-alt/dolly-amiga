@@ -47,4 +47,7 @@ int dolly_amiga_mounted_extents(const DollyPhysicalEntry *device,uint64_t start,
 int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend);
 int dolly_amiga_lock_uses_mount(BPTR lock,const DollyMountedVolume *mount);
 int dolly_amiga_unmount(const DollyMountedVolume *mount);
+/* NULL means the device and volume are gone. On failure, return the
+ * stage that blocked shutdown. An ACTION_DIE reply is requested once. */
+const char *dolly_amiga_unmount_checked(const DollyMountedVolume *mount,LONG *dos_error);
 #endif
