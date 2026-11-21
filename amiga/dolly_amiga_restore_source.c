@@ -2,6 +2,7 @@
 #include "dolly_dly_reader.h"
 #include "dolly_amiga_endpoint_picker.h"
 #include "dolly_amiga_destructive.h"
+#include "dolly_amiga_physical_catalog.h"
 #include <proto/dos.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -413,6 +414,7 @@ static DollyBlockStatus dolly_amiga_restore_source_open_first(DollyAmigaRestoreS
         source->blocks=container;
     }
     source->lock=file->lock;
+    source->file=file->file;
     return DOLLY_BLOCK_OK;
 fail:
     close_image(file);
@@ -433,6 +435,22 @@ BPTR dolly_amiga_restore_volume(const DollyAmigaRestoreSource *source,uint32_t i
     return 0;
 }
 
+int dolly_amiga_restore_uses_mount(const DollyAmigaRestoreSource *source,
+                                 const DollyMountedVolume *mount) {
+    const ImageSet *set=source->set;
+    if(!mount->handler)return 0;
+    if(dolly_amiga_file_uses_mount(source->file,mount) ||
+       dolly_amiga_lock_uses_mount(source->lock,mount))return 1;
+    if(!set)return 0;
+    if(dolly_amiga_file_uses_mount(set->manifest->file,mount))return 1;
+    for(uint32_t i=0;i<set->info.parts;++i) {
+        const ImageFile *part=&set->parts[i].image;
+        if(dolly_amiga_file_uses_mount(part->file,mount) ||
+           dolly_amiga_lock_uses_mount(part->lock,mount))return 1;
+    }
+    return 0;
+}
+
 uint32_t dolly_amiga_restore_failed_part(const DollyAmigaRestoreSource *source,uint32_t *total) {
     *total=source->set?source->set->info.parts:0;
     return source->set?source->set->failed_part:0;
@@ -442,6 +460,7 @@ void dolly_amiga_restore_source_close(DollyAmigaRestoreSource *source) {
     dolly_block_close(source->blocks);
     source->blocks=NULL;
     source->lock=0;
+    source->file=0;
     source->set=NULL;
     source->is_dly=0;
 }

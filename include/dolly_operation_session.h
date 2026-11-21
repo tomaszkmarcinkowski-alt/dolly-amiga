@@ -31,6 +31,24 @@ typedef struct DollyOperationSession {
     unsigned char sheep_counter_visible;
 } DollyOperationSession;
 
+/* Tick values come from a monotonic clock. Payload bytes exclude retries,
+ * skipped sectors, validation passes and format overhead. */
+typedef struct DollyOperationTiming {
+    uint64_t start,end,active_start,active_ticks,sample_ticks,sample_bytes,rate;
+    uint32_t frequency;
+    int active,finished,rate_valid;
+} DollyOperationTiming;
+
+void dolly_operation_timing_start(DollyOperationTiming *timing,uint64_t now,uint32_t frequency);
+void dolly_operation_timing_active(DollyOperationTiming *timing,uint64_t now,
+                                   uint64_t bytes,int active);
+void dolly_operation_timing_sample(DollyOperationTiming *timing,uint64_t now,uint64_t bytes);
+void dolly_operation_timing_finish(DollyOperationTiming *timing,uint64_t now,uint64_t bytes);
+uint64_t dolly_operation_timing_elapsed(const DollyOperationTiming *timing,uint64_t now);
+uint64_t dolly_operation_timing_work(const DollyOperationTiming *timing,uint64_t now);
+uint64_t dolly_operation_timing_average(const DollyOperationTiming *timing,uint64_t now,
+                                        uint64_t bytes);
+
 void dolly_operation_init(DollyOperationSession *session);
 DollyOperationResult dolly_operation_start(DollyOperationSession *session,
                                           uint64_t total_blocks);

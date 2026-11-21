@@ -17,7 +17,7 @@ This guide covers the native Dolly Alpha 3.6 prerelease for the MC68000 and Amig
 1. Dolly checks the relationship between the source and destination ranges. For image restores, it checks the volumes that contain every image file. A confirmed overlap blocks the operation. It shows a separate warning when it cannot identify the image volume. You can suppress the performance warning for transfers within one unit in **Settings**.
 2. Dolly automatically isolates mounted source volumes with `INHIBIT`. It inspects the destination range for existing filesystems.
 3. **Warning Review** shows overwrite, size and other compatibility warnings. When Dolly recognizes an existing destination volume, the warning names it, recommends a backup and enables **Proceed** after ten seconds. The final write confirmation also identifies the destination whose data will be overwritten.
-4. After the final approval, Dolly automatically unmounts the destination unit. A changed or busy DOS entry blocks the write. Dolly rechecks the device and partition geometry and compares the first and last sector fingerprints. It records the driver-wide open count and stops further writes if access increases or the mount state changes.
+4. After the final approval, Dolly isolates DOS filesystems that overlap the destination range. Verified neighboring partitions stay available. Whole-disk writes isolate the entire unit. A changed or busy DOS entry in scope blocks the write. Dolly rechecks the device and partition geometry and compares the first and last sector fingerprints. It records the driver-wide open count and stops further writes if access increases or the mount state changes in the selected ranges.
 5. Dolly writes bounded batches and flushes the driver. **Verify writes** adds a readback and byte comparison for each batch. After a successful transfer, Dolly may offer name changes. It releases source inhibits and retries removal of inactive destination entries. The final transfer summary offers to mount eligible destination partitions after verification. The default is configurable in Settings.
 
 See [Device writes](DEVICE_WRITE.md) and [AmigaOS I/O](AMIGA_IO.md) for driver requirements.
@@ -90,8 +90,41 @@ The selectors offer **Analyze (read only)** and **Analyze & repair**. The second
 
 ## Progress, interruption and DLRP files
 
+- After a started Surface Scan, Create Image, Copy or Restore Image
+  ends, **Operation summary** shows the outcome, endpoints and processed
+  sectors and bytes. Surface Scan also shows the requested LBA range,
+  read errors and retries. Smart Copy shows free sectors omitted by the
+  plan. Create Image counts input bytes before compression. For Copy
+  and Restore Image, the summary counts completed write batches and
+  reports read-back verification when enabled. Restore shows the
+  decoded IFF DOLY bytes validated before writing, when applicable.
+  Successful writes show the summary alongside any available
+  rename and mount choices.
+- The progress bar fills across the entire well, with the caption
+  drawn over it. Dolly measures the caption in the current GUI font
+  and drops the rate, then the elapsed time, as space gets tighter.
+  The summary reports elapsed time from **Start**
+  to the data result and the time spent actively transferring. Pauses,
+  confirmations, destination recovery and the IFF DOLY validation
+  pass before a restore count toward elapsed time. The average uses
+  active time and the logical bytes actually processed, including only
+  allocated ranges for Smart Copy. A successful Create Image also
+  reports the total output file size, including container overhead.
 - **Start** becomes **Pause** during an operation. **Stop** pauses it and lets you abort or resume. **Quit** during an active operation reports the block in the status bar.
 - After an unexpected read or write error, Dolly can offer to save an **Operation Restore File** in IFF DLRP format for supported Create Image, Restore Image and sector-copy cases. The file records the operation state. Surface Scan and manual Stop or Quit do not generate these checkpoints.
-- DLRP loading and resumption from the GUI are planned. Smart Copy needs a separate record of its ranges. Split images have separate per-part recovery.
+- **Project → Resume operation...** opens a RAW, HDF or single-file IFF DOLY
+  Create Image checkpoint.
+  Keep its original `.part` drawer alongside the intended destination.
+  Dolly checks the checkpoint and compares the retained image with
+  the source before showing the endpoints and asking to resume. The
+  confirmation shows the number of verified sectors and next LBA.
+  For IFF DOLY it also checks the chunk CRCs and uses the original
+  compression mode.
+- For Restore and sector-by-sector Copy, the same command repeats normal
+  write preflight and shows the destination LBA in Warning Review. Dolly
+  compares the committed destination sectors with the source and reads
+  the failed batch before writing. It rewrites that batch from its start
+  and verifies it by readback. A changed original last sector blocks
+  version 2 resume.
 
 See the [DLRP format](DLRP_FORMAT.md) and the [test matrix](TEST_MATRIX.md).

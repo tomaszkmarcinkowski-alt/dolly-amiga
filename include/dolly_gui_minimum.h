@@ -30,4 +30,8 @@ typedef struct DollyGuiMinimum {
  */
 DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
                                          DollyGuiMinMetrics metrics);
+/* Widths include their padding. Preserve at least half the space left
+ * after reserving the mandatory percentage for the fill. */
+uint32_t dolly_gui_progress_caption_width(uint32_t fill_space,uint32_t full_width,
+                                         uint32_t elapsed_width);
 #endif

@@ -122,6 +122,59 @@ static DollyBlockWriteStatus write_test_batch(void *context,uint64_t offset,
     return DOLLY_WRITE_VERIFIED;
 }
 
+static DollyBlockReadResult read_resume_test(void *context,uint64_t at,void *data,size_t bytes) {
+    TransferFixture *f=context;
+    if(f->fail_at==at+1)return (DollyBlockReadResult){DOLLY_BLOCK_EIO,0};
+    return read_memory(f->dest,at,data,bytes);
+}
+
+static DollyBlockWriteStatus write_resume_test(void *context,uint64_t offset,
+                                      const void *data,size_t bytes,int verify) {
+    TransferFixture *f=context;
+    assert(offset==(f->calls?1024u:512u));
+    assert(verify==!f->calls && bytes==512);
+    ++f->calls;
+    memcpy(f->dest+offset,data,bytes);
+    return verify?DOLLY_WRITE_VERIFIED:DOLLY_WRITE_COMPLETE;
+}
+
+static void check_resume(void) {
+    unsigned char data[1536],buffer[512],scratch[512];
+    DollyRestoreTransfer transfer;
+    DollyBlockSource *source;
+    TransferFixture fixture={0};
+    memset(data,0x6a,sizeof(data));
+    memcpy(fixture.dest,data,512+137); /* the failed batch wrote 137 bytes */
+    assert(dolly_block_open_backend(sizeof(data),read_memory,close_memory,data,&source)==DOLLY_BLOCK_OK);
+    assert(dolly_restore_transfer_init(&transfer,source,sizeof(data),512,512,
+                                       &fixture,write_resume_test,0));
+    assert(!dolly_restore_transfer_set_resume(&transfer,13,512,512,read_resume_test,
+                                               scratch,sizeof(scratch)));
+    assert(dolly_restore_transfer_set_resume(&transfer,512,512,512,read_resume_test,
+                                              scratch,sizeof(scratch)));
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_TRANSFERRING);
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_TRANSFERRING);
+    assert(fixture.calls==0 && transfer.processed==512 && transfer.source_checked==1024);
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_TRANSFERRING);
+    assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_FINISHED);
+    assert(fixture.calls==2 && !memcmp(fixture.dest,data,sizeof(data)));
+
+    for(unsigned changed=0;changed<2;++changed) {
+        fixture.calls=0;
+        fixture.fail_at=changed?0:513;
+        if(changed)fixture.dest[10]^=1;
+        assert(dolly_restore_transfer_init(&transfer,source,sizeof(data),512,512,
+                                           &fixture,write_resume_test,0));
+        assert(dolly_restore_transfer_set_resume(&transfer,512,512,512,read_resume_test,
+                                                  scratch,sizeof(scratch)));
+        if(!changed)
+            assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_TRANSFERRING);
+        assert(dolly_restore_transfer_step(&transfer,buffer,sizeof(buffer))==DOLLY_RESTORE_READ_FAILED);
+        assert(fixture.calls==0 && transfer.resume_target_failed);
+    }
+    dolly_block_close(source);
+}
+
 static void check_transfer(void) {
     unsigned char data[1536],buffer[1024];
     DollyRestoreTransfer transfer;
@@ -187,6 +240,7 @@ static void check_transfer(void) {
 }
 
 int main(void) {
+    check_resume();
     assert(dolly_restore_check_raw(4096,4096,512)==DOLLY_BLOCK_OK);
     assert(dolly_restore_check_raw(4096,4096,4096)==DOLLY_BLOCK_OK);
     assert(dolly_restore_check_raw(4096,8192,512)==DOLLY_BLOCK_ERANGE);

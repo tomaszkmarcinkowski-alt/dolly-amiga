@@ -1,6 +1,64 @@
 #include "dolly_operation_session.h"
 #include <string.h>
 
+static uint64_t bytes_per_second(uint64_t bytes,uint64_t ticks,uint32_t frequency) {
+    if(!ticks || !frequency)return 0;
+    while(bytes>UINT64_MAX/frequency) {
+        if(ticks<2u)return UINT64_MAX;
+        bytes/=2u;
+        ticks/=2u;
+    }
+    return bytes*frequency/ticks;
+}
+
+void dolly_operation_timing_start(DollyOperationTiming *t,uint64_t now,uint32_t frequency) {
+    memset(t,0,sizeof(*t));
+    t->frequency=frequency;
+    t->start=now;
+}
+
+uint64_t dolly_operation_timing_elapsed(const DollyOperationTiming *t,uint64_t now) {
+    return (t->finished?t->end:now)-t->start;
+}
+
+uint64_t dolly_operation_timing_work(const DollyOperationTiming *t,uint64_t now) {
+    return t->active_ticks+(t->active?now-t->active_start:0);
+}
+
+void dolly_operation_timing_active(DollyOperationTiming *t,uint64_t now,uint64_t bytes,int active) {
+    if(!t->frequency || t->finished || t->active==active)return;
+    t->active_ticks=dolly_operation_timing_work(t,now);
+    t->active_start=now;
+    t->active=active;
+    t->sample_ticks=t->active_ticks;
+    t->sample_bytes=bytes;
+    t->rate_valid=0;
+}
+
+void dolly_operation_timing_sample(DollyOperationTiming *t,uint64_t now,uint64_t bytes) {
+    if(!t->active)return;
+    uint64_t work=dolly_operation_timing_work(t,now),interval=work-t->sample_ticks;
+    if(bytes<t->sample_bytes)t->rate_valid=0;
+    else {
+        if(interval<t->frequency)return;
+        t->rate=bytes_per_second(bytes-t->sample_bytes,interval,t->frequency);
+        t->rate_valid=1;
+    }
+    t->sample_ticks=work;
+    t->sample_bytes=bytes;
+}
+
+void dolly_operation_timing_finish(DollyOperationTiming *t,uint64_t now,uint64_t bytes) {
+    if(t->finished)return;
+    dolly_operation_timing_active(t,now,bytes,0);
+    t->end=now;
+    t->finished=1;
+}
+
+uint64_t dolly_operation_timing_average(const DollyOperationTiming *t,uint64_t now,uint64_t bytes) {
+    return bytes_per_second(bytes,dolly_operation_timing_work(t,now),t->frequency);
+}
+
 void dolly_operation_init(DollyOperationSession *s) {
     if (!s) return;
     memset(s, 0, sizeof(*s));

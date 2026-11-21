@@ -154,7 +154,8 @@ if(DOLLY_NATIVE_ONLY)
       amiga/dolly_amiga_restore_source.c amiga/dolly_amiga_transfer.c
       src/dolly_restore_transfer.c src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
-      src/dolly_dly_writer.c src/dolly_dly_reader.c src/dolly_dly_codec.c src/dolly_checksum.c)
+      src/dolly_dly_writer.c src/dolly_dly_reader.c src/dolly_dly_codec.c src/dolly_checksum.c
+      src/dolly_version.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)
@@ -319,7 +320,7 @@ add_executable(test-restore-source tests/test_restore_source.c src/dolly_restore
 target_link_libraries(test-restore-source PRIVATE dollyrestoresource dollyrdb)
 add_test(NAME restore_source_geometry COMMAND test-restore-source)
 
-add_executable(test-dlrp tests/test_dlrp.c src/dolly_dlrp.c)
+add_executable(test-dlrp tests/test_dlrp.c src/dolly_dlrp.c src/dolly_checksum.c)
 target_include_directories(test-dlrp PRIVATE ${PROJECT_SOURCE_DIR}/include)
 add_test(NAME dlrp_iff_serialization COMMAND test-dlrp)
 

@@ -2,12 +2,16 @@
 #include "dolly_amiga_destructive.h"
 #include "dolly_amiga_endpoint_picker.h"
 #include "dolly_amiga_transfer_guard.h"
+#include "dolly_amiga_device_query.h"
+#include "dolly_checksum.h"
+#include "dolly_dly_reader.h"
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <proto/dos.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 extern struct DosLibrary *DOSBase;
 
@@ -190,12 +194,21 @@ static int open_part(DollyAmigaImage *image) {
 }
 
 static int finish_part(DollyAmigaImage *image) {
+    if(image->resuming && image->codec) {
+        image->resume_dirty=1;
+        image->resume_header_dirty=1;
+    }
     if(image->format_dly && !dolly_dly_finish(&image->dly)) {
         image->failure="IFF DOLY image is incomplete.";
         return 0;
     }
-    if(!Close(image->file))image->failure="Could not close the temporary image.";
-    image->file=0;
+    if(!image->resuming) {
+        if(!Close(image->file))image->failure="Could not close the temporary image.";
+        image->file=0;
+    }
+    if(!image->failure)
+        image->closed_bytes+=image->format_dly?image->dly.emitted:
+                           (image->part_end-image->part_start)*image->reader.sector_bytes;
     return image->failure==NULL;
 }
 
@@ -261,7 +274,7 @@ static int discard_failed_part(DollyAmigaImage *image) {
     return 1;
 }
 
-static int retry_split_part(DollyAmigaImage *image) {
+static int find_split_destination(DollyAmigaImage *image) {
     DollySurfaceScan *reader=&image->reader;
     while(image->split && image->drawers && image->failure) {
         char path[256],message[250];
@@ -332,11 +345,31 @@ static int retry_split_part(DollyAmigaImage *image) {
     return 0;
 }
 
+static int retry_split_part(DollyAmigaImage *image) {
+    if(image->transfer_activity)image->transfer_activity(0);
+    int opened=find_split_destination(image);
+    if(opened && image->transfer_activity)image->transfer_activity(1);
+    return opened;
+}
+
 static void release(DollyAmigaImage *image,int commit) {
+    dolly_block_close(image->resume_decoded);
+    image->resume_decoded=NULL;
     if(image->drawers)release_split(image,commit);
     if(image->staging && !image->keep_staging) {
         BPTR previous=CurrentDir(image->drawer);
-        if(image->file && !Close(image->file) && commit) {
+        if(!commit && image->resuming && image->resume_dirty && image->file) {
+            LONG bytes=(LONG)image->resume_bytes;
+            int header_ok=1;
+            if(image->resume_header_dirty) {
+                unsigned char length[4];
+                dolly_dlrp_u32(length,image->dly.file_bytes-8u);
+                header_ok=seek_image(image,4) && write_image(image,length,sizeof(length));
+            }
+            if(SetFileSize(image->file,bytes,OFFSET_BEGINNING)!=bytes || !header_ok)
+                image->failure="Could not roll back the retained image. Keep the .part drawer.";
+        }
+        if(image->file && !Close(image->file) && (commit || image->resume_dirty)) {
             image->failure="Could not close the temporary image.";
             commit=0;
         }
@@ -344,12 +377,15 @@ static void release(DollyAmigaImage *image,int commit) {
         if(commit && (!unused_name(image->name) ||
                       !Rename((STRPTR)image->staged_file,
                               (STRPTR)image->name))) {
-            image->failure="Could not publish image. Check destination.";
+            image->failure=image->resuming?"Could not publish image. Image remains in the .part drawer.":
+                                           "Could not publish image. Check destination.";
             commit=0;
         }
-        if(!commit && !unused_name(image->staged_file))DeleteFile((STRPTR)image->staged_file);
-        if(!DeleteFile((STRPTR)image->partial) && !commit)
-            image->failure="Incomplete image remains in the .part drawer.";
+        if(commit || !image->resuming) {
+            if(!commit && !unused_name(image->staged_file))DeleteFile((STRPTR)image->staged_file);
+            if(!DeleteFile((STRPTR)image->partial) && !commit)
+                image->failure="Incomplete image remains in the .part drawer.";
+        }
         image->staging=0;
         CurrentDir(previous);
     }
@@ -358,6 +394,8 @@ static void release(DollyAmigaImage *image,int commit) {
         image->drawer=0;
     }
     dolly_surface_close(&image->reader);
+    free(image->resume_buffer);
+    image->resume_buffer=NULL;
     free(image->dly.hash);
     free(image->dly.packed);
     image->dly.hash=NULL;
@@ -491,6 +529,240 @@ fail:
     release(image,0);
     return 0;
 }
+
+static int plain_child(BPTR drawer,const char *name,LONG type,struct FileInfoBlock *fib) {
+    if(!Examine(drawer,fib))return 0;
+    while(ExNext(drawer,fib)) {
+        if(!strcasecmp((const char *)fib->fib_FileName,name))return fib->fib_DirEntryType==type;
+    }
+    return 0;
+}
+
+static int lock_resume_image(DollyAmigaImage *image,const DollyDlrpImageResume *resume) {
+    char drawer[256],expected[256];
+    const char *path=resume->target.path;
+    const char *name=(const char *)FilePart((STRPTR)path);
+    size_t prefix=(size_t)(name-path);
+    struct FileInfoBlock *fib;
+    BPTR previous,stage=0,lock=0;
+    image->failure="Checkpoint destination path is invalid or no longer resolves.";
+    if(!prefix || !strchr(path,':') || !*name || !strcmp(name,".") ||
+       !strcmp(name,"..") || strpbrk(name,":/"))return 0;
+    memcpy(drawer,path,prefix);
+    drawer[prefix]='\0';
+    image->drawer=Lock((STRPTR)drawer,ACCESS_READ);
+    if(!image->drawer || !NameFromLock(image->drawer,drawer,sizeof(drawer)))return 0;
+    strcpy(expected,drawer);
+    if(!AddPart((STRPTR)expected,(STRPTR)name,sizeof(expected)) || strcasecmp(expected,path))return 0;
+    strcpy(image->name,name);
+    snprintf(image->partial,sizeof(image->partial),"%s.part",name);
+    snprintf(image->staged_file,sizeof(image->staged_file),"%s/image",image->partial);
+    strcpy(expected,drawer);
+    image->failure="Checkpoint does not name the expected .part/image.";
+    if(!AddPart((STRPTR)expected,(STRPTR)image->staged_file,sizeof(expected)) ||
+       strcasecmp(expected,resume->partial))return 0;
+    fib=AllocDosObject(DOS_FIB,NULL);
+    if(!fib) {
+        image->failure="Not enough memory to inspect the retained image.";
+        return 0;
+    }
+    previous=CurrentDir(image->drawer);
+    image->failure="The final image filename already exists or is unavailable.";
+    if(unused_name(name)) {
+        image->failure="The .part drawer or its regular image file is missing.";
+        if(plain_child(image->drawer,image->partial,ST_USERDIR,fib))
+            stage=Lock((STRPTR)image->partial,ACCESS_READ);
+        if(stage && plain_child(stage,"image",ST_FILE,fib)) {
+            image->failure="The retained image could not be locked exclusively.";
+            lock=Lock((STRPTR)image->staged_file,ACCESS_WRITE);
+            if(lock) {
+                image->failure="The retained image size or identity changed.";
+                if(Examine(lock,fib) && fib->fib_DirEntryType==ST_FILE &&
+                   fib->fib_Size==(LONG)resume->output_bytes) {
+                    image->failure="The filesystem could not open the retained image lock.";
+                    image->file=OpenFromLock(lock);
+                    if(image->file)lock=0;
+                }
+            }
+        }
+    }
+    if(lock)UnLock(lock);
+    if(stage)UnLock(stage);
+    CurrentDir(previous);
+    FreeDosObject(DOS_FIB,fib);
+    image->staging=image->file!=0;
+    return image->staging;
+}
+
+static int resume_anchor(DollySurfaceScan *reader,uint64_t lba,uint32_t expected) {
+    DollyChecksum checksum;
+    DollyBlockReadResult result=dolly_surface_read(reader,lba*reader->sector_bytes,
+                                                    reader->buffer,reader->sector_bytes);
+    if(result.status!=DOLLY_BLOCK_OK || result.bytes_read!=reader->sector_bytes)return 0;
+    dolly_checksum_init(&checksum);
+    return dolly_checksum_update(&checksum,reader->buffer,reader->sector_bytes)==0 &&
+           dolly_checksum_final(&checksum)==expected;
+}
+
+static DollyBlockReadResult read_resume_file(void *context,uint64_t offset,void *buffer,size_t bytes) {
+    DollyAmigaImage *image=context;
+    LONG got;
+    if(!seek_image(image,(uint32_t)offset))
+        return (DollyBlockReadResult){DOLLY_BLOCK_EIO,0};
+    got=Read(image->file,buffer,(LONG)bytes);
+    if(got<0)return (DollyBlockReadResult){DOLLY_BLOCK_EIO,0};
+    return (DollyBlockReadResult){got==(LONG)bytes?DOLLY_BLOCK_OK:DOLLY_BLOCK_ESHORT,(size_t)got};
+}
+
+/* The image owns the DOS handle; the decoder borrows it. */
+static void close_resume_file(void *context) {
+    (void)context;
+}
+
+int dolly_image_resume_open(DollyAmigaImage *image,const DollyDlrpImageResume *resume,
+                            struct Window *parent) {
+    DollySurfaceScan *reader=&image->reader;
+    DollyWarnings warnings={0};
+    uint64_t remaining=(resume->sectors-resume->completed)*resume->sector_bytes;
+    uint64_t encoded=remaining;
+    DollyDlyWriter plan;
+    char driver[DOLLY_PHYS_DRIVER_LEN];
+    ULONG unit;
+    const char *tail;
+    dolly_image_cancel(image);
+    memset(image,0,sizeof(*image));
+    image->parent=parent;
+    image->resuming=1;
+    image->resume_until=resume->completed;
+    image->resume_bytes=resume->output_bytes;
+    image->format_dly=resume->dly_file_bytes!=0;
+    image->codec=resume->codec;
+    image->failure="Checkpoint source path does not match its device.";
+    if(resume->source.kind!=DOLLY_ENDPOINT_LOGICAL) {
+        tail=dolly_amiga_parse_unit(resume->source.path,driver,sizeof(driver),&unit);
+        if(!tail || strcmp(driver,resume->driver) || unit!=resume->unit ||
+           (resume->source.kind==DOLLY_ENDPOINT_UNIT?*tail!=0:strlen(tail)<=3))goto fail;
+    }
+    if(!dolly_surface_open(reader,&resume->source,parent,DOLLY_IO_SOURCE,0,&warnings)) {
+        image->failure=reader->failure;
+        goto fail;
+    }
+    image->failure="Source identity, geometry or extent changed since the checkpoint.";
+    if(strcmp(reader->device.driver,resume->driver) || reader->device.unit!=resume->unit ||
+       strcmp(reader->device_name,resume->device_name) || reader->first_lba!=resume->first_lba ||
+       reader->total!=resume->sectors || reader->sector_bytes!=resume->sector_bytes ||
+       reader->geometry.block_count!=resume->capacity ||
+       (uint32_t)reader->geometry.capacity_source!=resume->capacity_source ||
+       reader->geometry.cylinders!=resume->cylinders || reader->geometry.heads!=resume->heads ||
+       reader->geometry.sectors_per_track!=resume->sectors_per_track)goto fail;
+    if(image->format_dly) {
+        uint64_t total_bytes=reader->total*reader->sector_bytes;
+        uint64_t chunks=(total_bytes-1u)/resume->batch_bytes+1u;
+        image->failure="Current I/O batch is smaller than the checkpoint's IFF DOLY chunk.";
+        if(resume->batch_bytes>reader->transfer_bytes)goto fail;
+        image->failure="Invalid single-file IFF DOLY plan in checkpoint.";
+        if(!dolly_dly_init(&image->dly,reader->first_lba,reader->total,
+                           reader->sector_bytes,resume->batch_bytes))goto fail;
+        if(total_bytes+dolly_dly_overhead(chunks,1,image->codec!=0)!=resume->dly_file_bytes)
+            goto fail;
+        plan=image->dly;
+        plan.compression=image->codec;
+        plan.file_bytes=resume->dly_file_bytes;
+        if(remaining)
+            encoded+=dolly_dly_overhead((remaining-1u)/resume->batch_bytes+1u,0,image->codec!=0);
+    }
+    if(!lock_resume_image(image,resume))goto fail;
+    if(!check_file_destination(image,image->drawer,&warnings,remaining,encoded,encoded,0))
+        goto fail;
+    image->failure=dolly_amiga_guard_file_transfer(&warnings,image->drawer,
+                         &reader->device,reader->first_lba*reader->sector_bytes,
+                         reader->total*reader->sector_bytes);
+    if(image->failure)goto fail;
+    image->failure="Cannot prepare source filesystem inhibition.";
+    if(!dolly_amiga_guard_read(&reader->mount_guard,parent,&warnings,
+                         &reader->device,reader->first_lba*reader->sector_bytes,
+                         reader->total*reader->sector_bytes,image->drawer))goto fail;
+    if(!dolly_warnings_review(parent,&warnings)) {
+        image->failure=NULL;
+        goto fail;
+    }
+    image->failure="Source filesystem or checkpoint anchor sectors changed.";
+    if(!dolly_amiga_read_guard_check(reader->mount_guard) ||
+       ((resume->anchors&1u) && !resume_anchor(reader,resume->first_lba,resume->first_crc)) ||
+       ((resume->anchors&2u) &&
+        !resume_anchor(reader,resume->first_lba+resume->sectors-1,resume->last_crc)))goto fail;
+    if(image->format_dly) {
+        DollyBlockSource *container;
+        DollyBlockStatus status;
+        image->failure="Not enough memory to open the retained IFF DOLY prefix.";
+        if(dolly_block_open_backend(resume->output_bytes,read_resume_file,close_resume_file,
+                                    image,&container)!=DOLLY_BLOCK_OK)goto fail;
+        status=dolly_dly_open_prefix(container,&image->resume_decoded,&plan,resume->completed);
+        if(status!=DOLLY_BLOCK_OK) {
+            dolly_block_close(container);
+            if(status!=DOLLY_BLOCK_ENOMEM)
+                image->failure="Invalid IFF DOLY header or committed prefix.";
+            goto fail;
+        }
+    }
+    image->failure="Not enough memory to verify the retained image.";
+    image->resume_buffer=malloc(reader->transfer_bytes);
+    if(!image->resume_buffer)goto fail;
+    image->part_end=reader->total;
+    dolly_warnings_clear(&warnings);
+    image->failure=NULL;
+    return 1;
+fail:
+    dolly_warnings_clear(&warnings);
+    release(image,0);
+    return 0;
+}
+
+int dolly_image_resume_confirm(DollyAmigaImage *image,const DollyEndpoint *target) {
+    char message[650],next[21],verified[21];
+    DollyWarnings review={.window_title="Dolly - Resume image"};
+    BPTR previous;
+    int available;
+    const char *format=image->format_dly?(image->codec==DOLLY_DLY_PACKBITS?"IFF DOLY / Fast":
+                         image->codec==DOLLY_DLY_LZSS?"IFF DOLY / Compact":"IFF DOLY"):
+                         target->image_format==DOLLY_IMAGE_HDF?"HDF":"RAW";
+    dolly_surface_log_decimal(next,image->reader.first_lba+image->resume_until);
+    dolly_surface_log_decimal(verified,image->resume_until);
+    snprintf(message,sizeof(message),
+             "Create Image (%s)\nSource: %s\nDestination: %s\nVerified sectors: %s. Next LBA: %s.",
+             format,image->reader.source_path,
+             target->path,verified,next);
+    if(!dolly_warning_add(&review,"Verified checkpoint",message,"Resume")) {
+        image->failure="Could not open the checkpoint review.";
+        return 0;
+    }
+    available=dolly_warnings_review(image->parent,&review);
+    dolly_warnings_clear(&review);
+    if(!available)return 0;
+    previous=CurrentDir(image->drawer);
+    available=unused_name(image->name);
+    CurrentDir(previous);
+    if(!available || !dolly_amiga_read_guard_check(image->reader.mount_guard)) {
+        image->failure="Source access or the destination changed during confirmation.";
+        return 0;
+    }
+    free(image->resume_buffer);
+    image->resume_buffer=NULL;
+    dolly_block_close(image->resume_decoded);
+    image->resume_decoded=NULL;
+    if(image->format_dly) {
+        if(image->codec && !prepare_compression(image,image->codec))return 0;
+        if(!seek_image(image,image->resume_bytes) ||
+           !dolly_dly_resume(&image->dly,write_image,image,image->resume_until,image->resume_bytes)) {
+            image->failure="Could not position the IFF DOLY writer at the verified cursor.";
+            return 0;
+        }
+    }
+    image->reader.processed=image->resume_until;
+    image->failure=NULL;
+    return 1;
+}
+
 void dolly_image_step(DollyAmigaImage *image) {
     DollySurfaceScan *reader=&image->reader;
     uint64_t remaining,lba;
@@ -498,9 +770,16 @@ void dolly_image_step(DollyAmigaImage *image) {
     uint32_t sectors;
     DollyBlockReadResult result;
     if(!image->file || image->failure)return;
-    remaining=image->part_end-reader->processed;
-    lba=reader->first_lba+reader->processed;
-    sectors=reader->transfer_bytes/reader->sector_bytes;
+    if(image->resume_buffer && image->resume_checked==image->resume_until)return;
+    remaining=image->resume_buffer?image->resume_until-image->resume_checked:
+                                    image->part_end-reader->processed;
+    if(!remaining) {
+        if(finish_part(image))release(image,1);
+        return;
+    }
+    lba=reader->first_lba+(image->resume_buffer?image->resume_checked:reader->processed);
+    sectors=(image->resuming && image->format_dly?image->dly.batch_bytes:
+                                                   reader->transfer_bytes)/reader->sector_bytes;
     if(!sectors)sectors=1;
     if(sectors>remaining)sectors=(uint32_t)remaining;
     bytes=(size_t)sectors*reader->sector_bytes;
@@ -514,6 +793,26 @@ void dolly_image_step(DollyAmigaImage *image) {
         image->failure=image->read_failure;
         return;
     }
+    if(image->resume_buffer) {
+        int retained_ok;
+        if(image->resume_decoded) {
+            DollyBlockReadResult decoded=dolly_block_read(image->resume_decoded,
+                image->resume_checked*reader->sector_bytes,image->resume_buffer,bytes);
+            retained_ok=decoded.status==DOLLY_BLOCK_OK && decoded.bytes_read==bytes;
+        } else retained_ok=Read(image->file,image->resume_buffer,(LONG)bytes)==(LONG)bytes;
+        if(!retained_ok ||
+           memcmp(image->resume_buffer,reader->buffer,bytes)) {
+            char position[21];
+            dolly_surface_log_decimal(position,lba);
+            snprintf(image->read_failure,sizeof(image->read_failure),
+                     "Retained image check failed at LBA %s.",position);
+            image->failure=image->read_failure;
+            return;
+        }
+        image->resume_checked+=sectors;
+        return;
+    }
+    if(image->resuming)image->resume_dirty=1;
     if(!(image->dly.file_bytes?
          dolly_dly_append(&image->dly,reader->buffer,bytes):
          write_image(image,reader->buffer,bytes))) {

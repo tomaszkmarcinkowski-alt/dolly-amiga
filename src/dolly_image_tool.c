@@ -322,7 +322,7 @@ static int resize_partition(const char *input,const char *destination,uint64_t s
         error="The source partition extent exceeds the file.";
         goto done;
     }
-    error=dolly_ffs_open_resized_source(source,start,length,reserved,target,&plan,&resized);
+    error=dolly_ffs_open_resized_source(source,start,length,reserved,target,1,&plan,&resized);
     if(error)goto done;
     error="Cannot create a new destination. Existing files are protected.";
     output=new_file(destination);

@@ -1,6 +1,7 @@
 #include "dolly_dly_reader.h"
 #include "dolly_checksum.h"
 #include "dolly_dly_codec.h"
+#include "dolly_dly_writer.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -23,6 +24,7 @@ typedef struct DlyReader {
     uint32_t file_bytes, decoded_bytes;
     uint32_t cursor_chunk, cursor_offset, cached_chunk;
     uint32_t chunk_count,indexed_chunks,index_offset;
+    DollyDlyCodec max_codec;
     uint32_t *index;
     unsigned char *raw, *packed;
 } DlyReader;
@@ -57,7 +59,7 @@ static DollyBlockStatus read_chunk(DlyReader *reader, uint32_t pos, uint32_t num
     if(chunk->raw!=(remaining<reader->info.batch_bytes?remaining:reader->info.batch_bytes))
         return DOLLY_BLOCK_EINVAL;
     codec=reader->info.version==1?0:read32(header+24);
-    if(codec>DOLLY_DLY_LZSS)return DOLLY_BLOCK_EUNSUPPORTED;
+    if(codec>(uint32_t)reader->max_codec)return DOLLY_BLOCK_EUNSUPPORTED;
     chunk->codec=(DollyDlyCodec)codec;
     chunk->stored=length-(header_bytes-8u);
     if(codec==DOLLY_DLY_RAW ? chunk->stored!=chunk->raw : chunk->stored>=chunk->raw)
@@ -238,7 +240,8 @@ DollyBlockStatus dolly_dly_set_unpack(const unsigned char *prefix,size_t bytes,
 }
 
 static DollyBlockStatus read_header(DollyBlockSource *container,DollyDlyImageInfo *info,
-                                   uint32_t *start,uint32_t *chunks) {
+                                   uint32_t *start,uint32_t *chunks,
+                                   const DollyDlyWriter *plan,uint64_t completed) {
     unsigned char header[PREFIX_BYTES+DOLLY_DLY_NUMBERED_MSET_BYTES];
     DollyDlyImageInfo parsed;
     DollyBlockStatus status;
@@ -249,7 +252,8 @@ static DollyBlockStatus read_header(DollyBlockSource *container,DollyDlyImageInf
     prefix_bytes=size<sizeof(header)?(size_t)size:sizeof(header);
     status=dolly_block_read(container,0,header,prefix_bytes).status;
     if(status!=DOLLY_BLOCK_OK)return status;
-    if(memcmp(header,"FORM",4) || read32(header+4)!=size-8u ||
+    if(memcmp(header,"FORM",4) ||
+       (!plan && read32(header+4)!=size-8u) ||
        memcmp(header+8,"DOLYHEAD",8) || read32(header+16)!=8 ||
        memcmp(header+28,"GEOM",4) || read32(header+32)!=24)
         return DOLLY_BLOCK_EINVAL;
@@ -266,12 +270,21 @@ static DollyBlockStatus read_header(DollyBlockSource *container,DollyDlyImageInf
         return DOLLY_BLOCK_EINVAL;
     if(prefix_bytes>=PREFIX_BYTES+4u && !memcmp(header+PREFIX_BYTES,"MSET",4)) {
         DollyDlySetInfo set;
+        if(plan)return DOLLY_BLOCK_EINVAL;
         status=dolly_dly_set_unpack(header,prefix_bytes,&set);
         if(status!=DOLLY_BLOCK_OK)return status;
         data_start+=set.part?DOLLY_DLY_NUMBERED_MSET_BYTES:DOLLY_DLY_MSET_BYTES;
     }
-    total=(uint32_t)(parsed.sectors*parsed.sector_bytes);
-    count=(total-1u)/parsed.batch_bytes+1u;
+    if(plan &&
+       (size>plan->file_bytes || read32(header+4)!=plan->file_bytes-8u ||
+        parsed.sectors!=plan->sectors || parsed.first_lba!=plan->first_lba ||
+        parsed.sector_bytes!=plan->sector_bytes || parsed.batch_bytes!=plan->batch_bytes ||
+        parsed.version!=(plan->compression?2u:1u) || completed>parsed.sectors ||
+        (completed!=parsed.sectors && completed*parsed.sector_bytes%parsed.batch_bytes)))
+        return DOLLY_BLOCK_EINVAL;
+    total=(uint32_t)((plan?completed:parsed.sectors)*parsed.sector_bytes);
+    count=total?(total-1u)/parsed.batch_bytes+1u:0;
+    if(!count && size!=data_start)return DOLLY_BLOCK_EINVAL;
     if(count>MAX_DATA_CHUNKS || count>(size-data_start)/24u)
         return DOLLY_BLOCK_EINVAL;
     *info=parsed;
@@ -283,37 +296,41 @@ static DollyBlockStatus read_header(DollyBlockSource *container,DollyDlyImageInf
 DollyBlockStatus dolly_dly_probe_header(DollyBlockSource *container,DollyDlyImageInfo *info) {
     uint32_t start,chunks;
     if(!info)return DOLLY_BLOCK_EINVAL;
-    return read_header(container,info,&start,&chunks);
+    return read_header(container,info,&start,&chunks,NULL,0);
 }
 
 static DollyBlockStatus open_reader(DollyBlockSource *container,DollyBlockSource **out,
-                                    DollyDlyImageInfo *info,int lazy) {
+                                    DollyDlyImageInfo *info,int lazy,
+                                    const DollyDlyWriter *plan,uint64_t completed) {
     DlyReader *reader;
     DollyDlyImageInfo parsed;
     DollyBlockStatus status;
     uint32_t count,data_start;
     if(!out)return DOLLY_BLOCK_EINVAL;
     *out=NULL;
-    status=read_header(container,&parsed,&data_start,&count);
+    status=read_header(container,&parsed,&data_start,&count,plan,completed);
     if(status!=DOLLY_BLOCK_OK)return status;
     reader=calloc(1,sizeof(*reader));
     if(!reader)return DOLLY_BLOCK_ENOMEM;
     reader->container=container;
     reader->info=parsed;
     reader->file_bytes=(uint32_t)dolly_block_size(container);
-    reader->decoded_bytes=(uint32_t)(parsed.sectors*parsed.sector_bytes);
+    reader->decoded_bytes=(uint32_t)((plan?completed:parsed.sectors)*parsed.sector_bytes);
     reader->chunk_count=count;
+    reader->max_codec=plan?plan->compression:DOLLY_DLY_LZSS;
     reader->index_offset=data_start;
-    reader->index=malloc(((count-1u)/INDEX_STRIDE+1u)*sizeof(*reader->index));
-    if(!reader->index)goto no_memory;
-    if(!lazy) {
-        DlyChunk chunk;
-        status=extend_index(reader,count-1u,&chunk);
-        if(status!=DOLLY_BLOCK_OK)goto fail;
+    if(count) {
+        reader->index=malloc(((count-1u)/INDEX_STRIDE+1u)*sizeof(*reader->index));
+        if(!reader->index)goto no_memory;
+        if(!lazy) {
+            DlyChunk chunk;
+            status=extend_index(reader,count-1u,&chunk);
+            if(status!=DOLLY_BLOCK_OK)goto fail;
+        }
+        reader->raw=malloc(parsed.batch_bytes>MAX_CACHED_BYTES?STREAM_BYTES:parsed.batch_bytes);
+        if(parsed.version==2)reader->packed=malloc(parsed.batch_bytes);
+        if(!reader->raw || (parsed.version==2 && !reader->packed))goto no_memory;
     }
-    reader->raw=malloc(parsed.batch_bytes>MAX_CACHED_BYTES?STREAM_BYTES:parsed.batch_bytes);
-    if(parsed.version==2)reader->packed=malloc(parsed.batch_bytes);
-    if(!reader->raw || (parsed.version==2 && !reader->packed))goto no_memory;
     reader->cursor_offset=data_start;
     reader->cached_chunk=UINT32_MAX;
     status=dolly_block_open_backend(reader->decoded_bytes,read_decoded,close_decoded,reader,out);
@@ -329,12 +346,18 @@ fail:
 
 DollyBlockStatus dolly_dly_open(DollyBlockSource *container,DollyBlockSource **out,
                                DollyDlyImageInfo *info) {
-    return open_reader(container,out,info,0);
+    return open_reader(container,out,info,0,NULL,0);
 }
 
 DollyBlockStatus dolly_dly_open_lazy(DollyBlockSource *container,DollyBlockSource **out,
                                     DollyDlyImageInfo *info) {
-    return open_reader(container,out,info,1);
+    return open_reader(container,out,info,1,NULL,0);
+}
+
+DollyBlockStatus dolly_dly_open_prefix(DollyBlockSource *container,DollyBlockSource **out,
+                                     const DollyDlyWriter *plan,uint64_t completed) {
+    if(!plan)return DOLLY_BLOCK_EINVAL;
+    return open_reader(container,out,NULL,1,plan,completed);
 }
 
 static int manifest_literal(const char **cursor,const char *end,const char *literal) {

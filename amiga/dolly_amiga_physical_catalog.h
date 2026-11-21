@@ -35,6 +35,8 @@ typedef struct DollyMountedVolume {
     char device[DOLLY_MOUNT_NAME],volume[DOLLY_MOUNT_NAME];
     struct DosList *entry; /* Identity only. */
     struct MsgPort *handler; /* Identity only. Never dereference after unlocking. */
+    uint64_t start,length;
+    ULONG block_bytes,dos_type;
     int suspended,allow_present,quiet_offline;
 } DollyMountedVolume;
 typedef struct DollyMountList {
@@ -46,6 +48,7 @@ int dolly_amiga_mounted_extents(const DollyPhysicalEntry *device,uint64_t start,
                                uint64_t bytes,int include_inactive,DollyMountList *out);
 int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend);
 int dolly_amiga_lock_uses_mount(BPTR lock,const DollyMountedVolume *mount);
+int dolly_amiga_file_uses_mount(BPTR file,const DollyMountedVolume *mount);
 int dolly_amiga_unmount(const DollyMountedVolume *mount);
 /* NULL means the device and volume are gone. On failure, return the
  * stage that blocked shutdown. An ACTION_DIE reply is requested once. */

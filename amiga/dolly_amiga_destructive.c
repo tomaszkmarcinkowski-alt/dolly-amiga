@@ -498,7 +498,8 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     if(inner_height>10*v.row+28)inner_height=10*v.row+28;
     if(inner_height<min_height)inner_height=min_height;
     v.window=OpenWindowTags(NULL,WA_PubScreen,(ULONG)screen,
-        WA_Title,(ULONG)"Dolly - Review warnings",WA_InnerWidth,(ULONG)inner_width,
+        WA_Title,(ULONG)(warnings->window_title?warnings->window_title:"Dolly - Review warnings"),
+        WA_InnerWidth,(ULONG)inner_width,
         WA_InnerHeight,(ULONG)inner_height,WA_Top,(ULONG)screen->BarHeight+1,
         WA_MinWidth,120UL,WA_MinHeight,80UL,WA_MaxWidth,(ULONG)max_width,
         WA_MaxHeight,(ULONG)max_height,WA_SizeGadget,TRUE,WA_SizeBBottom,TRUE,

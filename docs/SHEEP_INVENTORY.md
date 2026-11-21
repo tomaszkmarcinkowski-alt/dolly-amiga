@@ -150,7 +150,11 @@ device is accessed with read commands.
 
 The output is a raw binary prefix of the source disk. Dolly publishes
 it under the selected name after the temporary `.part` file has been
-written and closed. An existing destination is refused. Partition data
+written and closed. The operation summary includes the source, the
+output path, the number of complete sectors and the file size. If the
+reserved size has changed since Inventory was opened, Dolly leaves
+the selected output unpublished. An existing destination is refused.
+Partition data
 and a restore workflow are outside the scope of this export.
 
 The **Backup RDB** button stays visible and disabled when no valid RDB
@@ -219,6 +223,10 @@ Every click on **Restore RDB** opens the shared ten-second confirmation.
 After Proceed, Inventory checks target eligibility and displays an explicit
 reason for any refusal. Eligible operations retain the final confirmation
 for the validated write plan, including its LBA range.
+The operation summary distinguishes sectors already identical to the
+backup, written sectors with successful read-back, and the result of the
+final reread. It identifies any recovery copy that was saved. An identical
+backup ends with zero writes and no new recovery file.
 
 
 ### Header and partition list spacing

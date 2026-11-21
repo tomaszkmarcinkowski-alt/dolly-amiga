@@ -1,5 +1,6 @@
 #include "dolly_restore_transfer.h"
 #include "dolly_restore_source.h"
+#include <string.h>
 
 int dolly_restore_transfer_init(DollyRestoreTransfer *transfer,DollyBlockSource *source,
                       uint64_t target_bytes,uint32_t sector_bytes,uint32_t max_transfer,
@@ -32,7 +33,8 @@ int dolly_restore_transfer_set_ranges(DollyRestoreTransfer *transfer,
     uint64_t end=0,total=0;
     if(!transfer || !ranges || !count || !sector_bytes || transfer->ranges ||
        transfer->state!=DOLLY_RESTORE_TRANSFERRING || transfer->processed ||
-       transfer->source_check_bytes || transfer->batch_bytes%sector_bytes)return 0;
+       transfer->source_check_bytes || transfer->resume_read ||
+       transfer->batch_bytes%sector_bytes)return 0;
     for(i=0;i<count;++i) {
         const DollyTransferRange *r=&ranges[i];
         if(!r->length || r->offset<end || r->offset>transfer->bytes ||
@@ -47,12 +49,31 @@ int dolly_restore_transfer_set_ranges(DollyRestoreTransfer *transfer,
     return 1;
 }
 
+int dolly_restore_transfer_set_resume(DollyRestoreTransfer *transfer,
+                       uint64_t committed,uint64_t uncertain,uint32_t sector_bytes,
+                       DollyBlockReadFn read_target,void *scratch,size_t scratch_bytes) {
+    if(!transfer || !read_target || !scratch || !sector_bytes || !transfer->batch_bytes ||
+       scratch_bytes<transfer->batch_bytes || transfer->resume_read || transfer->ranges ||
+       transfer->processed || transfer->source_checked ||
+       transfer->state!=DOLLY_RESTORE_TRANSFERRING || committed>=transfer->bytes ||
+       committed%transfer->batch_bytes || uncertain>transfer->bytes-committed ||
+       uncertain>transfer->batch_bytes || uncertain%sector_bytes)return 0;
+    transfer->resume_committed=committed;
+    transfer->resume_check_end=committed+uncertain;
+    transfer->resume_read=read_target;
+    transfer->resume_scratch=scratch;
+    transfer->processed=committed;
+    if(transfer->source_check_bytes<transfer->resume_check_end)
+        transfer->source_check_bytes=transfer->resume_check_end;
+    return 1;
+}
+
 DollyRestoreTransferState dolly_restore_transfer_step(DollyRestoreTransfer *transfer,
                                                      void *buffer,size_t buffer_bytes) {
     DollyBlockReadResult result;
     uint64_t remaining,offset;
     size_t bytes;
-    int checking;
+    int checking,verify;
     if(transfer->state!=DOLLY_RESTORE_TRANSFERRING)return transfer->state;
     checking=transfer->source_checked<transfer->source_check_bytes;
     offset=checking?transfer->source_checked:transfer->processed;
@@ -74,12 +95,27 @@ DollyRestoreTransferState dolly_restore_transfer_step(DollyRestoreTransfer *tran
         return transfer->state=DOLLY_RESTORE_READ_FAILED;
     }
     if(checking) {
+        if(offset<transfer->resume_check_end) {
+            uint64_t end=offset<transfer->resume_committed?transfer->resume_committed:
+                                                         transfer->resume_check_end;
+            size_t count=end-offset<bytes?(size_t)(end-offset):bytes;
+            DollyBlockReadResult target=transfer->resume_read(transfer->target,offset,
+                                                       transfer->resume_scratch,count);
+            if(target.status!=DOLLY_BLOCK_OK || target.bytes_read!=count ||
+               (offset<transfer->resume_committed &&
+                memcmp(buffer,transfer->resume_scratch,count))) {
+                transfer->resume_target_failed=1;
+                transfer->read_status=DOLLY_BLOCK_EIO;
+                return transfer->state=DOLLY_RESTORE_READ_FAILED;
+            }
+        }
         transfer->source_checked+=bytes;
         return transfer->state;
     }
+    verify=transfer->verify || offset<transfer->resume_check_end;
     transfer->write_status=transfer->write_batch(transfer->target,offset,
-                                                buffer,bytes,transfer->verify);
-    if(transfer->write_status!=(transfer->verify?DOLLY_WRITE_VERIFIED:DOLLY_WRITE_COMPLETE))
+                                                buffer,bytes,verify);
+    if(transfer->write_status!=(verify?DOLLY_WRITE_VERIFIED:DOLLY_WRITE_COMPLETE))
         return transfer->state=DOLLY_RESTORE_WRITE_FAILED;
     if(transfer->ranges) {
         transfer->range_processed+=bytes;

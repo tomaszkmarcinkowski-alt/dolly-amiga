@@ -8,10 +8,12 @@
 #include <strings.h>
 
 int dolly_amiga_warn_same_unit(DollyWarnings *warnings) {
-    return dolly_amiga_suppress_same_unit_warning() ||
-           dolly_warning_add(warnings,"Same unit",
-             "Source and destination are on the same device unit.\n"
-             "Copying between them may be slower.","OK");
+    static const char details[]="Source and destination are on the same device unit.\n"
+                                "Copying between them may be slower.";
+    if(dolly_amiga_suppress_same_unit_warning())return 1;
+    for(unsigned i=0;i<warnings->count;++i)
+        if(!strcmp(warnings->items[i]->text,details))return 1;
+    return dolly_warning_add(warnings,"Same unit",details,"OK")!=NULL;
 }
 
 const char *dolly_amiga_guard_file_transfer(DollyWarnings *warnings,BPTR file_lock,

@@ -10,12 +10,14 @@ DollyBlockStatus dolly_amiga_image_file_size(BPTR file,uint64_t *size);
 
 struct Window;
 struct ImageSet;
+struct DollyMountedVolume;
 
 typedef struct DollyAmigaRestoreSource {
     DollyBlockSource *blocks;
     int is_dly;
     struct ImageSet *set;
     BPTR lock; /* Borrowed from the source. Kept until close; zero if unavailable. */
+    BPTR file; /* Borrowed open handle for a single-file image. */
 } DollyAmigaRestoreSource;
 
 /* Initialize to zero. Close before reusing. Recognizes FORM DOLY by content
@@ -26,6 +28,9 @@ DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source
                          uint32_t sector_bytes,struct Window *parent);
 /* Enumerate distinct source volumes for the destination overlap guard. */
 BPTR dolly_amiga_restore_volume(const DollyAmigaRestoreSource *source,uint32_t index);
+/* Check every opened file, including replacements on other volumes. */
+int dolly_amiga_restore_uses_mount(const DollyAmigaRestoreSource *source,
+                                 const struct DollyMountedVolume *mount);
 uint32_t dolly_amiga_restore_failed_part(const DollyAmigaRestoreSource *source,uint32_t *total);
 void dolly_amiga_restore_source_close(DollyAmigaRestoreSource *source);
 #endif

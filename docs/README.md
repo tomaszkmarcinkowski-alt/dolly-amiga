@@ -23,12 +23,14 @@
 
 - [Roadmap](ROADMAP.md), [backlog](BACKLOG.md) and [product specification](SPECIFICATION.md)
 - [Engineering field notes](ENGINEERING_JOURNAL.md) and [M0 history](SPRINT_M0.md)
+- [Public revision history](REVISION_HISTORY.md)
 - [GitHub release history](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+- [ShapeShifter and HFS feasibility research](SHAPESHIFTER_HFS_RESEARCH.md)
 
 
-## Alpha 3.6
+## Alpha 3.7
 
-The [operation guide](OPERATIONS_EN.md) documents the native FFS
-Clone and resize prototype. [Device writes](DEVICE_WRITE.md) covers
-eligibility, verification and the desktop resize command.
-See the [test matrix](TEST_MATRIX.md) for the verified cases.
+The [operation guide](OPERATIONS_EN.md) documents operation summaries,
+transfer timing and resumption from DLRP checkpoints. [Device writes](DEVICE_WRITE.md)
+covers eligibility, verification and the FFS resize prototype. See the
+[test matrix](TEST_MATRIX.md) for the verified cases.

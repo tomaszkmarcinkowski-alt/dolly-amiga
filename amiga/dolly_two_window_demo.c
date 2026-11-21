@@ -18,8 +18,11 @@
 #include "dolly_amiga_io_settings.h"
 #include "dolly_operation_pointer.h"
 #include "dolly_amiga_transfer.h"
+#include "dolly_version.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
+#include <exec/memory.h>
+#include <exec/tasks.h>
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <graphics/gfxbase.h>
@@ -27,12 +30,14 @@
 #include <graphics/rastport.h>
 #include <graphics/text.h>
 #include <dos/dosextens.h>
+#include <devices/timer.h>
 #include <libraries/gadtools.h>
 #include <utility/tagitem.h>
 #include <proto/exec.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include <proto/timer.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -43,6 +48,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
 struct Library *AslBase;
+struct Device *TimerBase;
 /* dos.library base is initialized by the C runtime; do not replace it. */
 
 #define GRID_COLS 24u
@@ -76,7 +82,6 @@ static const char hide_label[]="Hide";
 #define MAIN_DESC_ID 214u
 #define MAIN_SETTINGS_ID 217u
 #define MAIN_STOP_ID 218u
-#define DOLLY_DEMO_BUILD_LABEL "Dolly Alpha 3.6"
 #define MAIN_GADGET_HEIGHT 15
 #define MAIN_COLUMN_GAP 6
 
@@ -111,21 +116,33 @@ typedef struct DollyDemoView {
     unsigned char gadgets_detached;
     unsigned counter_steps;
     ULONG displayed_percent,displayed_errors;
-    LONG bar_filled;
+    unsigned displayed_timing;
+    LONG bar_filled,bar_timing_width;
     DemoLayout l;
 } DollyDemoView;
 
 static struct Screen *public_screen;
 static struct Menu *settings_menu;
 #define IO_SETTINGS_ITEM FULLMENUNUM(0,0,NOSUB)
+#define RESUME_IMAGE_ITEM FULLMENUNUM(1,0,NOSUB)
 
 static struct NewMenu settings_items[]={
     {NM_TITLE,(STRPTR)"Settings",NULL,0,0,NULL},
     {NM_ITEM,(STRPTR)"I/O override...",NULL,0,0,NULL},
+    {NM_TITLE,(STRPTR)"Project",NULL,0,0,NULL},
+    {NM_ITEM,(STRPTR)"Resume operation...",NULL,0,0,NULL},
     {NM_END,NULL,NULL,0,0,NULL}
 };
 static struct DrawInfo *screen_info;
 static DollyOperationSession operation;
+static DollyOperationTiming operation_timing;
+static struct MsgPort *timing_port;
+static struct timerequest *timing_request;
+static uint32_t timing_frequency;
+static uint64_t last_timing_display;
+static unsigned timing_revision;
+static char timing_caption[68];
+static char elapsed_caption[32];
 static DollySurfaceScan surface;
 static DollyAmigaTransfer transfer;
 static int transfer_result;
@@ -350,6 +367,92 @@ static int validating_restore(void) {
     return transfer.opened && transfer.job.source_checked<transfer.job.source_check_bytes;
 }
 
+static void open_operation_clock(void) {
+    struct EClockVal now;
+    timing_port=CreateMsgPort();
+    if(timing_port)
+        timing_request=(struct timerequest *)CreateIORequest(timing_port,sizeof(*timing_request));
+    if(timing_request && !OpenDevice(TIMERNAME,UNIT_ECLOCK,&timing_request->tr_node,0)) {
+        TimerBase=timing_request->tr_node.io_Device;
+        timing_frequency=ReadEClock(&now);
+    }
+}
+
+static void close_operation_clock(void) {
+    if(TimerBase)CloseDevice(&timing_request->tr_node);
+    if(timing_request)DeleteIORequest((struct IORequest *)timing_request);
+    if(timing_port)DeleteMsgPort(timing_port);
+}
+
+static uint64_t operation_now(void) {
+    struct EClockVal now;
+    if(!timing_frequency)return 0;
+    ReadEClock(&now);
+    return ((uint64_t)now.ev_hi<<32)|now.ev_lo;
+}
+
+static uint64_t operation_payload_bytes(void) {
+    if(scan_result)return surface.processed*surface.sector_bytes;
+    if(image_result)
+        return image.reader.processed>=image.resume_until?
+               (image.reader.processed-image.resume_until)*image.reader.sector_bytes:0;
+    return transfer.job.processed-transfer.job.resume_committed;
+}
+
+static void format_duration(char text[32],uint64_t seconds) {
+    char leading[21];
+    if(seconds>=3600u) {
+        dolly_surface_log_decimal(leading,seconds/3600u);
+        snprintf(text,32,"%s:%02u:%02u",leading,(unsigned)(seconds/60u%60u),(unsigned)(seconds%60u));
+    } else
+        snprintf(text,32,"%u:%02u",(unsigned)(seconds/60u),(unsigned)(seconds%60u));
+}
+
+static void format_rate(char text[32],uint64_t bytes_per_second) {
+    static const char *const units[]={"B/s","KiB/s","MiB/s","GiB/s"};
+    uint64_t scale=1;
+    unsigned unit=0;
+    char whole[21];
+    while(unit<3u && bytes_per_second>=scale*1024u) {
+        scale*=1024u;
+        ++unit;
+    }
+    dolly_surface_log_decimal(whole,bytes_per_second/scale);
+    if(unit) {
+        int fraction=(int)((bytes_per_second%scale)*10u/scale);
+        snprintf(text,32,"%s.%c %s",whole,'0'+fraction,units[unit]);
+    } else snprintf(text,32,"%s %s",whole,units[unit]);
+}
+
+static void update_timing_caption(uint64_t now,int force) {
+    char duration[32],rate[32],caption[sizeof(timing_caption)];
+    if(!operation_timing.frequency ||
+       (!force && now-last_timing_display<operation_timing.frequency))return;
+    last_timing_display=now;
+    dolly_operation_timing_sample(&operation_timing,now,operation_payload_bytes());
+    format_duration(duration,dolly_operation_timing_elapsed(&operation_timing,now)/
+                             operation_timing.frequency);
+    if(operation_timing.rate_valid) {
+        format_rate(rate,operation_timing.rate);
+        snprintf(caption,sizeof(caption),"%s  %s",duration,rate);
+    } else snprintf(caption,sizeof(caption),"%s",duration);
+    if(strcmp(timing_caption,caption)) {
+        strcpy(timing_caption,caption);
+        strcpy(elapsed_caption,duration);
+        ++timing_revision;
+    }
+}
+
+static void set_transfer_activity(int active) {
+    uint64_t now=operation_now();
+    dolly_operation_timing_active(&operation_timing,now,operation_payload_bytes(),active);
+    update_timing_caption(now,1);
+}
+
+static void finish_operation_timing(void) {
+    dolly_operation_timing_finish(&operation_timing,operation_now(),operation_payload_bytes());
+}
+
 static unsigned transfer_check_percent(void) {
     if(validating_restore()) {
         uint32_t sector=transfer.target.sector_bytes;
@@ -403,7 +506,8 @@ static void update_main_status(void) {
                                                 "Stopped. No sectors were written.");
         else if(operation.state==DOLLY_OP_RUNNING && transfer_check_percent()<100u)
             snprintf(main_view.status_label,sizeof(main_view.status_label),
-                     "Validating IFF DOLY: %u%%",transfer_check_percent());
+                     "%s: %u%%",transfer.job.resume_read?"Checking checkpoint":
+                               "Validating IFF DOLY",transfer_check_percent());
         else if(operation.state==DOLLY_OP_RUNNING)
             snprintf(main_view.status_label,sizeof(main_view.status_label),
                      "%s: %.18s -> %.21s",
@@ -431,7 +535,10 @@ static void update_main_status(void) {
     else if(operation.state==DOLLY_OP_RUNNING) {
         const char *kind=selected_source.kind==DOLLY_ENDPOINT_PARTITION?"partition":
                          selected_source.kind==DOLLY_ENDPOINT_LOGICAL?"volume":"disk";
-        if(image_result)
+        if(image_result && image.resume_buffer)
+            text_copy(main_view.status_label,sizeof(main_view.status_label),
+                      "Verifying retained image against source...");
+        else if(image_result)
             snprintf(main_view.status_label,sizeof(main_view.status_label),
                      "Writing %s to image: %.32s",kind,image.name);
         else if(scan_result)
@@ -533,6 +640,9 @@ static void progress_counts(uint64_t *current,uint64_t *total) {
         uint32_t sector=transfer.target.sector_bytes;
         *current=transfer.job.source_checked/sector;
         *total=transfer.job.source_check_bytes/sector;
+    } else if(image.file && image.resume_buffer) {
+        *current=image.resume_checked;
+        *total=image.resume_until;
     }
 }
 static ULONG progress_units(ULONG units) {
@@ -954,17 +1064,33 @@ static int set_content_minimum(DollyDemoView *v,int main_window) {
     if(!minimum.valid)return 0;
     {
         LONG pixel_x,pixel_y,span;
-        ULONG width,height;
+        ULONG cell_w,cell_h,gap_x,gap_y,chrome_w,chrome_h,cols;
+        ULONG chosen_width=0,chosen_height=0,best_distance=GRID_TOTAL;
         grid_pixel_size(&pixel_x,&pixel_y);
         span=8*(pixel_x>pixel_y?pixel_x:pixel_y);
-        width=m.border_left+m.border_right+2*m.padding_x+6+
-              GRID_COLS*((span+pixel_x/2)/pixel_x)+
-              (GRID_COLS-1)*grid_gap(pixel_x,pixel_y);
-        height=m.border_top+m.border_bottom+2*m.padding_y+2*m.line_height+2*(ULONG)selector_height(rp->Font)+21u+
-               GRID_ROWS*((span+pixel_y/2)/pixel_y)+
-               (GRID_ROWS-1)*grid_gap(pixel_y,pixel_x);
-        if(minimum.outer_width<width)minimum.outer_width=width;
-        if(minimum.outer_height<height)minimum.outer_height=height;
+        cell_w=(span+pixel_x/2)/pixel_x;
+        cell_h=(span+pixel_y/2)/pixel_y;
+        gap_x=grid_gap(pixel_x,pixel_y);
+        gap_y=grid_gap(pixel_y,pixel_x);
+        chrome_w=m.border_left+m.border_right+2*m.padding_x+6;
+        chrome_h=m.border_top+m.border_bottom+2*m.padding_y+2*m.line_height+
+                 2*(ULONG)selector_height(rp->Font)+21u;
+        /* Keep the usual minimum where it fits. On narrow or shallow
+         * screens, use another grid shape already supported by fit_grid(). */
+        for(cols=8;cols<=48;++cols) {
+            ULONG rows=(GRID_TOTAL+cols-1)/cols;
+            ULONG distance=cols>GRID_COLS?cols-GRID_COLS:GRID_COLS-cols;
+            ULONG width=chrome_w+cols*cell_w+(cols-1)*gap_x;
+            ULONG height=chrome_h+rows*cell_h+(rows-1)*gap_y;
+            if(distance>=best_distance || width>(ULONG)w->Width ||
+               height>(ULONG)w->Height)continue;
+            best_distance=distance;
+            chosen_width=width;
+            chosen_height=height;
+        }
+        if(!chosen_width)return 0;
+        if(minimum.outer_width<chosen_width)minimum.outer_width=chosen_width;
+        if(minimum.outer_height<chosen_height)minimum.outer_height=chosen_height;
     }
     if(minimum.outer_width>(ULONG)w->Width ||
        minimum.outer_height>(ULONG)w->Height)return 0;
@@ -1051,17 +1177,33 @@ static void draw_endpoint_frames(void) {
                         busy || (!destination_mode_mask() && !destination_button_available()));
 }
 
-/* Both windows reserve space for the percentage inside the same recessed
- * well. Sheep Counter repaints only the changed fill and caption. */
+/* The fill spans the well, including the area behind the caption.
+ * Repaint that area when the text or the fill beneath it changes. */
 static void draw_progress_well(DollyDemoView *v,LONG left,LONG y,LONG right,int full) {
     struct Window *w=v->window;
     struct RastPort *rp=w->RPort;
     LONG h=v->l.selector_h;
+    LONG inner_left=left+2,inner_right=right-2;
     LONG caption_x=right-v->l.progress_percent_w-5;
-    LONG fill_width=caption_x-left-8;
-    LONG filled=(LONG)progress_units((ULONG)fill_width);
+    LONG caption_space=caption_x-left-8,timing_width=0;
+    const char *caption=NULL;
+    if(caption_space>0 && operation_active() && timing_caption[0]) {
+        LONG full_width=TextLength(rp,(STRPTR)timing_caption,strlen(timing_caption))+8;
+        LONG elapsed_width=TextLength(rp,(STRPTR)elapsed_caption,strlen(elapsed_caption))+8;
+        timing_width=(LONG)dolly_gui_progress_caption_width((uint32_t)caption_space,
+                                               (uint32_t)full_width,(uint32_t)elapsed_width);
+        if(timing_width)caption=timing_width==full_width?timing_caption:elapsed_caption;
+    }
+    caption_x-=timing_width;
+    LONG filled=(LONG)progress_units((ULONG)(inner_right-inner_left+1));
     LONG previous=v->bar_filled;
+    LONG fill_end=inner_left+filled;
+    LONG changed_left=inner_left+(filled<previous?filled:previous);
+    LONG changed_right=inner_left+(filled>previous?filled:previous)-1;
     ULONG percent=progress_units(100);
+    int redraw_caption=full || timing_width!=v->bar_timing_width ||
+        percent!=v->displayed_percent || timing_revision!=v->displayed_timing ||
+        (filled!=previous && changed_right>=caption_x);
     SetDrMd(rp,JAM1);
     if(full) {
         struct TagItem tags[]={
@@ -1070,25 +1212,32 @@ static void draw_progress_well(DollyDemoView *v,LONG left,LONG y,LONG right,int 
             {TAG_DONE,0}
         };
         DrawBevelBoxA(rp,left,y,right-left+1,h,tags);
-        fill(rp,system_pen(BACKGROUNDPEN),left+2,y+2,right-2,y+h-3);
-        previous=0;
+        changed_left=inner_left;
     }
-    if(filled>previous)
-        fill(rp,system_pen(FILLPEN),left+2+previous,y+2,left+1+filled,y+h-3);
-    else if(filled<previous)
-        fill(rp,system_pen(BACKGROUNDPEN),left+2+filled,y+2,left+1+previous,y+h-3);
-    if(full || percent!=v->displayed_percent) {
+    if(redraw_caption) {
         char *end=v->percent_label;
-        LONG width;
+        LONG width,baseline=y+(h-rp->TxHeight)/2+rp->TxBaseline;
+        LONG repaint_x=caption_x;
+        if(!full && timing_width<v->bar_timing_width)
+            repaint_x-=v->bar_timing_width-timing_width;
+        if(changed_left>repaint_x || (!full && filled==previous))changed_left=repaint_x;
+        fill(rp,system_pen(FILLPEN),changed_left,y+2,fill_end-1,y+h-3);
+        fill(rp,system_pen(BACKGROUNDPEN),changed_left>fill_end?changed_left:fill_end,
+             y+2,inner_right,y+h-3);
         append_u32(&end,v->percent_label+sizeof(v->percent_label)-2,percent);
         *end++='%';
         *end='\0';
         width=TextLength(rp,(STRPTR)v->percent_label,end-v->percent_label);
-        fill(rp,system_pen(BACKGROUNDPEN),caption_x,y+2,right-2,y+h-3);
-        label(w,right-width-5,y+(h-rp->TxHeight)/2+rp->TxBaseline,v->percent_label);
+        if(caption)label(w,caption_x+2,baseline,caption);
+        label(w,right-width-5,baseline,v->percent_label);
+    } else if(filled!=previous) {
+        fill(rp,system_pen(filled>previous?FILLPEN:BACKGROUNDPEN),
+             changed_left,y+2,changed_right,y+h-3);
     }
     v->displayed_percent=percent;
+    v->displayed_timing=timing_revision;
     v->bar_filled=filled;
+    v->bar_timing_width=timing_width;
 }
 static void draw_main_progress(void) {
     DemoLayout *d=&main_view.l;
@@ -1180,7 +1329,8 @@ static void draw_sheep_static(void) {
     struct TagItem tags[3];
     unsigned i,completed=progress_units(GRID_TOTAL);
     const char *heading=transfer_result?
-                       (validating_restore()?"Validating IFF DOLY...":
+                       (validating_restore()?(transfer.job.resume_read?"Checking checkpoint...":
+                                             "Validating IFF DOLY..."):
                         transfer.restoring?"Restoring image...":transfer.resizing?"Cloning FFS...":"Copying sectors..."):
                        image_result?image_heading:counter_heading;
     if(!sheep_view.window)return;
@@ -1272,6 +1422,8 @@ static void update_main_actions(void) {
     if(settings_menu) {
         if(io_settings_available())OnMenu(main_view.window,IO_SETTINGS_ITEM);
         else OffMenu(main_view.window,IO_SETTINGS_ITEM);
+        if(io_settings_available() && AslBase)OnMenu(main_view.window,RESUME_IMAGE_ITEM);
+        else OffMenu(main_view.window,RESUME_IMAGE_ITEM);
     }
     if(main_view.settings)
         GT_SetGadgetAttrs(main_view.settings,main_view.window,NULL,
@@ -1349,7 +1501,9 @@ static void progress_view_update(unsigned old,int cell_changed) {
     unsigned now=progress_units(GRID_TOTAL),cell;
     ULONG percent=progress_units(100);
     int running=operation.state==DOLLY_OP_RUNNING;
-    if(running && percent!=main_view.displayed_percent)draw_main_progress();
+    if(running)update_timing_caption(operation_now(),0);
+    if(running && (percent!=main_view.displayed_percent ||
+                   timing_revision!=main_view.displayed_timing))draw_main_progress();
     if(!sheep_view.window)return;
     if(old!=now || cell_changed || !running)
         for(cell=old<now?old:now;cell<GRID_TOTAL && cell<=(old>now?old:now);++cell)
@@ -1358,6 +1512,7 @@ static void progress_view_update(unsigned old,int cell_changed) {
      * while the integer percentage stays the same. */
     if(++sheep_view.counter_steps>=COUNTER_UPDATE_STEPS ||
        percent!=sheep_view.displayed_percent ||
+       timing_revision!=sheep_view.displayed_timing ||
        (ULONG)operation.errors!=sheep_view.displayed_errors || !running) {
         DemoLayout *d=&sheep_view.l;
         if(!sheep_view.gadgets_detached)
@@ -1367,10 +1522,103 @@ static void progress_view_update(unsigned old,int cell_changed) {
 }
 static void toggle_pause(void) {
     quit_blocked=0;
-    if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
-    else if(operation.state==DOLLY_OP_PAUSED)(void)dolly_operation_resume(&operation);
+    if(operation.state==DOLLY_OP_RUNNING) {
+        set_transfer_activity(0);
+        (void)dolly_operation_pause(&operation);
+    } else if(operation.state==DOLLY_OP_PAUSED) {
+        (void)dolly_operation_resume(&operation);
+        set_transfer_activity(!validating_restore() && !image.resume_buffer);
+    }
     refresh_main_selection();
+    progress_view_update(progress_units(GRID_TOTAL),0);
 }
+
+#define OPERATION_SUMMARY_SIZE 736u
+static void format_operation_summary(char text[OPERATION_SUMMARY_SIZE],const char *result) {
+    const char *source=selected_source.path;
+    const char *target=scan_result?"None (read only)":selected_target.path;
+    const char *name=(const char *)demo_operations[selected_operation];
+    const char *amount=scan_result?"Range bytes checked":image_result?"Input bytes imaged":"Bytes copied";
+    uint32_t sector=scan_result?surface.sector_bytes:image_result?image.reader.sector_bytes:
+                                                            transfer.target.sector_bytes;
+    uint64_t bytes=operation.completed_blocks*sector;
+    char completed[21],total[21],byte_count[21];
+    size_t used;
+    char mode[48];
+    if(selected_operation==DOLLY_DEMO_COPY) {
+        snprintf(mode,sizeof(mode),"Copy (%s)",(const char *)copy_modes[copy_mode]);
+        name=mode;
+    }
+    dolly_surface_log_decimal(completed,operation.completed_blocks);
+    dolly_surface_log_decimal(total,operation.total_blocks);
+    dolly_surface_log_decimal(byte_count,bytes);
+    snprintf(text,OPERATION_SUMMARY_SIZE,
+             "%s - %s\nSource: \"%s\"\nDestination: \"%s\"\n"
+             "Sectors processed: %s of %s (%lu B/sector).\n%s: %s.",
+             name,result,source,target,
+             completed,total,(unsigned long)sector,amount,byte_count);
+    used=strlen(text);
+    if(scan_result) {
+        char first[21],last[21];
+        dolly_surface_log_decimal(first,surface.first_lba);
+        dolly_surface_log_decimal(last,surface.first_lba+surface.total-1u);
+        snprintf(text+used,OPERATION_SUMMARY_SIZE-used,
+                 "\nRequested LBA range: %s to %s.\nRead errors: %lu. Retries: %lu.",first,last,
+                 (unsigned long)operation.errors,(unsigned long)operation.retries);
+    } else if(transfer_result) {
+        if(transfer.job.resume_read) {
+            char committed[21];
+            dolly_surface_log_decimal(committed,transfer.job.resume_committed);
+            snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nPreviously committed bytes: %s.",committed);
+            used=strlen(text);
+        } else if(transfer.job.verify) {
+            snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nRead-back verified bytes: %s.",byte_count);
+            used=strlen(text);
+        }
+        if(selected_operation==DOLLY_DEMO_COPY && copy_mode==1u) {
+            char skipped[21];
+            dolly_surface_log_decimal(skipped,(transfer.target.length-transfer.job.bytes)/sector);
+            snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nFree sectors omitted by plan: %s.",skipped);
+        } else if(transfer.job.source_check_bytes && !transfer.job.resume_read) {
+            char checked[21];
+            dolly_surface_log_decimal(checked,transfer.job.source_checked);
+            snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nIFF DOLY bytes validated: %s.",checked);
+        }
+    }
+    if(image_result && strcmp(result,"Completed")==0) {
+        dolly_surface_log_decimal(byte_count,image.closed_bytes);
+        used=strlen(text);
+        snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nOutput file bytes: %s.",byte_count);
+    }
+    if(operation_timing.frequency) {
+        char elapsed[32],active[32],rate[32];
+        uint64_t work=dolly_operation_timing_work(&operation_timing,operation_timing.end);
+        uint64_t payload=image_result || transfer_result?operation_payload_bytes():bytes;
+        uint32_t frequency=operation_timing.frequency;
+        format_duration(elapsed,dolly_operation_timing_elapsed(&operation_timing,operation_timing.end)/frequency);
+        format_duration(active,work/frequency);
+        used=strlen(text);
+        snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nElapsed: %s. Active: %s.",
+                 elapsed,work && work<frequency?"<1 s":active);
+        if(work && payload) {
+            format_rate(rate,dolly_operation_timing_average(&operation_timing,operation_timing.end,payload));
+            used=strlen(text);
+            snprintf(text+used,OPERATION_SUMMARY_SIZE-used,"\nAverage payload rate: %s.",rate);
+        }
+    }
+}
+
+static void show_operation_summary(const char *result,const char *detail) {
+    char text[OPERATION_SUMMARY_SIZE];
+    DollyWarnings summary={.window_title="Dolly - Operation summary"};
+    format_operation_summary(text,result);
+    if(dolly_warning_add(&summary,"Operation result",text,"OK")) {
+        if(detail)(void)dolly_warning_add(&summary,"Details",detail,"OK");
+        (void)dolly_warnings_review(main_view.window,&summary);
+    }
+    dolly_warnings_clear(&summary);
+}
+
 static void ask_stop(void) {
     char reason[580];
     snprintf(reason,sizeof(reason),"%s\nSource: \"%s\"\nDestination: \"%s\"",
@@ -1378,16 +1626,89 @@ static void ask_stop(void) {
              transfer.restoring?"Restore Image":"Copy",
              selected_source.path[0]?selected_source.path:main_view.source_label,
              scan_result?"-":selected_target.path[0]?selected_target.path:main_view.target_label);
-    if(operation.state==DOLLY_OP_RUNNING)(void)dolly_operation_pause(&operation);
+    if(operation.state==DOLLY_OP_RUNNING) {
+        set_transfer_activity(0);
+        (void)dolly_operation_pause(&operation);
+    }
     quit_blocked=0;
     refresh_main_selection();
-    if(dolly_amiga_role_request(main_view.window,"Dolly - Operation in progress",
-                               reason,"Abort","Resume",NULL)==1) {
+    int stopped=dolly_amiga_role_request(main_view.window,"Dolly - Operation in progress",
+                                         reason,"Abort","Resume",NULL)==1;
+    if(stopped) {
+        finish_operation_timing();
         if(image.file)dolly_image_cancel(&image);
         else if(transfer.opened)dolly_amiga_transfer_close(&transfer);
         else dolly_surface_close(&surface);
         (void)dolly_operation_cancel(&operation);
-    } else (void)dolly_operation_resume(&operation);
+    } else {
+        (void)dolly_operation_resume(&operation);
+        set_transfer_activity(!validating_restore() && !image.resume_buffer);
+    }
+    refresh_main_selection();
+    if(stopped) {
+        const char *detail=image_result?image.failure:NULL;
+        if(transfer_result)
+            detail=transfer.may_have_written?"The destination may be partly overwritten.":
+                                             "No destination sectors were written.";
+        show_operation_summary("Stopped",detail);
+    }
+}
+
+static void begin_checkpoint_resume(void) {
+    DollyDlrpImageResume imaging;
+    DollyDlrpTransferResume writing;
+    struct Window *parent=main_view.window;
+    int kind=dolly_operation_pointer_pick(parent,&imaging,&writing);
+    uint64_t total;
+    if(!kind)return;
+    show_analysis_status("Checking operation checkpoint...");
+    dolly_operation_timing_start(&operation_timing,operation_now(),timing_frequency);
+    if(kind==DOLLY_RESUME_TRANSFER) {
+        if(!dolly_amiga_transfer_resume(&transfer,parent,&writing,show_analysis_status)) {
+            refresh_main_selection();
+            return;
+        }
+        selected_source=writing.source.endpoint;
+        selected_target=writing.target.endpoint;
+        selected_operation=writing.restoring?DOLLY_DEMO_RESTORE:DOLLY_DEMO_COPY;
+        transfer_operation=selected_operation;
+        format_endpoint(transfer_from,sizeof(transfer_from),&selected_source);
+        format_endpoint(transfer_to,sizeof(transfer_to),&selected_target);
+        copy_mode=0;
+        total=transfer.job.bytes/transfer.target.sector_bytes;
+    } else {
+        if(!dolly_image_resume_open(&image,&imaging,parent)) {
+            if(image.failure)
+                dolly_amiga_role_request(parent,"Dolly - Resume image blocked",image.failure,"OK",NULL,NULL);
+            refresh_main_selection();
+            return;
+        }
+        selected_source=imaging.source;
+        selected_target=imaging.target;
+        selected_operation=DOLLY_DEMO_CREATE_IMAGE;
+        image_type=image.format_dly;
+        compression_type=image.codec;
+        total=image.reader.total;
+    }
+    quit_blocked=0;
+    scan_result=0;
+    transfer_result=kind==DOLLY_RESUME_TRANSFER;
+    image_result=kind==DOLLY_RESUME_IMAGE;
+    medium_modes[0]=dolly_endpoint_mode(&selected_source);
+    medium_modes[1]=dolly_endpoint_mode(&selected_target);
+    memset(cell_result,0,sizeof(cell_result));
+    dolly_amiga_log_view_close();
+    dolly_operation_init(&operation);
+    (void)dolly_operation_start(&operation,total);
+    if(transfer_result)
+        (void)dolly_operation_progress(&operation,
+             transfer.job.resume_committed/transfer.target.sector_bytes,0,0);
+    set_transfer_activity(transfer_result && !validating_restore());
+    if(rebuild_gadgets(&main_view,1))draw_full(&main_view,1);
+    if(sheep_view.window) {
+        draw_full(&sheep_view,0);
+        update_numbers(&sheep_view);
+    }
     refresh_main_selection();
 }
 
@@ -1526,6 +1847,7 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     memset(cell_result,0,sizeof(cell_result));
                     dolly_amiga_log_view_close();
                     dolly_operation_init(&operation);
+                    dolly_operation_timing_start(&operation_timing,operation_now(),timing_frequency);
                     if(scan_result) {
                         DollyWarnings warnings={0};
                         if(dolly_surface_open(&surface,&selected_source,main_view.window,
@@ -1561,7 +1883,11 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                             draw_main_progress();
                         }
                     }
-                    if(total)(void)dolly_operation_start(&operation,total);
+                    if(total) {
+                        (void)dolly_operation_start(&operation,total);
+                        if(image_result)image.transfer_activity=set_transfer_activity;
+                        set_transfer_activity(!validating_restore());
+                    }
                     if(sheep_view.window) {
                         draw_full(&sheep_view,0);
                         update_numbers(&sheep_view);
@@ -1578,6 +1904,9 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
            (cls==IDCMP_MENUPICK && code==IO_SETTINGS_ITEM)) &&
            io_settings_available())
             dolly_amiga_io_settings(public_screen,&selected_source);
+        if(main_window && cls==IDCMP_MENUPICK && code==RESUME_IMAGE_ITEM &&
+           io_settings_available() && AslBase)
+            begin_checkpoint_resume();
         if(!main_window && id==SHEEP_PAUSE_ID && operation_active())toggle_pause();
         if(!main_window && id==SHEEP_LOG_ID && log_available() &&
            !dolly_amiga_log_view_open(public_screen,&surface,log_outcome()))
@@ -1622,7 +1951,7 @@ static int open_main_window(void) {
     if(height>max_height)height=max_height;
     if(width<600u)width=600u;
     if(width>(ULONG)public_screen->Width-12u)width=(ULONG)public_screen->Width-12u;
-    if(!open_view(&main_view,1,DOLLY_DEMO_BUILD_LABEL,12,top,width,height))return 0;
+    if(!open_view(&main_view,1,DOLLY_WINDOW_TITLE,12,top,width,height))return 0;
     settings_menu=CreateMenus(settings_items,TAG_DONE);
     if(settings_menu &&
        (!LayoutMenus(settings_menu,main_view.visual,TAG_DONE) ||
@@ -1660,7 +1989,7 @@ static ULONG window_signal(const struct Window *window) {
     return window && window->UserPort ? 1UL<<window->UserPort->mp_SigBit : 0;
 }
 
-int main(int argc,char **argv) {
+static __attribute__((noinline)) int run_dolly(int argc,char **argv) {
     int quit=0,rc=10;
     const char *prefs_error;
     dolly_operation_init(&operation);
@@ -1680,6 +2009,7 @@ int main(int argc,char **argv) {
     prefs_error=dolly_amiga_prefs_load(argc,argv);
     if(!dolly_amiga_fonts_init(public_screen) || !open_main_with_fallback())
         goto cleanup;
+    open_operation_clock();
     {
         if(prefs_error) {
             struct EasyStruct request={
@@ -1737,31 +2067,34 @@ int main(int argc,char **argv) {
             dolly_amiga_transfer_step(&transfer);
             if(old_check!=transfer_check_percent())refresh_main_selection();
             finished=transfer.job.state!=DOLLY_RESTORE_TRANSFERRING;
+            if(finished)finish_operation_timing();
+            else if(was_validating && !validating_restore())set_transfer_activity(1);
             if(transfer.failure && old<GRID_TOTAL)cell_result[old]='X';
             (void)dolly_operation_progress(&operation,
                    transfer.job.processed/transfer.target.sector_bytes,transfer.failure?1u:0u,0);
             if(finished) {
                 if(transfer.failure &&
                    transfer.job.source_checked<transfer.job.source_check_bytes) {
-                    dolly_amiga_role_request(main_view.window,"Dolly - Restore blocked",
-                                             transfer.failure,"OK",NULL,NULL);
+                    show_operation_summary("Failed",transfer.failure);
                 } else if(transfer.failure) {
                     char lba[21],reason[246];
                     uint64_t first=(transfer.target.start+transfer.job.batch_offset)/
                                    transfer.target.sector_bytes;
                     dolly_surface_log_decimal(lba,first);
-                    snprintf(reason,sizeof(reason),"%s\nDestination batch starts at LBA %s.\n"
-                             "The destination may be partly overwritten.",transfer.failure,lba);
-                    dolly_amiga_role_request(main_view.window,"Dolly - Transfer stopped",
-                                             reason,"OK",NULL,NULL);
+                    snprintf(reason,sizeof(reason),"%s\nDestination batch starts at LBA %s.\n%s",
+                             transfer.failure,lba,transfer.may_have_written?
+                             "The destination may be partly overwritten.":"No sectors were written.");
+                    show_operation_summary("Failed",reason);
                     if(!transfer.job.ranges && !transfer.resizing)
                         dolly_operation_pointer_offer_transfer(main_view.window,&selected_source,
                                                                 &selected_target,&transfer);
                 }
                 if(!transfer.failure) {
+                    char summary[OPERATION_SUMMARY_SIZE];
+                    format_operation_summary(summary,"Completed");
                     progress_view_update(old,0);
                     show_analysis_status("Copy complete. Checking destination names...");
-                    dolly_amiga_transfer_review_names(&transfer,&selected_target,show_analysis_status);
+                    dolly_amiga_transfer_review_names(&transfer,&selected_target,summary,show_analysis_status);
                     if(transfer.opened)
                         show_analysis_status("Finalizing transfer. Restoring source access...");
                 }
@@ -1777,6 +2110,24 @@ int main(int argc,char **argv) {
         } else if(!quit && image.file && operation.state==DOLLY_OP_RUNNING) {
             unsigned old=progress_units(GRID_TOTAL);
             dolly_image_step(&image);
+            if(!image.failure && image.resume_buffer && image.resume_checked==image.resume_until) {
+                progress_view_update(old,0);
+                if(!dolly_image_resume_confirm(&image,&selected_target)) {
+                    finish_operation_timing();
+                    dolly_image_cancel(&image);
+                    if(!image.failure) {
+                        (void)dolly_operation_cancel(&operation);
+                        refresh_main_selection();
+                        progress_view_update(old,0);
+                        show_operation_summary("Stopped","The retained image and checkpoint are available.");
+                        continue;
+                    }
+                } else {
+                    set_transfer_activity(1);
+                    refresh_main_selection();
+                }
+            }
+            if(image.failure || !image.file)finish_operation_timing();
             if(image.reader.processed<operation.completed_blocks)
                 (void)dolly_operation_rewind(&operation,image.reader.processed);
             else
@@ -1791,6 +2142,8 @@ int main(int argc,char **argv) {
                 refresh_main_selection();
             }
             progress_view_update(old,0);
+            if(!image.file)
+                show_operation_summary(image.failure?"Failed":"Completed",image.failure);
         } else if(!quit && surface.source && operation.state==DOLLY_OP_RUNNING) {
             unsigned old=progress_units(GRID_TOTAL);
             uint32_t errors=surface.errors;
@@ -1806,12 +2159,17 @@ int main(int argc,char **argv) {
             }
             (void)dolly_operation_progress(&operation,surface.processed,
                                            surface.errors,surface.retries);
-            if(surface.failure || surface.processed==surface.total) {
+            int finished=surface.failure || surface.processed==surface.total;
+            if(finished) {
+                finish_operation_timing();
                 (void)dolly_operation_finish(&operation,surface.failure==NULL);
                 dolly_surface_close(&surface);
                 refresh_main_selection();
             }
             progress_view_update(old,cell_changed);
+            if(finished)
+                show_operation_summary(surface.failure?"Failed":
+                                       surface.errors?"Completed with read errors":"Completed",surface.failure);
         }
         if(!quit && dolly_amiga_fonts_changed()) {
             int counter_open=sheep_view.window!=NULL;
@@ -1829,6 +2187,7 @@ int main(int argc,char **argv) {
     }
     rc=0;
 cleanup:
+    close_operation_clock();
     dolly_amiga_transfer_close(&transfer);
     dolly_image_cancel(&image);
     dolly_amiga_log_view_close();
@@ -1848,5 +2207,31 @@ cleanup:
     if(GadToolsBase)CloseLibrary(GadToolsBase);
     if(GfxBase)CloseLibrary((struct Library *)GfxBase);
     if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);
+    return rc;
+}
+
+/* Keep this frame on the caller's stack while Dolly runs on the new one.
+ * Pop the run_dolly arguments before handing that stack back to Exec. */
+static __attribute__((noinline,noclone,optimize("no-omit-frame-pointer","no-defer-pop")))
+int run_on_stack(struct StackSwapStruct *stack,int argc,char **argv) {
+    StackSwap(stack);
+    int rc=run_dolly(argc,argv);
+    StackSwap(stack);
+    return rc;
+}
+
+int main(int argc,char **argv) {
+    const ULONG stack_bytes=32768;
+    const struct Task *task=FindTask(NULL);
+    const uintptr_t lower=(uintptr_t)task->tc_SPLower;
+    const uintptr_t upper=(uintptr_t)task->tc_SPUpper;
+    (void)dolly_version_text();
+    if(upper>lower && upper-lower>=stack_bytes)return run_dolly(argc,argv);
+
+    UBYTE *memory=AllocMem(stack_bytes,MEMF_PUBLIC);
+    if(!memory)return 10;
+    struct StackSwapStruct stack={memory,(ULONG)(memory+stack_bytes),memory+stack_bytes};
+    int rc=run_on_stack(&stack,argc,argv);
+    FreeMem(memory,stack_bytes);
     return rc;
 }

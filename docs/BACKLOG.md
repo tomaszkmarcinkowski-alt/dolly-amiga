@@ -828,13 +828,27 @@ kontrolerów, ADF, weryfikacja obrazu po zapisie i operacje przywracania.
 
 [Issue #73](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/issues/73)
 
-- Dodać parser `FORM DLRP`, walidację CRC i ponowne sprawdzanie źródła,
-  celu oraz kompletności danych częściowych według [specyfikacji](DLRP_FORMAT.md).
-- Dodać GUI wyboru checkpointu i podglądu operacji, stanu postępu oraz
-  ścieżek przed wznowieniem. Zacząć od Create Image, a następnie dodać Restore i Copy/Clone.
-- Wrócić do tego zadania przed udostępnieniem wznawiania Restore z zapisem.
-  Dla przerwanego zapisu zapisać i ponownie sprawdzać zakres potencjalnie
-  zmodyfikowanej partii oraz tożsamość celu.
+- `Project > Resume operation...` supports version 1 single-file Create
+  Image and version 2 Restore and sector-copy checkpoints.
+- Consider a stronger media identifier for a future checkpoint version,
+  especially when the failed batch overwrites the final destination anchor.
+
+### Review IFF library usage
+
+The classic `iffparse.library` API is available from AmigaOS V36. It
+handles IFF structure, padding, and final lengths for ordinary
+streams. DLRP still needs Dolly's field, range, and CRC checks.
+Resuming a partly written DOLY also needs the exact committed
+boundary and writer state from the checkpoint. The documented
+library API offers ordinary stream parsing and writing. Supporting
+that recovery model would require a Dolly-specific adapter while
+the desktop tool still needs the portable implementation.
+
+Keep the shared code for DLRP and DOLY. This decision is based on
+format behavior and portability. Comparative memory and I/O
+measurements remain open. [Classic API examples](https://wiki.amigaos.net/wiki/IFF_Source_Code)
+[Stream handling](https://wiki.amigaos.net/wiki/IFFParse_Library)
+[Chunk writing](https://wiki.amigaos.net/wiki/Writing_IFF)
 
 
 ### Diagnostyczna sonda ATA/SCSI poza sterownikiem
@@ -845,3 +859,80 @@ wbudowanego ATA A600/A1200, uruchamianą w środowisku zapewniającym
 wyłączność na kanał IDE. Porównać surowe pola CHS/LBA z ATA IDENTIFY
 z READ CAPACITY(10), wynikiem TD_GETGEOMETRY i metadanymi RDB.
 Dla natywnego SCSI ocenić potrzebę osobno dla konkretnych kontrolerów.
+
+## Dolly desktop image tools
+
+The `dolly-image` CLI prototype and a Windows, macOS and Linux CI matrix
+are available. Conversion and joining of an image larger than 4 GiB
+passed on Linux. Validation on the other platforms and a graphical
+application remain planned.
+
+- Provide a Windows, macOS and Linux application to convert, split, join and verify RAW/HDF and IFF DOLY images.
+- Use IFF DOLY for split images and share Dolly's manifest format. Preserve sector order and limit each file, including headers, to 2 GiB minus one byte.
+- Validate completeness, member order, lengths and checksums. Verify the complete round trip above 4 GiB in both directions between Dolly and the desktop tool.
+
+
+### Resume Smart Copy from DLRP
+
+Record the approved range plan and position in the current range, or
+verify both by analyzing the source again on resume. Smart Copy's
+copied byte count alone is insufficient to locate its cursor.
+
+### Operation summaries
+
+Surface Scan, Create Image, all Copy modes and Restore Image display
+a result after a started operation completes, stops or fails. The
+result includes both endpoints, processed sectors and bytes, and the
+counters applicable to the operation. Sheep Inventory shows export
+sizes for Backup RDB and Backup MBR and separate comparison,
+verified-write and final verification counters for Restore RDB.
+
+### Operation time and transfer rate
+
+The main window and Sheep Counter show elapsed time and the live
+payload rate when there is room. The result records elapsed time,
+active time and the average payload rate. Create Image also reports
+the output file size. FS-UAE exercised both progress wells with
+Topaz 9, and host tests cover the caption width thresholds. Native
+timing during split-part recovery and checks with proportional fonts
+remain open.
+
+### Destination mounting after a write
+
+Collect independent Rename and Keep decisions for RDB names and volume
+labels. Offer **Mount destination volumes** in the final summary, with
+its initial state controlled by Settings.
+
+Use the verified target's DosEnvec and a compatible handler from
+FileSystem.resource. Check the current DOS list for collisions and an
+existing handler covering the same range. Report mounting independently
+of the copy result. The initial scope is supported OFS/FFS partitions.
+
+### Filesystem health check before resize
+
+Implement after Disk Vet provides a filesystem analysis and repair module.
+Run its read-only health check on the source filesystem before resizing
+and show the result in Warning Review. Provide a **Skip** button for the
+current operation and a **Skip filesystem health check before resize**
+control in Settings, disabled by default. Record a skipped check in the
+operation summary. Keep the resize format and bounds checks mandatory.
+
+### ShapeShifter HFS and HFS Plus media
+
+Use the [ShapeShifter media assessment](SHAPESHIFTER_HFS_RESEARCH.md)
+to scope read-only recognition and equal-size FileDisk/DeviceDisk
+round trips first. Test complete Apple Partition Map disks separately.
+Prototype resizing on staged copies after the equal-size round trip
+is verified in a Macintosh guest.
+
+Support FileDisk import into a dedicated RDB partition with an inner
+Apple Partition Map and a compatible Macintosh SCSI driver. On export,
+offer a flat Macintosh volume for FileDisk or the full virtual SCSI disk
+with its map and driver. Use the existing Amiga device and unit for
+raw I/O bounded to the selected RDB partition. The conversion requires
+no AmigaDOS mount or additional Amiga driver.
+
+Before import, probe the destination filesystem with read-only I/O and
+require approval in Warning Review before overwriting the RDB partition.
+Show the detected filesystem or probe result and reuse the existing
+ten-second destructive confirmation.

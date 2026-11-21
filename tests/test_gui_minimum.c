@@ -43,6 +43,11 @@ int main(void) {
     assert(c.valid && c.outer_width<b.outer_width);
     m.line_height=0;
     assert(!dolly_gui_measure_minimum(DOLLY_GUI_WINDOW_MAIN,m).valid);
+    assert(dolly_gui_progress_caption_width(300,150,56)==150);
+    assert(dolly_gui_progress_caption_width(299,150,56)==56);
+    assert(dolly_gui_progress_caption_width(112,150,56)==56);
+    assert(dolly_gui_progress_caption_width(111,150,56)==0);
+    assert(dolly_gui_progress_caption_width(0,150,56)==0);
     puts("GUI content-derived minimum: PASS");
     return 0;
 }

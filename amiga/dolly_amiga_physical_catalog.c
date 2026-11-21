@@ -302,14 +302,15 @@ int dolly_amiga_mounted_extents(const DollyPhysicalEntry *device,uint64_t start,
         DollyPhysicalEntry found;
         uint64_t first,length;
         ULONG sector;
+        int extent_valid;
         struct DosList *volume=list;
         DollyMountedVolume *mount;
         if((!include_inactive && !entry->dol_Task) || !bptr_valid(b,sizeof(*startup)))continue;
         startup=BADDR(b);
         if(startup->fssm_Unit!=device->unit || !driver_name(found.driver,startup->fssm_Device) ||
            strcasecmp(found.driver,device->driver))continue;
-        if(startup_extent(entry,&found,&first,&length,&sector,NULL) &&
-           (first>=start+bytes || start>=first+length))
+        extent_valid=startup_extent(entry,&found,&first,&length,&sector,NULL);
+        if(extent_valid && (first>=start+bytes || start>=first+length))
             continue;
         if(out->count==DOLLY_MOUNT_MAX){ok=0;break;}
         mount=&out->entries[out->count];
@@ -317,6 +318,15 @@ int dolly_amiga_mounted_extents(const DollyPhysicalEntry *device,uint64_t start,
         if(!mount_name(mount->device,entry->dol_Name)){ok=0;break;}
         mount->entry=entry;
         mount->handler=entry->dol_Task;
+        if(extent_valid) {
+            mount->start=first;
+            mount->length=length;
+            mount->block_bytes=sector;
+            if(bptr_valid(startup->fssm_Environ,17u*sizeof(ULONG))) {
+                const struct DosEnvec *env=BADDR(startup->fssm_Environ);
+                if(env->de_TableSize>=16u)mount->dos_type=env->de_DosType;
+            }
+        }
         while((volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL) {
             if(!mount->handler || volume->dol_Task!=mount->handler)continue;
             if(!mount_name(mount->volume,volume->dol_Name))ok=0;
@@ -423,4 +433,12 @@ int dolly_amiga_lock_uses_mount(BPTR lock,const DollyMountedVolume *mount) {
     if(!mount->handler || !bptr_valid(lock,sizeof(*opened)))return 0;
     opened=BADDR(lock);
     return opened->fl_Task==mount->handler;
+}
+
+int dolly_amiga_file_uses_mount(BPTR file,const DollyMountedVolume *mount) {
+    const struct FileHandle *opened;
+    if(!mount->handler || !bptr_valid(file,sizeof(*opened)))return 0;
+    opened=BADDR(file);
+    /* AmigaDOS stores the file's handler port in fh_Type. */
+    return opened->fh_Type==mount->handler;
 }

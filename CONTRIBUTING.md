@@ -11,4 +11,9 @@ Dolly is an alpha Amiga application with a portable inspection core and native d
 - Do not add third-party artwork, samples or code without verifying distribution rights.
 - When fixing a surprising bug, hardware incompatibility or architectural assumption, add a dated, traceable entry to [Engineering Field Notes](docs/ENGINEERING_JOURNAL.md). Preserve corrected hypotheses rather than silently erasing history.
 
+For each public release, increment the shared version in `include/dolly_version.h`
+and create a new release tag. Add a dated section to the [revision history](docs/REVISION_HISTORY.md)
+covering features, fixes and other changes since the last public release.
+Keep test builds within the interval they were developed in.
+
 **License:** Dolly is MIT-licensed (see [LICENSE](LICENSE)). By contributing you agree that your contributions are submitted under the same MIT terms; only submit work you have the rights to contribute.

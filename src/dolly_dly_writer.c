@@ -114,6 +114,19 @@ static int begin(DollyDlyWriter *writer,DollyDlySink sink,void *context,
 int dolly_dly_begin(DollyDlyWriter *writer,DollyDlySink sink,void *context) {
     return begin(writer,sink,context,NULL);
 }
+int dolly_dly_resume(DollyDlyWriter *writer,DollyDlySink sink,void *context,
+                     uint64_t completed,uint32_t emitted) {
+    if(!writer->file_bytes || writer->sink || !sink || completed>writer->sectors ||
+       emitted<DLY_PREFIX_BYTES || emitted>writer->file_bytes ||
+       (!completed && emitted!=DLY_PREFIX_BYTES) ||
+       (completed!=writer->sectors && completed*writer->sector_bytes%writer->batch_bytes))
+        return 0;
+    writer->written=completed;
+    writer->emitted=emitted;
+    writer->sink=sink;
+    writer->context=context;
+    return 1;
+}
 int dolly_dly_begin_set(DollyDlyWriter *writer,DollyDlySink sink,void *context,
                         const DollyDlySetInfo *set) {
     return set && begin(writer,sink,context,set);

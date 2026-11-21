@@ -1,6 +1,14 @@
 #include "dolly_gui_minimum.h"
 #include <limits.h>
 static uint32_t max_u32(uint32_t a,uint32_t b){return a>b?a:b;}
+
+uint32_t dolly_gui_progress_caption_width(uint32_t fill_space,uint32_t full_width,
+                                         uint32_t elapsed_width) {
+    uint32_t budget=fill_space/2u;
+    if(full_width && full_width<=budget)return full_width;
+    return elapsed_width<=budget?elapsed_width:0;
+}
+
 DollyGuiMinimum dolly_gui_measure_minimum(DollyGuiWindowKind kind,
                                          DollyGuiMinMetrics m) {
     DollyGuiMinimum out={0,0,0};

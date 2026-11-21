@@ -359,9 +359,14 @@ static int has_mbr_entries(const UBYTE *sector) {
             sector[482]!=0 || sector[498]!=0);
 }
 
+typedef struct BackupExport {
+    BPTR file;
+    ULONG blocks,exported;
+} BackupExport;
+
 static int scan_device(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionMap *out,
-          DollyNativePartitionFormat expected,BPTR backup_file,int inventory) {
+          DollyNativePartitionFormat expected,BackupExport *backup,int inventory) {
     struct MsgPort *port=NULL;
     struct IOExtTD *io=NULL;
     Reader r;
@@ -399,17 +404,14 @@ static int scan_device(const char *driver,ULONG unit,
             strcpy(out->status,"Hybrid RDB/MBR unsupported");
         } else ok=1;
     } else if(rs==0)ok=scan_mbr(&r,out,inventory);
-    if(ok && backup_file) {
-        ok=out->format==expected;
-        if(ok && expected==DOLLY_NATIVE_PARTITION_MBR) {
-            /* scan_mbr left the validated LBA 0 in the read buffer. */
-            ok=Write(backup_file,r.buffer,BLK)==BLK;
-        } else if(ok) {
-            ULONG block;
-            ok=out->rdb_backup_blocks!=0;
-            for(block=0;ok && block<out->rdb_backup_blocks;++block)
-                ok=load_sector(&r,block) &&
-                    Write(backup_file,r.buffer,BLK)==BLK;
+    if(ok && backup) {
+        ULONG blocks=expected==DOLLY_NATIVE_PARTITION_MBR?1u:out->rdb_backup_blocks;
+        ok=out->format==expected && blocks && blocks==backup->blocks;
+        for(ULONG block=0;ok && block<blocks;++block) {
+            /* For MBR the parser leaves validated LBA 0 in the buffer. */
+            ok=(expected==DOLLY_NATIVE_PARTITION_MBR || load_sector(&r,block)) &&
+                Write(backup->file,r.buffer,BLK)==BLK;
+            if(ok)++backup->exported;
         }
     }
 finish:
@@ -437,14 +439,17 @@ int dolly_amiga_inventory_scan(const char *driver,ULONG unit,
 }
 int dolly_amiga_partition_backup(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionFormat format,
-          BPTR file) {
+          ULONG blocks,BPTR file,ULONG *exported) {
     DollyNativePartitionMap *map;
+    BackupExport backup={file,blocks,0};
     int ok;
+    *exported=0;
     if(!file || (format!=DOLLY_NATIVE_PARTITION_RDB &&
                  format!=DOLLY_NATIVE_PARTITION_MBR))return 0;
     map=AllocMem(sizeof(*map),MEMF_PUBLIC);
     if(!map)return 0;
-    ok=scan_device(driver,unit,geometry,map,format,file,0);
+    ok=scan_device(driver,unit,geometry,map,format,&backup,0);
+    *exported=backup.exported;
     FreeMem(map,sizeof(*map));
     return ok;
 }
@@ -484,7 +489,8 @@ static int restore_sector_matches(Reader *reader,ULONG block,const UBYTE *expect
 
 const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,ULONG blocks,BPTR backup,
-          BPTR image_lock,BPTR recovery_lock,DollyRdbRecoverySink save_recovery,void *context) {
+          BPTR image_lock,BPTR recovery_lock,DollyRdbRecoverySink save_recovery,void *context,
+          DollyRdbRestoreResult *result) {
     struct MsgPort *port=NULL;
     struct IOExtTD *request=NULL;
     DollyNativePartitionMap *old=NULL,*replacement=NULL;
@@ -497,6 +503,7 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     int opened=0,changed=0;
     char unit_name[112],size_text[48],warning[160];
     const char *failure="Restore RDB requires an offline ROM scsi.device unit with 512 B sectors.";
+    memset(result,0,sizeof(*result));
     if(!parent || !driver || !geometry || !backup || !image_lock || !recovery_lock || !save_recovery ||
        !geometry->capacity_valid ||
        geometry->block_bytes!=BLK || blocks<16 || blocks>DOLLY_RDB_RESTORE_MAX_BLOCKS ||
@@ -539,7 +546,11 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     failure="Only existing RDSK/PART metadata may change in this build.";
     for(i=0;i<blocks;++i) {
         const UBYTE *a=previous+i*BLK,*b=bytes+i*BLK;
-        if(memcmp(a,b,BLK)==0)continue;
+        ++result->compared;
+        if(memcmp(a,b,BLK)==0) {
+            ++result->identical;
+            continue;
+        }
         if(memcmp(a,b,4)!=0)goto out;
         if(memcmp(a,"RDSK",4)==0 && i==old->rdb_header_block) {
             /* Keep physical geometry, reserved bounds, and top-level links. */
@@ -569,6 +580,7 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     open_count=request->iotd_Req.io_Device->dd_Library.lib_OpenCnt;
     failure="Could not save the current RDB as the recovery copy.";
     if(!save_recovery(context,previous,size))goto out;
+    result->recovery_saved=1;
     reader.snapshot=NULL;
     failure="Target changed or became busy. Restore stopped before writing.";
     if(!restore_unit_idle(driver,unit,&request->iotd_Req,&open_count))goto out;
@@ -598,10 +610,14 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
                     "Use the recovery copy from an independent recovery environment.";
             if(dolly_amiga_write_batch(&target,(uint64_t)i*BLK,bytes+i*BLK,BLK,1)
                     !=DOLLY_WRITE_VERIFIED)goto out;
+            ++result->written_verified;
         }
     failure="Final RDB verification failed. Keep the recovery copy.";
-    for(i=0;i<blocks;++i)
+    result->final_check_started=1;
+    for(i=0;i<blocks;++i) {
         if(!restore_sector_matches(&reader,i,bytes+i*BLK))goto out;
+        ++result->final_verified;
+    }
 success:
     failure=NULL;
 out:

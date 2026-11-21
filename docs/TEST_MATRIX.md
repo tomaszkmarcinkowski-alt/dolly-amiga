@@ -1514,3 +1514,246 @@ range. Restore RDB now uses the same automatic dismount after its final
 timed approval. Its metadata-only scope, required recovery copy and
 mandatory readback verification remain in force. The revised Restore RDB
 flow still needs a WinUAE run.
+
+The desktop shrink writer relocated a retained bitmap page and its
+extension from blocks 102901 and 102900 into blocks 2 and 3. Amitools
+0.9.1 fsck and file readback passed at 102514 blocks. At 102500 blocks,
+fsck passed after correcting the validator's final bitmap word mask to
+cover in-range bits. The output bitmap was unchanged by that check.
+The input SHA-256 and the file payload matched after both runs.
+The portable regression verifies both the opt-out and opt-in paths.
+Native Clone and resize now opts in after Warning Review. Regression
+coverage confirms that moving a different page changes the plan
+fingerprint, and that preview and output produce the same fingerprint.
+
+For native relocation tests, use disposable RDB hardfiles and attach
+them through `uaehf.device` so the driver exposes the full image extent.
+Place a 103000-block DOS/3 filesystem at LBA 32 in the source with a
+retained bitmap page at relative block 102901 and its extension at
+102900. Disable source automount in RDB before boot. In FS-UAE with
+Kickstart 37.350, allowing the source to mount changed its bitmap
+placement before Dolly started. Use a blank 102500-block DOS/3
+destination partition at LBA 32 with automount also disabled. When the
+blank destination was registered as `RT0:NDOS`, its handler returned
+DOS error 209 (`ERROR_ACTION_NOT_KNOWN`) for `ACTION_DIE`, and Dolly
+blocked the operation before writing. Select both offline partitions
+by device and unit, then start Clone and resize. Warning Review should
+show one page and one extension moving into blocks 2–3. After the copy,
+check the destination root and bitmap references, compare the payload,
+and verify the destination RDB and complete source image against pre-run
+hashes.
+
+On the default Shell stack, the preflight hit MC68000 exception 3
+before Warning Review. The transfer preflight and its destination
+reader alone have stack frames of 2792 and 800 bytes respectively. The
+same binary finished the clone when launched with a 32 KiB stack.
+The native partition matched the desktop output byte for byte. The
+new root was at block 51250, the relocated bitmap page at block 2, and
+its extension at block 3. The source and target RDB hashes and the
+payload comparison passed, and Amitools fsck accepted the filesystem with
+the final-word mask correction described above.
+Dolly now provides a 32 KiB stack through Exec V36 `StackSwap` if the
+launcher's allocation is smaller and restores the original stack on exit.
+The rebuilt MC68000 program completed the same clone from the default
+Shell in FS-UAE (A600, Kickstart 37.350). The byte comparison, hashes,
+and independent filesystem and file checks passed again. Closing Dolly
+returned to the Shell with status 0.
+Native relocation to a mounted filesystem remains to be tested in WinUAE.
+
+### Registered NDOS destination in FS-UAE
+
+On the A600 with Kickstart 37.350, attach a 4096-sector DOS/3 source
+partition and a blank 6144-sector DOS/3 destination through
+`uaehf.device`. Disable RDB automount for the source and enable it for
+the destination. Select the source by partition and the destination by
+its registered DOS device (`RT0:`). Clone and resize should complete
+with the handler inhibited if it rejects `ACTION_DIE` with DOS error
+209. Accept the label change and select **Mount destination volumes**
+in the final summary.
+
+Workbench published `Copy_of_CloneSource` without a reboot. The source
+and destination RDB hashes matched their pre-run values. The copied
+partition matched the desktop resize output apart from the renamed
+root block, and the payload matched byte for byte. Amitools fsck
+passed with the final-word mask correction described above.
+The rebuilt program reported `Mounted: 1`. A second attempt against
+the now-mounted volume showed the timed overwrite warning. Its handler
+again returned error 209, and Dolly blocked the write. The full
+destination image hash matched its value before the attempt.
+
+### Partition isolation on one device unit
+
+In FS-UAE on an A600 with Kickstart 37.350, attach one RDB hardfile
+through `uaehf.device` with three DOS/3 partitions. Use an active
+4096-sector source (`SR0:`), a blank 6144-sector automount destination
+(`TR0:`), and an active neighboring volume (`NR0:`). Start **Clone and
+resize** from `SR0:` to `TR0:` as logical devices. Dolly showed one
+**Same unit** warning. After approving the new label and enabling
+mounting, it reported `Mounted: 1`. AmigaDOS listed the source, the
+neighbor and the copy as mounted. The RDB, source and neighboring
+partition hashes matched their pre-run values. The target matched the
+desktop resize apart from the renamed root block, and filesystem
+validation and file readback passed.
+
+In a second hardfile, place `restore.raw` on the mounted `ARC0:`
+partition and select the separate, blank `TR0:` as the destination.
+**Restore Image** showed one **Same unit** warning and copied all
+4096 sectors. The target matched the RAW image byte for byte. The RDB
+and the partition holding the image retained their pre-run hashes.
+Selecting `ARC0:` itself as the destination blocked Restore before
+writing, with an explicit overlap message. The complete disk hash
+matched the value recorded after the successful restore.
+
+### Split image files on separate partitions
+
+In FS-UAE on an A600 with Kickstart 37.350, generate a 2048-sector
+DOS/3 image with two 1024-sector IFF DOLY members. Place `split.dly`
+on `AR0:` and `split.001` on `PR0:` of the same `uaehf.device`
+unit. Open the first member, then use the missing-part requester to
+locate the second member. Selecting `PR0:` as the destination
+blocked Restore before writing and preserved the full disk SHA-256.
+Selecting the separate blank `TR0:` with the same relocated second
+member showed one **Same unit** warning. Dolly validated both members,
+wrote 2048 sectors, and mounted `SplitRestored` without rebooting. The
+restored bytes matched the original image exactly. The RDB and both
+partitions holding image members retained their initial hashes.
+
+A separate native probe opened `PR0:split.001` without obtaining a
+DOS lock. The file handle matched the DOS handler for `PR0:` and
+did not match the handler for `AR0:` or the empty target partition.
+
+### Operation summary in FS-UAE
+
+On the A600 with Kickstart 37.350, Restore Image showed the full
+source and destination, 2048 of 2048 sectors at 512 bytes and
+1048576 bytes copied. The same summary offered **Mount destination
+volumes**. The restored partition matched the input image and the
+destination RDB retained its SHA-256.
+
+Surface Scan of the same device showed LBA 0 through 2079, 2080
+sectors processed, 1064960 range bytes checked, and zero errors and
+retries. The result window used the existing Warning Review layout.
+
+### Transfer timing and compressed output in FS-UAE
+
+On the A600 with Kickstart 37.350, Create Image in **IFF DOLY / Fast**
+read an 8224-sector RDB hardfile. The main window and Sheep Counter
+both showed elapsed time and the live payload rate. **Pause** froze
+the sector count and hid the live rate. **Resume** restarted sampling.
+The summary recorded 9:25 elapsed, 8:07 of active transfer, and an
+average payload rate of 8.4 KiB/s in emulated time.
+
+The summary reported 4210688 input bytes and 73238 output bytes.
+The output size matched the actual file. Decoding reproduced the
+entire source, whose SHA-256 remained unchanged. The operation
+session tests cover excluded preflight and pause time, a retry
+rewind, a sub-second transfer and an unavailable clock.
+
+### Progress caption with a larger font
+
+In FS-UAE on an A600 with Kickstart 37.350, Surface Scan of a
+synthetic RDB hardfile showed the fill, elapsed time, live rate and
+percentage together in the main window and Sheep Counter on an
+880 × 256 ECS Super Hi-Res public screen with Topaz 9. Sheep Counter
+opened after the minimum-size calculation accepted an alternate
+grid shape and drew all 192 tiles. The source hardfile SHA-256
+matched after the test. At 640 × 256 the existing font-fit check
+chose Topaz 8. Host tests cover the shared exact fit threshold for
+the full caption, its reduction to elapsed time, and the
+percentage-only layout.
+
+The overlay was checked during a separate 30,001-sector scan on
+the same screen. The fill used the entire interior width in the
+main window and Sheep Counter. At 84% the main fill had reached
+the rate text, with the remainder of the caption visible in the
+unfilled area. Both areas use the same screen text pen.
+
+### RAW image resumption from DLRP
+
+FS-UAE on an A600 with Kickstart 37.350 used a synthetic 3,904-sector
+RDB disk. A native test fixture retained the first 64 sectors and
+wrote a version 1 checkpoint using the DLRP writer. After restarting
+with the production binary, **Project → Resume image...** verified
+the prefix, reported LBA 64 and published a 1,998,848-byte RAW file.
+The output matched the source byte for byte, the source SHA-256
+remained unchanged, and Dolly removed the empty staging drawer.
+A second checkpoint with a one-byte change in its retained prefix
+failed before publishing. The checkpoint and stage hashes were
+unchanged. Host coverage includes HDF decoding, a truncated form,
+CRC corruption, an invalid cursor, missing anchors and an unsupported
+version.
+
+The checkpoint save path was also checked with an injected write
+failure after two committed batches and a 73-byte uncommitted tail.
+Dolly trimmed the stage to 32,768 bytes and saved a valid DLRP. The
+retained bytes matched the source prefix and an independent CRC
+calculation confirmed the checkpoint.
+
+### Single-file IFF DOLY resumption
+
+Host tests cover uncompressed, Fast and Compact output. A resumed
+container matches a fresh one byte for byte, and the regular reader
+decodes the result. Prefix tests accept a header with no committed
+chunks and reject an unaligned cursor, a bad chunk CRC and an
+uncommitted tail.
+
+The FS-UAE A600 test injected a 73-byte uncommitted tail after 64
+sectors in Fast mode. Dolly saved the checkpoint, verified the
+retained prefix, and resumed from LBA 64. The final FORM length
+matched the published file size. The desktop tool verified and
+decoded all 1,998,848 source bytes. A byte comparison and the
+original source SHA-256 both matched.
+
+### Version 2 Restore and sector-copy checkpoints
+
+Host tests validate both checkpoint operations, CRC rejection,
+inconsistent uncertain ranges, and 64-bit partition offsets. The
+transfer tests simulate a partially written batch. They confirm
+that the committed prefix and the uncertain range are checked
+before writes, the replay starts at the committed cursor, and
+readback is forced only for the uncertain batch when verify is
+disabled. A mismatching prefix and an unreadable uncertain batch
+both produce zero writes.
+
+In FS-UAE on an A600 with Kickstart 37.350, sector Copy from
+`uaehf.device` unit 1 to unit 2 and RAW Restore to unit 3 each
+started from a completed 32-sector prefix and a 32-sector failed
+batch with one sector already written. Warning Review showed LBA
+32. Both completed 3,904-sector targets matched their sources
+byte for byte. The source hardfile and source image SHA-256 values
+were unchanged.
+
+An A600 test harness also ran Restore from a single PackBits IFF DOLY
+file and a two-member PackBits set. Each 224-sector destination had
+32 committed sectors and one sector already written in the following
+32-sector batch. The harness supplied confirmation for its disposable
+targets while running the native checkpoint parser and transfer code.
+Both finished destinations matched the decoded source byte for byte.
+A separate target with a changed final anchor was blocked in preflight
+and retained its complete pre-run hash.
+
+### Alpha 3.7 public release build
+
+The Release configuration passed all 38 host tests. The native
+executable was built with libnix and `-m68000`. The executable format
+reports `m68k:68000` and the AmigaDOS `Version FILE` command reported
+`Dolly 3.7`. The same executable opened its main window in FS-UAE on
+an A600 with Kickstart 37.350. See the separate operation fixtures for
+transfer coverage.
+
+### Sheep Inventory metadata results
+
+FS-UAE on an A600 with Kickstart 37.350 used two disposable IDE
+hardfiles. **Backup RDB** reported 32 sectors and 16384 output bytes.
+**Backup MBR** reported one sector and 512 output bytes. Each file
+matched the expected source bytes, and both backup operations left
+their source hardfiles unchanged.
+
+**Restore RDB** on ROM `scsi.device` changed only one PART sector.
+The result reported 32 sectors compared, 31 already identical, one
+written and verified, and 32 matching in the final reread. The
+recovery file matched the original prefix, and the complete hardfile
+matched the fixture with the single planned metadata change.
+Reapplying the same backup reported all 32 sectors already identical
+and zero writes. The destination SHA-256 remained unchanged and the
+independently selected recovery directory stayed empty.

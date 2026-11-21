@@ -1,4 +1,4 @@
-# Dolly Restore Pointer (DLRP) v1
+# Dolly Restore Pointer (DLRP)
 
 A DLRP is an operation checkpoint for unexpected failures in imaging
 and supported Restore Image and sector-copy operations. Smart Copy resume
@@ -9,7 +9,7 @@ prefix; any uncommitted tail must be removed before saving. Cancel
 discards the staged output. Surface Scan and manual Stop/Quit do not
 offer checkpoints.
 
-## IFF representation
+## Version 1 Create Image checkpoints
 
 Use `FORM DLRP` with big-endian integer fields and conventional IFF
 length and even-byte padding. Strings are AmigaDOS byte strings without
@@ -42,20 +42,26 @@ append offset and immutable encoding choices for reconstruction. The
 checkpoint is staged and renamed into place after successful close;
 existing files are refused.
 
-## Requirements for the future resume reader
+## Resume validation
 
-Validate version, chunk order, bounds, cursor, CRC and value ranges before
-opening endpoints. Resolve source aliases again and verify the endpoint,
-device identity, capacity, geometry, extent, and available anchors. If
-identity remains uncertain, require recovery or an explicit restart.
-Recheck destination ownership and free space. For RAW/HDF compare the
-retained prefix against the original source before appending. For DOLY
-validate complete chunks and their CRCs, verify the decoded prefix against
-source data, and reconstruct the writer state. Refuse a changed staged
-length or destination path. The future write-side format must also carry
-target identity, write verification mode and the potentially modified
-range at a failed batch. Require destructive confirmation and repeat
-destination checks before writing after resume.
+The image reader checks version, chunk order, bounds, cursor, CRC and
+value ranges before opening endpoints. It resolves source aliases
+again and checks device identity, capacity, geometry, extent, and all
+recorded anchor sectors. At least one saved anchor is required. It
+rechecks destination ownership and free space, opens the existing
+stage exclusively and compares the full retained prefix against the
+source before offering Resume. The final filename must be unused.
+The valid staging path is the original destination with `.part/image`
+appended. If a resumed append is stopped or fails, Dolly attempts to
+truncate back to the original cursor while retaining the checkpoint.
+
+For a single-file DOLY checkpoint, the existing FORM contains the
+planned length, and the staged file ends at the last committed chunk.
+Dolly checks the header, the block sequence and the CRC of each chunk,
+compares the decoded prefix with the source, then reattaches the writer
+with the recorded chunk size and compression. On completion, compressed
+images receive their final FORM length. Rollback restores the planned
+length if finalization had started. Split images use per-part recovery.
 
 ## Version 2 device-write checkpoints
 
@@ -71,7 +77,25 @@ CR32. Version 1 Create Image continues to use the format above.
 | DRVR / TDRV / NAME / TNAM | Source driver, target driver, source device name, target device name. The source driver and name are empty for a file. |
 | CR32 | Same checksum coverage as version 1. |
 
-The target CRC anchors describe the media **before** the transfer. A
-future resume reader must verify the already-written prefix against
-the source and account for the potentially modified range before
-trusting the cursor. That reader is still planned.
+The target CRC anchors describe the media **before** the transfer.
+Dolly requires the original last-sector CRC to match, even when that
+sector falls inside the uncertain batch. If it changed, version 2
+cannot distinguish a late partial write from replacement media.
+The original first-sector CRC is also checked when the checkpoint
+records zero committed and zero uncertain bytes.
+For an IFF DOLY Restore, version 2 stores the first decoded sector
+CRC in both source anchor fields. The subsequent full image check
+validates container integrity. These anchors and the prefix comparison
+can detect changes in the checked regions, but do not identify media
+uniquely or establish the original contents of an unwritten suffix.
+
+Resume reopens the saved endpoints using the ordinary write preflight,
+including overlap and mount checks. Warning Review shows the exact
+destination write cursor and the uncertain range. Before issuing a
+write, Dolly compares the committed prefix byte for byte with the
+source and reads the entire uncertain range. Restore also runs its
+ordinary full IFF DOLY validation when applicable. Dolly rechecks the
+last anchor immediately before replay. The uncertain batch is rewritten
+in full and verified by readback, regardless of the saved verify flag.
+The flag governs subsequent batches. A retry that fails before making
+progress can reuse the same DLRP when its original anchors still match.

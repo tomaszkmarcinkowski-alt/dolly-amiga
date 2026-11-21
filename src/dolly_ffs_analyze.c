@@ -55,6 +55,7 @@ static unsigned count_bits(uint32_t bits) {
 typedef struct ResizeOutput {
     DollyFfsPatch patch;
     void *context;
+    int allow_bitmap_relocation;
 } ResizeOutput;
 
 static int emit_block(const ResizeOutput *output,uint32_t block,uint32_t bytes,
@@ -167,6 +168,84 @@ static int preview_page_refs(const DollyFfsReport *report,const uint32_t *pages,
     return 1;
 }
 
+typedef struct ShrinkBitmapMove {
+    uint32_t index,destination;
+} ShrinkBitmapMove;
+
+static uint32_t shrink_bitmap_location(const uint32_t *pages,uint32_t index,
+                                        const ShrinkBitmapMove *moves,uint32_t count) {
+    uint32_t first=0;
+    while(first<count) {
+        uint32_t mid=first+(count-first)/2u;
+        if(moves[mid].index<index)first=mid+1u;
+        else if(moves[mid].index>index)count=mid;
+        else return moves[mid].destination;
+    }
+    return pages[index];
+}
+
+static int shrink_reference_preview(DollyBlockSource *source,uint64_t start,
+                                     const DollyFfsReport *report,const uint32_t *pages,
+                                     uint32_t old_pages,uint32_t old_extensions,
+                                     const ShrinkBitmapMove *moves,uint32_t count,
+                                     unsigned char *buffer,const ResizeOutput *output) {
+    uint32_t bytes=report->block_bytes,words=bytes/4u;
+    for(uint32_t row=0;row<=report->shrink_bitmap_extensions;++row) {
+        uint32_t first,slot,slots,next,old_next;
+        if(!row) {
+            if(!read_block(source,start,bytes,(uint32_t)report->root_block,buffer) ||
+               !checksum_ok(buffer,words))return 0;
+            first=0;
+            slot=words-49u;
+            slots=ROOT_PAGES;
+            old_next=old_extensions?pages[old_pages]:0;
+        } else {
+            if(!read_block(source,start,bytes,pages[old_pages+row-1u],buffer))return 0;
+            first=ROOT_PAGES+(row-1u)*(words-1u);
+            slot=0;
+            slots=words-1u;
+            old_next=row<old_extensions?pages[old_pages+row]:0;
+        }
+        next=row<report->shrink_bitmap_extensions ?
+             shrink_bitmap_location(pages,old_pages+row,moves,count) : 0;
+        uint32_t link=row?words-1u:words-24u;
+        if(word(buffer,link)!=old_next ||
+           (next && (next<report->reserved_blocks || next>=report->target_blocks)))return 0;
+        int changed=next!=old_next;
+        store_word(buffer,link,next);
+        for(uint32_t i=0;i<slots;++i) {
+            uint32_t index=first+i;
+            uint32_t original=index<old_pages?pages[index]:0;
+            if(word(buffer,slot+i)!=original)return 0;
+            uint32_t ref=0;
+            if(index<report->shrink_bitmap_pages) {
+                ref=shrink_bitmap_location(pages,index,moves,count);
+                if(ref<report->reserved_blocks || ref>=report->target_blocks)return 0;
+            }
+            if(ref!=original)changed=1;
+            store_word(buffer,slot+i,ref);
+        }
+        if(!row) {
+            if(output)mark_root_valid(buffer,words);
+            else {
+                uint32_t sum=0;
+                store_word(buffer,words-50u,0);
+                store_word(buffer,5,0);
+                for(uint32_t i=0;i<words;++i)sum+=word(buffer,i);
+                store_word(buffer,5,0u-sum);
+            }
+            if(!checksum_ok(buffer,words) ||
+               !emit_block(output,report->shrink_root_block,bytes,buffer))return 0;
+        } else {
+            uint32_t index=old_pages+row-1u;
+            uint32_t location=shrink_bitmap_location(pages,index,moves,count);
+            if((changed || location!=pages[index]) &&
+               !emit_block(output,location,bytes,buffer))return 0;
+        }
+    }
+    return 1;
+}
+
 static uint32_t word_range(uint64_t base,uint64_t first,uint64_t end);
 
 static int shrink_bitmap_preview(DollyBlockSource *source,uint64_t start,
@@ -174,15 +253,18 @@ static int shrink_bitmap_preview(DollyBlockSource *source,uint64_t start,
                                  uint32_t root,uint32_t first_extension,
                                  uint32_t last_retained_extension,unsigned char *buffer,
                                  const uint32_t *obsolete,uint32_t obsolete_count,
+                                 const ShrinkBitmapMove *moves,uint32_t move_count,
                                  const ResizeOutput *output) {
     uint32_t bytes=report->block_bytes,words=bytes/4u,coverage=(words-1u)*32u;
     uint32_t last_page=report->shrink_bitmap_pages-1u;
     uint32_t root_page=(report->shrink_root_block-report->reserved_blocks)/coverage;
-    uint32_t next_obsolete=0;
+    uint32_t next_obsolete=0,next_slot=0,next_page=0;
     uint64_t free_before=0,free_after=0;
     int root_pending=report->shrink_root_block!=root;
     int boundary_pending=1;
-    while(boundary_pending || root_pending || next_obsolete<obsolete_count) {
+    uint32_t moved_pages=move_count?report->shrink_required_pages_outside:0u;
+    while(boundary_pending || root_pending || next_obsolete<obsolete_count ||
+          next_slot<move_count || next_page<moved_pages) {
         uint32_t page=last_page;
         if(root_pending && root_page<page)page=root_page;
         if(next_obsolete<obsolete_count) {
@@ -190,6 +272,11 @@ static int shrink_bitmap_preview(DollyBlockSource *source,uint64_t start,
             uint32_t obsolete_page=(obsolete[next_obsolete]-report->reserved_blocks)/coverage;
             if(obsolete_page<page)page=obsolete_page;
         }
+        if(next_slot<move_count) {
+            uint32_t reserved_page=(moves[next_slot].destination-report->reserved_blocks)/coverage;
+            if(reserved_page<page)page=reserved_page;
+        }
+        if(next_page<moved_pages && moves[next_page].index<page)page=moves[next_page].index;
         if(!read_block(source,start,bytes,pages[page],buffer) ||
            !checksum_ok(buffer,words))return 0;
         uint64_t base=report->reserved_blocks+(uint64_t)page*coverage;
@@ -206,60 +293,75 @@ static int shrink_bitmap_preview(DollyBlockSource *source,uint64_t start,
                 bits|=mask;
                 ++next_obsolete;
             }
+            while(next_slot<move_count && moves[next_slot].destination<base+32u) {
+                uint32_t location=moves[next_slot].destination;
+                if(location<base || location>=report->target_blocks)return 0;
+                uint32_t mask=UINT32_C(1)<<(location-base);
+                if(!(bits&mask))return 0;
+                bits&=~mask;
+                ++next_slot;
+            }
             free_after+=count_bits(bits);
             store_word(buffer,slot,bits);
             sum+=bits;
         }
         store_word(buffer,0,0u-sum);
-        if(!checksum_ok(buffer,words) || !emit_block(output,pages[page],bytes,buffer))return 0;
+        uint32_t location=shrink_bitmap_location(pages,page,moves,move_count);
+        if(!checksum_ok(buffer,words) || !emit_block(output,location,bytes,buffer))return 0;
+        if(next_page<moved_pages && moves[next_page].index==page)++next_page;
         if(page==root_page)root_pending=0;
         if(page==last_page)boundary_pending=0;
     }
 
-    if(!read_block(source,start,bytes,root,buffer) ||
-       !checksum_ok(buffer,words) || word(buffer,words-24u)!=first_extension ||
-       (report->shrink_bitmap_extensions &&
-        (first_extension<report->reserved_blocks || first_extension>=report->target_blocks ||
-         last_retained_extension<report->reserved_blocks ||
-         last_retained_extension>=report->target_blocks)))return 0;
-    for(uint32_t i=0;i<ROOT_PAGES;++i) {
-        uint32_t ref=i<=last_page ? pages[i] : 0;
-        if(ref>=report->target_blocks || (ref && word(buffer,words-49u+i)!=ref))return 0;
-        store_word(buffer,words-49u+i,ref);
-    }
-    store_word(buffer,words-24u,report->shrink_bitmap_extensions ? first_extension : 0u);
-    store_word(buffer,words-50u,0);
-    store_word(buffer,5,0);
-    uint32_t sum=0;
-    for(uint32_t i=0;i<words;++i)sum+=word(buffer,i);
-    store_word(buffer,5,0u-sum);
-    if(output) {
-        mark_root_valid(buffer,words);
-        if(!emit_block(output,report->shrink_root_block,bytes,buffer))return 0;
-    }
-
-    if(report->shrink_bitmap_extensions) {
-        uint32_t first=ROOT_PAGES+(report->shrink_bitmap_extensions-1u)*(words-1u);
-        if(!read_block(source,start,bytes,last_retained_extension,buffer))return 0;
-        for(uint32_t i=0;i<words-1u;++i) {
-            uint32_t ref=first+i<=last_page ? pages[first+i] : 0;
-            if(ref>=report->target_blocks || (ref && word(buffer,i)!=ref))return 0;
-            store_word(buffer,i,ref);
+    /* With relocations, shrink_reference_preview has already rebuilt
+     * the root and the complete retained extension chain. */
+    if(!move_count) {
+        if(!read_block(source,start,bytes,root,buffer) ||
+           !checksum_ok(buffer,words) || word(buffer,words-24u)!=first_extension ||
+           (report->shrink_bitmap_extensions &&
+            (first_extension<report->reserved_blocks || first_extension>=report->target_blocks ||
+             last_retained_extension<report->reserved_blocks ||
+             last_retained_extension>=report->target_blocks)))return 0;
+        for(uint32_t i=0;i<ROOT_PAGES;++i) {
+            uint32_t ref=i<=last_page ? pages[i] : 0;
+            if(ref>=report->target_blocks || (ref && word(buffer,words-49u+i)!=ref))return 0;
+            store_word(buffer,words-49u+i,ref);
         }
-        store_word(buffer,words-1u,0);
-        if(!emit_block(output,last_retained_extension,bytes,buffer))return 0;
+        store_word(buffer,words-24u,report->shrink_bitmap_extensions ? first_extension : 0u);
+        store_word(buffer,words-50u,0);
+        store_word(buffer,5,0);
+        uint32_t sum=0;
+        for(uint32_t i=0;i<words;++i)sum+=word(buffer,i);
+        store_word(buffer,5,0u-sum);
+        if(output) {
+            mark_root_valid(buffer,words);
+            if(!emit_block(output,report->shrink_root_block,bytes,buffer))return 0;
+        }
+
+        if(report->shrink_bitmap_extensions) {
+            uint32_t first=ROOT_PAGES+(report->shrink_bitmap_extensions-1u)*(words-1u);
+            if(!read_block(source,start,bytes,last_retained_extension,buffer))return 0;
+            for(uint32_t i=0;i<words-1u;++i) {
+                uint32_t ref=first+i<=last_page ? pages[first+i] : 0;
+                if(ref>=report->target_blocks || (ref && word(buffer,i)!=ref))return 0;
+                store_word(buffer,i,ref);
+            }
+            store_word(buffer,words-1u,0);
+            if(!emit_block(output,last_retained_extension,bytes,buffer))return 0;
+        }
     }
     /* Detached metadata reused for the new root remains allocated. */
-    uint32_t extra_used=report->shrink_root_block!=root &&
-                        !report->shrink_root_reuses_bitmap;
+    uint64_t extra_used=(uint64_t)move_count+
+                        (report->shrink_root_block!=root && !report->shrink_root_reuses_bitmap);
     uint64_t removed=(uint64_t)obsolete_count+report->shrink_discarded_outside+
-                     (unsigned)report->shrink_root_outside;
+                     (unsigned)report->shrink_root_outside+move_count;
     if(free_before+obsolete_count!=free_after+extra_used ||
        report->used+extra_used<removed ||
        report->used+extra_used-removed>report->target_blocks)return 0;
     report->shrink_preview_free=report->target_blocks-(report->used+extra_used-removed);
     report->shrink_reclaimed_blocks=obsolete_count;
-    report->shrink_bitmap_preview_ready=1;
+    report->shrink_relocation_bitmap_ready=move_count!=0;
+    report->shrink_bitmap_preview_ready=move_count==0;
     return 1;
 }
 
@@ -289,6 +391,7 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
     DollyFfsReport report={0};
     unsigned char *buffer;
     uint32_t *pages=NULL,*metadata=NULL;
+    ShrinkBitmapMove *moves=NULL;
     uint32_t blocks,words,coverage,needed,extension,ext_needed,root,i,j,n=0,m=0,checked=0;
     uint32_t first_extension,last_extension=0,last_retained_extension=0;
     uint32_t previous_used=1u; /* The reserved prefix is included in the copy. */
@@ -405,6 +508,32 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
         report.first_outside_target=report.target_blocks;
         report.used_outside_target=reserved-report.target_blocks;
     }
+    if(report.shrink_bitmap_pages) {
+        report.shrink_root_outside=block_bytes==BOOT_SECTOR_BYTES && root>=report.target_blocks;
+        for(i=0;i<needed+ext_needed;++i) {
+            uint32_t block=pages[i];
+            int is_extension=i>=needed;
+            int retained=is_extension ? i-needed<retained_extensions : i<report.shrink_bitmap_pages;
+            if(!retained) {
+                if(block>=report.target_blocks)++report.shrink_discarded_outside;
+                if(block==report.shrink_root_block)report.shrink_root_reuses_bitmap=1;
+            } else if(block>=report.target_blocks) {
+                if(is_extension)++report.shrink_required_extensions_outside;
+                else ++report.shrink_required_pages_outside;
+                if(!report.shrink_first_required_bitmap_outside ||
+                   block<report.shrink_first_required_bitmap_outside)
+                    report.shrink_first_required_bitmap_outside=block;
+            }
+        }
+    }
+    uint32_t relocation_needed=report.shrink_required_pages_outside+
+                               report.shrink_required_extensions_outside;
+    if(relocation_needed && (!output || output->allow_bitmap_relocation)) {
+        error="Not enough memory for the FFS bitmap relocation plan.";
+        if((uint64_t)relocation_needed*sizeof(*moves)>SIZE_MAX)goto done;
+        moves=malloc((size_t)relocation_needed*sizeof(*moves));
+        if(!moves)goto done;
+    }
     if(progress)progress(0);
     for(i=0;i<needed;++i) {
         uint64_t base=(uint64_t)reserved+(uint64_t)i*coverage;
@@ -428,6 +557,22 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
                target_root>=base && target_root<end &&
                (used&(UINT32_C(1)<<(target_root-base))))
                 root_placement=DOLLY_FFS_ROOT_OCCUPIED;
+            if(report.shrink_relocation_slots<relocation_needed && base<report.target_blocks) {
+                uint32_t free_bits=~used&low_mask((uint32_t)(report.target_blocks-base));
+                /* Keep the proposed root available for the resize. Select
+                 * candidate blocks in ascending partition-relative order. */
+                if(target_root>=base && target_root<end)
+                    free_bits&=~(UINT32_C(1)<<(target_root-base));
+                for(unsigned bit=0;free_bits && report.shrink_relocation_slots<relocation_needed;
+                    ++bit,free_bits>>=1) {
+                    if(!(free_bits&1u))continue;
+                    uint32_t block=(uint32_t)(base+bit);
+                    if(!report.shrink_relocation_slots)report.shrink_first_relocation_slot=block;
+                    report.shrink_last_relocation_slot=block;
+                    if(moves)moves[report.shrink_relocation_slots].destination=block;
+                    ++report.shrink_relocation_slots;
+                }
+            }
             if(used) {
                 unsigned highest=31;
                 while(!(used&(UINT32_C(1)<<highest)))--highest;
@@ -559,27 +704,35 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
             if(!emit_block(output,(uint32_t)location,block_bytes,buffer))goto done;
         }
     }
-    if(report.shrink_bitmap_pages) {
-        report.shrink_root_outside=block_bytes==BOOT_SECTOR_BYTES && root>=report.target_blocks;
-        for(i=0;i<needed+ext_needed;++i) {
-            uint32_t block=pages[i];
-            int is_extension=i>=needed;
-            int retained=is_extension ? i-needed<retained_extensions : i<report.shrink_bitmap_pages;
-            if(!retained) {
-                if(block>=report.target_blocks)++report.shrink_discarded_outside;
-                if(block==report.shrink_root_block)report.shrink_root_reuses_bitmap=1;
-            } else if(block>=report.target_blocks) {
-                if(is_extension)++report.shrink_required_extensions_outside;
-                else ++report.shrink_required_pages_outside;
-                if(!report.shrink_first_required_bitmap_outside ||
-                   block<report.shrink_first_required_bitmap_outside)
-                    report.shrink_first_required_bitmap_outside=block;
-            }
+    if(moves && report.shrink_relocation_slots==relocation_needed &&
+       report.used_outside_target==(uint64_t)report.shrink_discarded_outside+
+                                   (unsigned)report.shrink_root_outside+relocation_needed &&
+       (report.shrink_root_placement<=DOLLY_FFS_ROOT_FREE ||
+        report.shrink_root_reuses_bitmap)) {
+        uint32_t assigned=0;
+        for(i=0;i<report.shrink_bitmap_pages;++i)
+            if(pages[i]>=report.target_blocks)moves[assigned++].index=i;
+        for(i=0;i<retained_extensions;++i)
+            if(pages[needed+i]>=report.target_blocks)moves[assigned++].index=needed+i;
+        error="Could not build the relocated FFS bitmap reference chain.";
+        if(assigned!=relocation_needed ||
+           !shrink_reference_preview(source,start,&report,pages,needed,ext_needed,moves,
+                                     relocation_needed,buffer,output))goto done;
+        /* Identify the exact source-to-target assignments for preflight
+         * revalidation, independently of the displayed first/last slots. */
+        uint32_t fingerprint=UINT32_C(2166136261);
+        for(i=0;i<assigned;++i) {
+            fingerprint=(fingerprint^moves[i].index)*UINT32_C(16777619);
+            fingerprint=(fingerprint^pages[moves[i].index])*UINT32_C(16777619);
+            fingerprint=(fingerprint^moves[i].destination)*UINT32_C(16777619);
         }
+        report.shrink_relocation_fingerprint=fingerprint;
+        report.shrink_relocation_refs_ready=1;
     }
+    uint32_t preview_moves=report.shrink_relocation_refs_ready?relocation_needed:0u;
     if(report.shrink_bitmap_pages &&
        report.used_outside_target==(uint64_t)report.shrink_discarded_outside+
-                                   (unsigned)report.shrink_root_outside &&
+                                   (unsigned)report.shrink_root_outside+preview_moves &&
        (report.shrink_root_placement<=DOLLY_FFS_ROOT_FREE ||
         report.shrink_root_reuses_bitmap)) {
         if(report.shrink_root_block!=root) {
@@ -604,7 +757,8 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
         qsort(metadata,obsolete_count,sizeof(*metadata),compare_blocks);
         error="Could not build the shortened FFS allocation bitmap.";
         if(!shrink_bitmap_preview(source,start,&report,pages,root,first_extension,
-                                  last_retained_extension,buffer,metadata,obsolete_count,output))goto done;
+                                  last_retained_extension,buffer,metadata,obsolete_count,
+                                  moves,preview_moves,output))goto done;
         if(block_bytes==BOOT_SECTOR_BYTES &&
            !read_boot_preview(source,start,report.dos_type,report.shrink_root_block,
                               buffer,&report.shrink_boot_payload)) {
@@ -614,8 +768,9 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
     }
     if(output) {
         error="The selected FFS resize needs block relocation beyond this prototype.";
-        if(!report.grow_preview_bitmap_pages && !report.shrink_bitmap_preview_ready)goto done;
-        if(report.shrink_bitmap_preview_ready &&
+        int shrink_ready=report.shrink_bitmap_preview_ready || report.shrink_relocation_bitmap_ready;
+        if(!report.grow_preview_bitmap_pages && !shrink_ready)goto done;
+        if(shrink_ready &&
            !emit_block(output,0,2u*BOOT_SECTOR_BYTES,buffer)) {
             error="Cannot write the new FFS boot sectors.";
             goto done;
@@ -630,6 +785,7 @@ static const char *analyze(DollyBlockSource *source,uint64_t start,uint64_t leng
     *out=report;
     error=NULL;
 done:
+    free(moves);
     free(metadata);
     free(pages);
     free(buffer);
@@ -662,14 +818,20 @@ const char *dolly_ffs_analyze(DollyBlockSource *source,uint64_t start,uint64_t l
                                           expected_dos_type,target_bytes,out,NULL);
 }
 
+static const char *resize_copy(DollyBlockSource *source,uint64_t start,uint64_t length,
+                               uint32_t reserved,uint64_t target_bytes,DollyFfsReport *out,
+                               const ResizeOutput *output) {
+    if(!output->patch || target_bytes==length || target_bytes/BOOT_SECTOR_BYTES<=reserved)
+        return "Resize output requires a different target size with room for the filesystem.";
+    return analyze(source,start,length,BOOT_SECTOR_BYTES,reserved,0,target_bytes,
+                   out,NULL,NULL,NULL,output);
+}
+
 const char *dolly_ffs_resize_copy(DollyBlockSource *source,uint64_t start,uint64_t length,
                                 uint32_t reserved,uint64_t target_bytes,DollyFfsReport *out,
                                 DollyFfsPatch patch,void *context) {
-    const ResizeOutput output={patch,context};
-    if(!patch || target_bytes==length || target_bytes/BOOT_SECTOR_BYTES<=reserved)
-        return "Resize output requires a different target size with room for the filesystem.";
-    return analyze(source,start,length,BOOT_SECTOR_BYTES,reserved,0,target_bytes,
-                   out,NULL,NULL,NULL,&output);
+    const ResizeOutput output={patch,context,0};
+    return resize_copy(source,start,length,reserved,target_bytes,out,&output);
 }
 
 typedef struct FfsResizeSector {
@@ -750,8 +912,8 @@ static void close_resize_source(void *context) {
 }
 
 const char *dolly_ffs_open_resized_source(DollyBlockSource *source,uint64_t start,uint64_t length,
-                                        uint32_t reserved,
-                                        uint64_t target,DollyFfsReport *report,
+                                        uint32_t reserved,uint64_t target,
+                                        int allow_bitmap_relocation,DollyFfsReport *report,
                                         DollyBlockSource **resized) {
     if(!resized)return "Missing resized block source.";
     *resized=NULL;
@@ -760,8 +922,8 @@ const char *dolly_ffs_open_resized_source(DollyBlockSource *source,uint64_t star
     resize->source=source;
     resize->start=start;
     resize->length=length;
-    const char *error=dolly_ffs_resize_copy(source,start,length,reserved,target,
-                                           report,stage_resize_sector,resize);
+    const ResizeOutput output={stage_resize_sector,resize,allow_bitmap_relocation};
+    const char *error=resize_copy(source,start,length,reserved,target,report,&output);
     if(!error) {
         qsort(resize->sectors,resize->count,sizeof(*resize->sectors),compare_resize_sector);
         for(size_t i=1u;i<resize->count;++i)

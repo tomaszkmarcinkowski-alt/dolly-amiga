@@ -3,8 +3,12 @@
 
 #include "dolly_amiga_image.h"
 #include "dolly_amiga_transfer.h"
+#include "dolly_dlrp.h"
 
 struct Window;
+enum { DOLLY_RESUME_IMAGE=1,DOLLY_RESUME_TRANSFER };
+int dolly_operation_pointer_pick(struct Window *parent,DollyDlrpImageResume *image,
+                                  DollyDlrpTransferResume *transfer);
 /* Offer a checkpoint for an interrupted live scan or image. For imaging,
  * a successful save transfers ownership of the staging drawer to the
  * checkpoint. The caller still closes/cancels the operation afterwards. */

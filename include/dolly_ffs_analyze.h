@@ -31,6 +31,11 @@ typedef struct DollyFfsReport {
     DollyFfsBootPayload shrink_boot_payload;
     uint32_t shrink_required_pages_outside,shrink_required_extensions_outside;
     uint32_t shrink_first_required_bitmap_outside;
+    /* Free placement candidates found inside the target, capped at the
+     * required count. The proposed root is excluded. */
+    uint32_t shrink_relocation_slots,shrink_first_relocation_slot,shrink_last_relocation_slot;
+    uint32_t shrink_relocation_fingerprint;
+    int shrink_relocation_refs_ready,shrink_relocation_bitmap_ready;
     uint64_t shrink_preview_free;
     int shrink_root_outside,shrink_root_reuses_bitmap,shrink_bitmap_preview_ready;
     uint32_t block_bytes,reserved_blocks,dos_type;
@@ -66,10 +71,11 @@ const char *dolly_ffs_resize_copy(DollyBlockSource *source,uint64_t start,uint64
                                 uint32_t reserved,uint64_t target_bytes,DollyFfsReport *out,
                                 DollyFfsPatch patch,void *context);
 /* Virtual resized partition backed by the source plus staged metadata.
- * The caller retains the source and must keep it open and isolated. */
+ * The caller retains the source and must keep it open and isolated.
+ * Bitmap relocation requires explicit opt-in. */
 const char *dolly_ffs_open_resized_source(DollyBlockSource *source,uint64_t start,uint64_t length,
-                                        uint32_t reserved,
-                                        uint64_t target,DollyFfsReport *report,
+                                        uint32_t reserved,uint64_t target,
+                                        int allow_bitmap_relocation,DollyFfsReport *report,
                                         DollyBlockSource **resized);
 /* Map an additional bitmap page or extension to its block in the added
  * range. Blocks are assigned in order, bitmap pages first. Returns 0 if

@@ -495,6 +495,21 @@ static int rebuild_gadgets(DollyNativeInventoryView *v,int details_changed) {
     paint(v,screen);
     return 1;
 }
+static void show_metadata_summary(DollyNativeInventoryView *v,const char *title,
+                                  const char *text,const char *detail,const char *recovery) {
+    DollyWarnings summary={.window_title="Dolly - Operation summary"};
+    if(dolly_warning_add(&summary,title,text,"OK")) {
+        if(recovery) {
+            char path[290];
+            snprintf(path,sizeof(path),"Recovery copy saved as \"%s\".",recovery);
+            (void)dolly_warning_add(&summary,"Recovery copy",path,"OK");
+        }
+        if(detail)(void)dolly_warning_add(&summary,"Details",detail,"OK");
+        (void)dolly_warnings_review(v->window,&summary);
+    }
+    dolly_warnings_clear(&summary);
+}
+
 static void backup_partition_table(DollyNativeInventoryView *v) {
     struct FileRequester *fr;
     char path[256],partial[sizeof(path)+sizeof(".part")-1u];
@@ -506,7 +521,9 @@ static void backup_partition_table(DollyNativeInventoryView *v) {
     uint64_t read_bytes;
     size_t prefix;
     char output_drawer[256];
-    int ok;
+    ULONG blocks,exported;
+    int ok,published;
+    const char *detail=NULL;
     int mbr=v->map.format==DOLLY_NATIVE_PARTITION_MBR;
     if(!backup_available(v))return;
     fr=(struct FileRequester *)AllocAslRequestTags(
@@ -552,7 +569,8 @@ static void backup_partition_table(DollyNativeInventoryView *v) {
     }
     strcpy(device.driver,v->driver);
     device.unit=v->unit;
-    read_bytes=(uint64_t)(mbr?16u:v->map.rdb_backup_blocks)*512u;
+    blocks=mbr?1u:v->map.rdb_backup_blocks;
+    read_bytes=(uint64_t)(mbr?16u:blocks)*512u;
     ok=dolly_amiga_guard_read(&guard,v->window,&warnings,&device,0,read_bytes,drawer_lock) &&
        dolly_warnings_review(v->window,&warnings) && dolly_amiga_read_guard_check(guard);
     dolly_warnings_clear(&warnings);
@@ -569,16 +587,30 @@ static void backup_partition_table(DollyNativeInventoryView *v) {
         return;
     }
     ok=dolly_amiga_partition_backup(v->driver,v->unit,&v->geometry,
-                                   v->map.format,handle);
+                                   v->map.format,blocks,handle,&exported);
     dolly_amiga_read_guard_close(&guard);
     if(!Close(handle))ok=0;
-    if(ok && path_is_unused((STRPTR)path) &&
-       Rename((STRPTR)partial,(STRPTR)path)) {
+    published=ok && path_is_unused((STRPTR)path) && Rename((STRPTR)partial,(STRPTR)path);
+    if(published) {
         set_status(v,mbr?"MBR backup saved":"RDB backup saved");
     } else if(DeleteFile((STRPTR)partial)) {
+        detail="The backup could not be published. The temporary file was removed.";
         set_status(v,"Partition table backup failed");
     } else {
+        detail="The backup could not be published. The temporary .part file remains.";
         set_status(v,"Backup failed. .part file remains");
+    }
+    {
+        char text[500],bytes[21];
+        const char *operation=mbr?"Backup MBR":"Backup RDB";
+        dolly_surface_log_decimal(bytes,(uint64_t)exported*512u);
+        snprintf(text,sizeof(text),
+                 "%s - %s\nSource: \"%s / Unit %lu\"\nDestination: \"%s\"\n"
+                 "%s: %lu of %lu.\n%s: %s.",
+                 operation,published?"Completed":"Failed",v->driver,(unsigned long)v->unit,path,
+                 published?"Sectors exported":"Complete sectors staged",(unsigned long)exported,
+                 (unsigned long)blocks,published?"Output file bytes":"Bytes in complete staged sectors",bytes);
+        show_metadata_summary(v,operation,text,detail,NULL);
     }
 }
 static int choose_restore_file(struct Window *window,int save,char path[256]) {
@@ -626,15 +658,17 @@ static int save_rdb_recovery(void *context,const void *data,ULONG bytes) {
     DeleteFile((STRPTR)drawer);
     return ok;
 }
-static void show_restore_failure(DollyNativeInventoryView *v,const char *reason) {
+static void set_restore_failure_status(DollyNativeInventoryView *v,const char *reason) {
     char first_line[sizeof(v->status)];
     size_t len=strcspn(reason,"\n");
     if(len>=sizeof(first_line))len=sizeof(first_line)-1;
     memcpy(first_line,reason,len);
     first_line[len]=0;
     set_status(v,first_line);
-    if(strcmp(reason,"Restore RDB cancelled.")!=0)
-        dolly_amiga_role_request(v->window,"Dolly - Restore RDB",reason,"OK",NULL,NULL);
+}
+static void show_restore_failure(DollyNativeInventoryView *v,const char *reason) {
+    set_restore_failure_status(v,reason);
+    dolly_amiga_role_request(v->window,"Dolly - Restore RDB",reason,"OK",NULL,NULL);
 }
 static void restore_partition_table(DollyNativeInventoryView *v) {
     char input[256],recovery[256],warning[128];
@@ -642,6 +676,7 @@ static void restore_partition_table(DollyNativeInventoryView *v) {
     char drawer[256];
     size_t prefix;
     const char *reason;
+    DollyRdbRestoreResult result;
     if(v->driver[0])
         snprintf(warning,sizeof(warning),"Restore RDB on %s / Unit %lu.",
                  v->driver,(unsigned long)v->unit);
@@ -681,12 +716,32 @@ static void restore_partition_table(DollyNativeInventoryView *v) {
     }
     reason=dolly_amiga_restore_rdb(v->window,v->driver,v->unit,&v->geometry,
                  v->map.rdb_backup_blocks,file,image_lock,recovery_lock,
-                 save_rdb_recovery,recovery);
+                 save_rdb_recovery,recovery,&result);
     UnLock(image_lock);
     UnLock(recovery_lock);
     Close(file);
-    if(reason)show_restore_failure(v,reason);
+    if(reason)set_restore_failure_status(v,reason);
     else set_status(v,"RDB checked. Reopen Inventory to refresh the device snapshot.");
+    {
+        char text[624];
+        const char *outcome=reason?
+            (!strcmp(reason,"Restore RDB cancelled.")?"Cancelled":"Failed"):
+            (result.written_verified?"Completed":"Already matches the backup");
+        snprintf(text,sizeof(text),
+                 "Restore RDB - %s\nSource: \"%s\"\nDestination: \"%s / Unit %lu\"\n"
+                 "Sectors compared: %lu of %lu.\nSectors already identical: %lu.\n"
+                 "Sectors written and verified: %lu (%lu bytes).",
+                 outcome,input,v->driver,(unsigned long)v->unit,
+                 (unsigned long)result.compared,(unsigned long)v->map.rdb_backup_blocks,
+                 (unsigned long)result.identical,(unsigned long)result.written_verified,
+                 (unsigned long)result.written_verified*512u);
+        if(result.final_check_started) {
+            size_t used=strlen(text);
+            snprintf(text+used,sizeof(text)-used,"\nSectors matching on final reread: %lu of %lu.",
+                     (unsigned long)result.final_verified,(unsigned long)v->map.rdb_backup_blocks);
+        }
+        show_metadata_summary(v,"Restore RDB",text,reason,result.recovery_saved?recovery:NULL);
+    }
 }
 
 void dolly_inventory_view_close(DollyNativeInventoryView *v) {

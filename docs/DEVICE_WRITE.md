@@ -18,14 +18,29 @@ is available through Smart Copy for matching OFS/FFS RDB partitions.
 Clone and resize supports a limited FFS write prototype. For raw sources, Dolly automatically uses DOS Inhibit on active filesystems within
 the selected range, then releases the temporary inhibits on completion,
 failure or cancellation. The file volume serving a Restore image stays
-available for reading. Restore therefore requires the image to reside
-on a different unit when the destination must be unmounted.
+available for reading. On the destination unit, every image part must
+reside on a verified range separate from the selected destination.
+Restore checks the ranges of all source volumes, including volumes
+selected as replacements for missing parts. Before taking any
+destination entries offline, Dolly rechecks their identities and
+extents and compares their handlers against every open image file.
+The handler check also works when an image file has no DOS lock.
+Copy between separate partitions on the same unit and Restore from a
+separate partition on that unit show one same-unit speed warning per
+operation, unless it is disabled in Settings. An overlapping or
+ambiguous range on the same unit blocks the operation.
 
 On a raw destination, Warning Review identifies recognized volumes and
 allows their overwrite confirmation after ten seconds. The final Proceed
-automatically takes the DOS filesystems on the destination unit offline.
-A handler that refuses shutdown or an entry that remains active blocks
-the write with a diagnostic identifying that stage. After a successful
+automatically takes DOS filesystems overlapping the destination range
+offline. A partition operation leaves independently verified neighboring
+partitions available. A whole-disk write or Restore RDB still covers the
+entire unit for mount isolation. Unknown DOS ranges are treated as possible
+overlaps.
+A handler that refuses shutdown or an entry that remains active normally
+blocks the write with a diagnostic identifying that stage. An eligible
+unformatted destination with a verified partition extent and a registered
+handler can stay inhibited for the raw write. After a successful
 shutdown reply, Dolly briefly waits for the volume to disappear. A completed unmount persists for the session. The existing
 post-copy mount option can mount eligible partitions again.
 
@@ -84,7 +99,11 @@ the failed batch and offers to save an IFF DLRP checkpoint. The
 checkpoint records the committed prefix and the range that may have
 been modified by the failed write. It can be saved to RAM or a verified
 device other than the destination. Stop does not generate a checkpoint.
-Resume support remains planned.
+**Project → Resume operation...** reopens supported sector-copy and Restore
+checkpoints. Dolly repeats write preflight, verifies the committed prefix
+and the original destination anchors, and rewrites the failed batch with
+readback verification. Both single-file and split IFF DOLY inputs are
+supported for Restore. See the [DLRP format](DLRP_FORMAT.md).
 
 ## Verification
 
@@ -124,20 +143,22 @@ always verifies the metadata write. Reload the partition table or
 reboot before accessing the destination under its new device names.
 
 
-A DOS device with no active volume is handled without a mount warning
-when its live handler can be inhibited or the node has no handler.
-For the destination, Dolly tries to remove the DOS node. If it remains,
-only the same inhibited handler or an inactive node with no volume may
-remain during copying and the post-copy rename review. A newly active
-volume or handler blocks further writes. Dolly retries removal during cleanup for entries with no live handler.
-If a live handler remains inhibited after a write, Dolly reports that a
-reboot is needed to remount the destination. The RDB automount flag describes boot policy. The live DOS list
-determines whether the volume is mounted for this operation.
+A destination handler can return DOS error 209 because it lacks
+`ACTION_DIE`. After overwrite approval, Dolly can instead inhibit it if
+it publishes no DOS volume and its range, block size and DosType match the
+selected classic OFS/FFS RDB partition exactly. Whole-disk writes and
+Restore RDB require full dismount because they can change the handler's
+startup data. During copying and post-copy rename, a changed DOS entry,
+handler, extent or newly published volume blocks further writes.
+If the operation stops before writing, Dolly releases the inhibition.
+After any possible write, the handler stays inhibited unless the user
+requests mounting and the copied volume and original registration pass
+revalidation. Dolly reports when a reboot is needed to regain access.
 
-The open count still covers the entire Exec driver. Unexplained
-additional opens require confirmation. A reduction in the approved
-count is accepted when the DOS mount checks still pass. New opens
-above the reduced count block subsequent writes.
+The open count covers the entire Exec driver. Dolly allows the
+post-isolation baseline and accepts a reduction while the DOS mount
+checks still pass. New opens above the reduced count block subsequent
+writes.
 
 ### Post-copy names and mounting in Alpha 3.6
 
@@ -154,16 +175,19 @@ initial choice. The checkbox applies only after the data and approved name chang
 finish. Dolly closes its transfer handles, restores source access,
 then rereads the destination geometry, PART descriptor and OFS/FFS
 root block. It checks their identity, the partition's automount flag,
-and the live DOS namespace before installing a node with
-MakeDosNode and AddDosNode.
+and the live DOS namespace. A matching inhibited handler can resume
+through `Inhibit(FALSE)` once Dolly has verified the copied volume and
+the partition's original registration. Otherwise an unowned range can
+receive a new node through MakeDosNode and AddDosNode. Both paths check
+that AmigaDOS publishes the expected volume.
 
 Dolly prefers a compatible resident handler for the exact DosType.
 For DOS/0 through DOS/3 it can also use a compatible resident OFS/FFS
 handler or let AmigaOS select the standard ROM filesystem handler.
 Runtime mounting still requires a verified volume within the first
-4 GiB and a free DOS name and range. It skips unformatted volumes, conflicting
-names, partitions with automount disabled and ranges still owned by
-an old DOS handler. No handler is loaded from the copied disk. Mount
+4 GiB and a valid DOS name and range. It skips unformatted volumes,
+conflicting names, partitions with automount disabled and ranges with
+an unrelated DOS entry. No handler is loaded from the copied disk. Mount
 results are reported separately from copying.
 
 The read-only **Clone and resize** growth preview also prepares the new
@@ -261,8 +285,9 @@ and bitmap metadata, and reopens the result to check its size, root and
 free-space count. The original root is freed in the clone when it moves.
 A failed run removes the incomplete output. Existing files are protected.
 
-The output is a partition image without an RDB. Layouts that require
-relocating file blocks or retained bitmap metadata remain unsupported.
+The output is a partition image without an RDB. The desktop writer can
+relocate retained bitmap metadata into free blocks in a smaller target.
+Layouts that require relocating file blocks remain unsupported.
 ### Native Clone and resize prototype
 
 Select two disjoint RDB partitions through Partition or Logical device.
@@ -279,3 +304,17 @@ checks the root and allocation totals before offering rename or mount.
 The partition table remains in place. Unsupported layouts still have
 a read-only analysis where possible. DLRP recovery for resize needs a
 persisted resize plan and is not offered by this prototype.
+
+The shrink relocation plan searches the validated source bitmap for
+free blocks within the target, in increasing block order. It reserves
+the proposed root separately. Warning Review compares the available
+placement slots with the number of required bitmap blocks. When the
+slots suffice and no other occupied blocks need to move, the preview
+pairs bitmap pages and extension blocks with those slots in chain
+order. It rebuilds the root references and extension links in memory,
+marks the new locations as allocated, checks the changed page checksums
+and reconciles the free-block count. The desktop writer applies this
+plan to a new image. Native Clone and resize shows the plan before
+overwrite approval, then rebuilds it and compares the relocation
+fingerprint before the first write. Dolly validates the generated
+filesystem view and later checks the written destination metadata.

@@ -24,6 +24,14 @@ DollyBlockStatus dolly_dly_probe_header(DollyBlockSource *container,DollyDlyImag
 DollyBlockStatus dolly_dly_open_lazy(DollyBlockSource *container,DollyBlockSource **out,
                                    DollyDlyImageInfo *info);
 
+struct DollyDlyWriter;
+/* Decode a retained single-file prefix against its original writer plan.
+ * The FORM length still describes the planned file. Reading the entire
+ * decoded view checks every committed chunk and where the prefix ends.
+ * Takes ownership of the container only on success. */
+DollyBlockStatus dolly_dly_open_prefix(DollyBlockSource *container,DollyBlockSource **out,
+                                     const struct DollyDlyWriter *plan,uint64_t completed);
+
 #define DOLLY_DLY_SET_MAGIC "Dolly split image 1\n"
 
 /* Read an optional embedded manifest from the FORM prefix. */

@@ -32,6 +32,10 @@ int dolly_dly_init(DollyDlyWriter *writer,uint64_t first_lba,uint64_t sectors,
 int dolly_dly_compress(DollyDlyWriter *writer,DollyDlyCodec codec,
                        unsigned char *packed,uint16_t *hash,DollyDlySeek seek);
 int dolly_dly_begin(DollyDlyWriter *writer,DollyDlySink sink,void *context);
+/* Attach the writer to a validated single-file prefix. The sink must
+ * already be positioned just beyond its last complete chunk. */
+int dolly_dly_resume(DollyDlyWriter *writer,DollyDlySink sink,void *context,
+                     uint64_t completed,uint32_t emitted);
 /* Begin the first part and include the multipart manifest in its FORM. */
 int dolly_dly_begin_set(DollyDlyWriter *writer,DollyDlySink sink,void *context,
                         const DollyDlySetInfo *set);

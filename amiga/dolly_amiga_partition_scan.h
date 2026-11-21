@@ -47,16 +47,21 @@ int dolly_amiga_partition_scan(const char *driver,ULONG unit,
 /* Read-only inventory may include container entries, without walking them. */
 int dolly_amiga_inventory_scan(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionMap *out);
-/* Revalidate the expected table. Export the RDB prefix or the MBR sector. */
+/* Revalidate the selected export size. Return the complete sectors staged. */
 int dolly_amiga_partition_backup(const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,DollyNativePartitionFormat format,
-          BPTR file);
+          ULONG blocks,BPTR file,ULONG *exported);
 #define DOLLY_RDB_RESTORE_MAX_BLOCKS 128u
 struct Window;
+typedef struct DollyRdbRestoreResult {
+    ULONG compared,identical,written_verified,final_verified;
+    int recovery_saved,final_check_started;
+} DollyRdbRestoreResult;
 /* A successful recovery sink publishes a durable copy before writes begin. */
 typedef int (*DollyRdbRecoverySink)(void *context,const void *data,ULONG bytes);
 /* Returns NULL on success, or a literal diagnostic on failure. */
 const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,ULONG backup_blocks,BPTR backup,
-          BPTR image_lock,BPTR recovery_lock,DollyRdbRecoverySink save_recovery,void *context);
+          BPTR image_lock,BPTR recovery_lock,DollyRdbRecoverySink save_recovery,void *context,
+          DollyRdbRestoreResult *result);
 #endif

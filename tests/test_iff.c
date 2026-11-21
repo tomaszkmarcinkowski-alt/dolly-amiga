@@ -120,6 +120,71 @@ static int seek(void *context,uint32_t offset) {
     buffer->position=offset;
     return 1;
 }
+static DollyBlockStatus open_prefix(Buffer *buffer,DollyBlockSource **decoded,
+                                   const DollyDlyWriter *plan,uint64_t completed) {
+    DollyBlockSource *container;
+    DollyBlockStatus status;
+    assert(dolly_block_open_backend(buffer->used,read_buffer,close_buffer,buffer,
+                                   &container)==DOLLY_BLOCK_OK);
+    status=dolly_dly_open_prefix(container,decoded,plan,completed);
+    if(status!=DOLLY_BLOCK_OK)dolly_block_close(container);
+    return status;
+}
+
+static void verify_resume(void) {
+    unsigned char payload[1536]={0},prefix[1024],packed[1024];
+    uint16_t hash[DOLLY_DLY_HASH_SLOTS];
+    unsigned mode;
+    for(size_t i=1024;i<sizeof(payload);++i)payload[i]=(unsigned char)i;
+    for(mode=DOLLY_DLY_RAW;mode<=DOLLY_DLY_LZSS;++mode) {
+        DollyBlockSource *decoded;
+        DollyDlyWriter writer,plan;
+        Buffer interrupted={.limit=2048},baseline={.limit=2048};
+        uint32_t retained;
+        assert(dolly_dly_init(&writer,23,3,512,1024));
+        if(mode)assert(dolly_dly_compress(&writer,(DollyDlyCodec)mode,packed,hash,seek));
+        plan=writer;
+        assert(dolly_dly_begin(&writer,append,&interrupted));
+        assert(open_prefix(&interrupted,&decoded,&plan,0)==DOLLY_BLOCK_OK);
+        assert(dolly_block_size(decoded)==0);
+        dolly_block_close(decoded);
+        assert(dolly_dly_append(&writer,payload,sizeof(prefix)));
+        retained=writer.emitted;
+        assert(open_image(&interrupted,&decoded,NULL)!=DOLLY_BLOCK_OK);
+        assert(open_prefix(&interrupted,&decoded,&plan,1)==DOLLY_BLOCK_EINVAL);
+        assert(open_prefix(&interrupted,&decoded,&plan,2)==DOLLY_BLOCK_OK);
+        assert(dolly_block_size(decoded)==sizeof(prefix));
+        assert(dolly_block_read(decoded,0,prefix,sizeof(prefix)).status==DOLLY_BLOCK_OK);
+        assert(!memcmp(prefix,payload,sizeof(prefix)));
+        dolly_block_close(decoded);
+
+        interrupted.bytes[DOLLY_DLY_GEOM_END+20]^=1; /* committed chunk CRC */
+        assert(open_prefix(&interrupted,&decoded,&plan,2)==DOLLY_BLOCK_OK);
+        assert(dolly_block_read(decoded,0,prefix,sizeof(prefix)).status==DOLLY_BLOCK_EIO);
+        dolly_block_close(decoded);
+        interrupted.bytes[DOLLY_DLY_GEOM_END+20]^=1;
+        interrupted.used+=2; /* uncommitted tail */
+        assert(open_prefix(&interrupted,&decoded,&plan,2)==DOLLY_BLOCK_OK);
+        assert(dolly_block_read(decoded,0,prefix,sizeof(prefix)).status==DOLLY_BLOCK_EINVAL);
+        dolly_block_close(decoded);
+        interrupted.used-=2;
+
+        writer=plan;
+        assert(!dolly_dly_resume(&writer,append,&interrupted,1,retained));
+        assert(seek(&interrupted,retained));
+        assert(dolly_dly_resume(&writer,append,&interrupted,2,retained));
+        assert(dolly_dly_append(&writer,payload+1024,512));
+        assert(dolly_dly_finish(&writer) && dolly_dly_complete(&writer));
+        check_decoded(&interrupted,payload,sizeof(payload),mode?2:1,23);
+        writer=plan;
+        assert(dolly_dly_begin(&writer,append,&baseline));
+        assert(dolly_dly_append(&writer,payload,1024));
+        assert(dolly_dly_append(&writer,payload+1024,512));
+        assert(dolly_dly_finish(&writer));
+        assert(interrupted.used==baseline.used &&
+               !memcmp(interrupted.bytes,baseline.bytes,baseline.used));
+    }
+}
 static void verify_compression(void) {
     DollyDlyWriter writer;
     unsigned char data[1024],decoded[512],packed[512];
@@ -462,6 +527,7 @@ int main(void){
   {DollyIffStatus s=probe(p,24,&chunks);assert(s!=DOLLY_IFF_IO_ERROR);}
  }
  verify_writer();
+ verify_resume();
  verify_compression();
  verify_reader_navigation();
  verify_large_raw_read();

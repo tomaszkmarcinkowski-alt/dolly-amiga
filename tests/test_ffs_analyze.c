@@ -8,6 +8,8 @@ static const uint64_t start=UINT64_C(0x100010000);
 static int damage;
 static int far_extension;
 static int far_bitmap_page;
+static int full_bitmap;
+static int sparse_fixture;
 static int root_entries;
 static int empty_boot_payload;
 static void put(unsigned char *b,unsigned i,uint32_t x) {
@@ -37,7 +39,8 @@ static DollyBlockReadResult read_fixture(void *context,uint64_t off,void *data,s
     unsigned char *b=data;
     uint32_t block=(uint32_t)((off-start)/BYTES),i;
     uint32_t extension=far_extension?102900u:(damage==6?51501u:500u);
-    uint32_t last_bitmap=far_bitmap_page?102901u:125u;
+    uint32_t far_index=far_bitmap_page==2?24u:25u;
+    uint32_t last_bitmap=far_bitmap_page==1?102901u:125u;
     (void)context;
     assert(bytes==BYTES && off>=start && (off-start)%BYTES==0);
     memset(b,0,bytes);
@@ -51,7 +54,7 @@ static DollyBlockReadResult read_fixture(void *context,uint64_t off,void *data,s
         if(root_entries)put(b,6,32u);
         if(root_entries==3)put(b,7,33u);
         put(b,78,damage==1?0:UINT32_MAX);
-        for(i=0;i<25;++i)put(b,79+i,100+i);
+        for(i=0;i<25;++i)put(b,79+i,far_bitmap_page && i==far_index?102901u:100+i);
         if(damage!=7)put(b,104,extension);
         seal(b,5);
     } else if(root_entries && (block==32u || block==33u)) {
@@ -64,17 +67,18 @@ static DollyBlockReadResult read_fixture(void *context,uint64_t off,void *data,s
     } else if(block==extension) {
         put(b,0,damage==2?100:last_bitmap);
         if(damage==3)put(b,127,500);
-    } else if((block>=100 && block<125u) || block==last_bitmap) {
-        uint32_t page=block==last_bitmap ? 25u : block-100u;
+    } else if((block>=100 && block<100u+PAGES) || (far_bitmap_page && block==102901u)) {
+        uint32_t page=block==102901u ? far_index : block-100u;
         memset(b+4,255,bytes-4);
         if(damage!=4)mark(b,page,51500);
         if(damage!=7)mark(b,page,extension);
-        for(i=0;i<(damage==7?25u:PAGES);++i)mark(b,page,i==25u ? last_bitmap : 100u+i);
+        for(i=0;i<(damage==7?25u:PAGES);++i)mark(b,page,far_bitmap_page && i==far_index?102901u:100u+i);
         mark(b,page,32);if(root_entries!=5)mark(b,page,33);
         if(damage!=8) { mark(b,page,102991);mark(b,page,102999); }
+        if(full_bitmap)memset(b+4,0,bytes-4);
         seal(b,0);
         if(damage==5 && page==25)b[31]^=1;
-    } else return (DollyBlockReadResult){DOLLY_BLOCK_EIO,0};
+    } else if(!sparse_fixture)return (DollyBlockReadResult){DOLLY_BLOCK_EIO,0};
     return (DollyBlockReadResult){DOLLY_BLOCK_OK,bytes};
 }
 static int is_free(const unsigned char *page,uint32_t index,uint32_t block) {
@@ -427,6 +431,39 @@ int main(void) {
     assert(!dolly_ffs_analyze(source,start,length,BYTES,2,0x444f5303,102500u*BYTES,&r));
     assert(r.shrink_required_pages_outside==1u && r.shrink_required_extensions_outside==1u &&
            r.shrink_first_required_bitmap_outside==102900u && !r.shrink_bitmap_preview_ready);
+    assert(r.shrink_relocation_slots==2u && r.shrink_first_relocation_slot==2u &&
+           r.shrink_last_relocation_slot==3u && r.shrink_relocation_refs_ready &&
+           r.shrink_relocation_bitmap_ready);
+    assert(r.shrink_preview_free==102500u-r.used-1u);
+    uint32_t previous_fingerprint=r.shrink_relocation_fingerprint;
+    /* Move a page that is neither the boundary nor the root/slot page. */
+    far_bitmap_page=2;
+    assert(!dolly_ffs_analyze(source,start,length,BYTES,2,0x444f5303,102500u*BYTES,&r));
+    assert(r.shrink_relocation_bitmap_ready && r.shrink_preview_free==102500u-r.used-1u);
+    assert(r.shrink_relocation_fingerprint!=previous_fingerprint);
+    uint32_t preview_fingerprint=r.shrink_relocation_fingerprint;
+    empty_boot_payload=1;
+    sparse_fixture=1;
+    DollyBlockSource *resized=NULL;
+    DollyFfsReport verified;
+    uint64_t target=102500u*BYTES;
+    assert(dolly_ffs_open_resized_source(source,start,length,2,target,0,&r,&resized));
+    assert(!resized);
+    assert(!dolly_ffs_open_resized_source(source,start,length,2,target,1,&r,&resized));
+    assert(r.shrink_relocation_fingerprint==preview_fingerprint);
+    assert(!dolly_ffs_analyze(resized,0,target,BYTES,2,0x444f5303,target,&verified));
+    assert(verified.root_block==r.shrink_root_block &&
+           verified.blocks-verified.used==r.shrink_preview_free);
+    dolly_block_close(resized);
+    sparse_fixture=0;
+    empty_boot_payload=0;
+    full_bitmap=1;
+    assert(!dolly_ffs_analyze(source,start,length,BYTES,2,0x444f5303,102500u*BYTES,&r));
+    assert(r.shrink_required_pages_outside==1u && r.shrink_required_extensions_outside==1u &&
+           !r.shrink_relocation_slots && !r.shrink_relocation_refs_ready &&
+           !r.shrink_relocation_bitmap_ready &&
+           !r.shrink_bitmap_preview_ready);
+    full_bitmap=0;
     far_bitmap_page=0;
     far_extension=0;
     damage=0;

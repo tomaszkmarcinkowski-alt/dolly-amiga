@@ -22,18 +22,18 @@ typedef struct PointerSink {
 
 static int checksum_sink(void *ctx,const void *data,size_t size) {
     PointerSink *out=ctx;
-    return sink(&out->file,data,size) && dolly_checksum_update(&out->checksum,data,size);
+    return sink(&out->file,data,size) && dolly_checksum_update(&out->checksum,data,size)==0;
 }
 static void notice(struct Window *parent,const char *message) {
     dolly_amiga_role_request(parent,"Dolly - Operation Restore File",message,"OK",NULL,NULL);
 }
-static int choose_path(struct Window *parent,char path[256]) {
+static int choose_path(struct Window *parent,char path[256],int save) {
     struct FileRequester *request;
     int result=0;
     if(!AslBase)return -1;
     request=(struct FileRequester *)AllocAslRequestTags(ASL_FileRequest,
-        ASL_FuncFlags,(ULONG)FILF_SAVE,ASLFR_Window,(ULONG)parent,
-        ASLFR_TitleText,(ULONG)"Save Operation Restore File",
+        ASL_FuncFlags,(ULONG)(save?FILF_SAVE:0),ASLFR_Window,(ULONG)parent,
+        ASLFR_TitleText,(ULONG)(save?"Save Operation Restore File":"Open Operation Restore File"),
         ASLFR_InitialFile,(ULONG)"operation.dlrp",TAG_DONE);
     if(!request)return -1;
     if(AslRequest(request,NULL)) {
@@ -48,6 +48,35 @@ static int choose_path(struct Window *parent,char path[256]) {
     }
     FreeAslRequest(request);
     return result;
+}
+static int read_pointer(void *ctx,void *data,size_t size) {
+    return Read(*(BPTR *)ctx,data,(LONG)size)==(LONG)size;
+}
+int dolly_operation_pointer_pick(struct Window *parent,DollyDlrpImageResume *image,
+                                  DollyDlrpTransferResume *transfer) {
+    char path[256];
+    int picked=choose_path(parent,path,0);
+    BPTR file;
+    LONG length;
+    int kind=DOLLY_RESUME_IMAGE;
+    DollyDlrpStatus status=DOLLY_DLRP_INVALID;
+    if(!picked)return 0;
+    file=picked>0?Open((STRPTR)path,MODE_OLDFILE):0;
+    if(file) {
+        if(Seek(file,0,OFFSET_END)>=0 && (length=Seek(file,0,OFFSET_BEGINNING))>0) {
+            status=dolly_dlrp_read_image(read_pointer,&file,(uint32_t)length,image);
+            if(status==DOLLY_DLRP_UNSUPPORTED && Seek(file,0,OFFSET_BEGINNING)>=0) {
+                status=dolly_dlrp_read_transfer(read_pointer,&file,(uint32_t)length,transfer);
+                kind=DOLLY_RESUME_TRANSFER;
+            }
+        }
+        Close(file);
+    }
+    if(status!=DOLLY_DLRP_READY)
+        notice(parent,status==DOLLY_DLRP_UNSUPPORTED?
+               "This checkpoint operation or version is not supported.":
+               "Could not validate the Operation Restore File.");
+    return status==DOLLY_DLRP_READY?kind:0;
 }
 static int unused(const char *path) {
     BPTR lock=Lock((STRPTR)path,ACCESS_READ);
@@ -183,7 +212,7 @@ static int request_pointer_path(struct Window *parent,char path[256]) {
         (STRPTR)"Save...|Cancel"};
     int choice;
     if(EasyRequestArgs(parent,&request,NULL,NULL)!=1)return 0;
-    choice=choose_path(parent,path);
+    choice=choose_path(parent,path,1);
     if(choice<0)notice(parent,"The save requester or filename is unavailable.");
     if(choice<=0)return 0;
     if(unused(path))return 1;
@@ -198,7 +227,7 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
     PointerStage stage;
     LONG output=0;
     int ok;
-    if(!image || image->split || !image->failure || !image->file || !scan->source ||
+    if(!image || image->split || image->resuming || !image->failure || !image->file || !scan->source ||
        !scan->total || scan->processed>scan->total || scan->outside_range!=DOLLY_RANGE_STRICT ||
        !request_pointer_path(parent,path))return;
     if(image) {
@@ -206,6 +235,7 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
         strcpy(partial,final);
         if(!AddPart((STRPTR)final,(STRPTR)image->name,sizeof(final)) ||
            !AddPart((STRPTR)partial,(STRPTR)image->staged_file,sizeof(partial)))goto failed;
+        if(Seek(image->file,0,OFFSET_END)<0)goto failed;
         output=Seek(image->file,0,OFFSET_CURRENT);
         uint64_t committed=image->dly.file_bytes?image->dly.emitted:
                            scan->processed*scan->sector_bytes;
@@ -213,6 +243,15 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
         if((uint64_t)output>committed &&
            SetFileSize(image->file,(LONG)committed,OFFSET_BEGINNING)!=(LONG)committed)
             goto failed;
+        if(image->dly.compression && image->dly.failed &&
+           image->dly.written==image->dly.sectors) {
+            unsigned char length[4];
+            /* An interrupted final FORM-length update may have moved
+             * the handle back to the header and partially changed it. */
+            dolly_dlrp_u32(length,image->dly.file_bytes-8u);
+            if(Seek(image->file,4,OFFSET_BEGINNING)<0 ||
+               !sink(&image->file,length,sizeof(length)))goto failed;
+        }
         output=(LONG)committed;
     }
     if(!stage_pointer(&stage,path))goto failed;
@@ -331,7 +370,9 @@ void dolly_operation_pointer_offer_transfer(struct Window *parent,const DollyEnd
     char path[256];
     PointerStage stage;
     int ok;
-    if(!transfer->failure || !request_pointer_path(parent,path))return;
+    if(!transfer->failure ||
+       (transfer->job.resume_read && transfer->job.processed==transfer->job.resume_committed) ||
+       !request_pointer_path(parent,path))return;
     if(!checkpoint_drawer_safe(path,transfer)) {
         notice(parent,"Save on RAM: or on a verified device other than the write destination.");
         return;
