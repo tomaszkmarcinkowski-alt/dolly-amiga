@@ -16,6 +16,8 @@ static void test_smart_copy_selection(void) {
     assert(dolly_endpoint_set_unit(&other,0,1));
     assert(!dolly_smart_copy_can_start(&other,&partition));
     assert(!dolly_smart_copy_can_start(&logical,&other));
+    assert(dolly_endpoint_set_logical(&other,1));
+    assert(dolly_smart_copy_can_start(&logical,&other));
 }
 
 int main(void) {

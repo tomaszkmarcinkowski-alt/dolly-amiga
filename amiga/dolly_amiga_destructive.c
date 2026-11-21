@@ -304,6 +304,8 @@ typedef struct WarningView {
     APTR visual;
     LONG x,y,width,height,row,button_y,list_min,detail_min;
     unsigned selected,page,lines_per_page,linked_warnings;
+    unsigned remaining;
+    char timed_label[40];
     int mount_checked;
 } WarningView;
 
@@ -314,13 +316,21 @@ static struct Gadget *warning_button(WarningView *v,struct Gadget *last,UWORD id
     return CreateGadget(BUTTON_KIND,last,&ng,TAG_DONE);
 }
 
-static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWarning *warning) {
+static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWarning *warning,
+                            unsigned remaining) {
     unsigned i;
     struct Gadget *last;
     struct NewGadget ng={0};
     LONG left=v->window->BorderLeft+6;
-    LONG action_width=TextLength(v->window->RPort,(STRPTR)warning->button,
-                                 strlen(warning->button))+14;
+    const char *button=warning->button;
+    LONG action_width=TextLength(v->window->RPort,(STRPTR)button,strlen(button))+14;
+    if(warning->delay_seconds) {
+        if(remaining) {
+            snprintf(v->timed_label,sizeof(v->timed_label),"%.24s (%u)",button,remaining);
+            button=v->timed_label;
+        }
+        action_width+=TextLength(v->window->RPort,(STRPTR)" (10)",5);
+    }
     LONG more_width=TextLength(v->window->RPort,(STRPTR)"More",4)+14;
     const char *alternate=warning->can_keep?"Keep":warning->settings?"Settings":NULL;
     LONG alternate_width=alternate && !warning->confirmed?
@@ -351,7 +361,7 @@ static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWa
                                 GTLV_ShowSelected,0UL,GTLV_Selected,(ULONG)v->selected,
                                 GTLV_MakeVisible,(ULONG)v->selected,TAG_DONE);
     if(!last)return 0;
-    v->action=last=warning_button(v,last,WARN_ACTION,v->x+4,v->button_y,action_width,warning->button);
+    v->action=last=warning_button(v,last,WARN_ACTION,v->x+4,v->button_y,action_width,button);
     if(!last)return 0;
     v->settings=NULL;
     if(alternate_width) {
@@ -419,6 +429,7 @@ static void measure_warning_view(WarningView *v,struct RastPort *rp,
     for(i=0;i<warnings->count;++i) {
         const DollyWarning *warning=warnings->items[i];
         LONG width=warning_label_width(rp,warning->button)+14;
+        if(warning->delay_seconds)width+=warning_label_width(rp," (10)");
         if(warning->can_keep)width+=warning_label_width(rp,"Keep")+14;
         else if(warning->settings)width+=warning_label_width(rp,"Settings")+14;
         if(width>v->detail_min)v->detail_min=width;
@@ -450,10 +461,23 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     const DollyEndpoint *settings=NULL;
     struct RastPort measure=screen->RastPort;
     LONG inner_width,inner_height,min_width,min_height,max_width,max_height;
+    struct MsgPort *timer_port=NULL;
+    struct timerequest *timer=NULL;
     unsigned count=0,pending=0,line_capacity=0;
+    int timer_open=0,ticking=0;
     int result=0,done=0,rebuild=1;
     char (*lines)[97]=NULL;
     if(!warnings->count)return 1;
+    for(unsigned i=0;i<warnings->count;++i)
+        if(warnings->items[i]->delay_seconds) {
+            timer_port=CreateMsgPort();
+            if(!timer_port)goto out;
+            timer=(struct timerequest *)CreateIORequest(timer_port,sizeof(*timer));
+            if(!timer || OpenDevice(TIMERNAME,UNIT_VBLANK,&timer->tr_node,0))goto out;
+            timer_open=1;
+            break;
+        }
+    unsigned timed_item=DOLLY_WARNING_MAX;
     if(warnings->mount_destination)v.mount_checked=*warnings->mount_destination;
     SetFont(&measure,dolly_amiga_font(0));
     measure_warning_view(&v,&measure,warnings);
@@ -494,6 +518,15 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     while(!done) {
         struct IntuiMessage *msg;
         DollyWarning *warning=warnings->items[v.selected];
+        const int timed=v.selected==pending && warning->delay_seconds!=0;
+        if(timed && timed_item!=pending) {
+            timed_item=pending;
+            v.remaining=warning->delay_seconds;
+            start_second(timer);
+            ticking=1;
+        }
+        if(!timed && !ticking)v.remaining=0;
+        unsigned remaining=timed?v.remaining:0;
         if(rebuild) {
             unsigned needed=0;
             if(!wrap_lines(v.window->RPort,warning->text,v.width-12,NULL,&needed,768))break;
@@ -504,12 +537,13 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
                 line_capacity=needed;
             }
             count=0;
-            if(!wrap_lines(v.window->RPort,warning->text,v.width-12,lines,&count,line_capacity) ||
-               !warning_controls(&v,warnings,warning))break;
-            paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending,warning->can_keep);
+            if(!wrap_lines(v.window->RPort,warning->text,v.width-12,lines,&count,line_capacity))break;
+            if(!warning_controls(&v,warnings,warning,remaining))break;
+            paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending && !remaining,warning->can_keep);
             rebuild=0;
         }
-        WaitPort(v.window->UserPort);
+        Wait((1UL<<v.window->UserPort->mp_SigBit) |
+             (ticking?(1UL<<timer_port->mp_SigBit):0UL));
         while((msg=GT_GetIMsg(v.window->UserPort))!=NULL) {
             ULONG cls=msg->Class;
             UWORD code=msg->Code,id=0;
@@ -532,19 +566,19 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
             if(id==WARN_MOUNT)v.mount_checked=code!=0;
             if(done || rebuild)continue;
             if(cls==IDCMP_REFRESHWINDOW)
-                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending,warning->can_keep);
+                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending && !remaining,warning->can_keep);
             else if(id==WARN_LIST && code<warnings->count) {
                 v.selected=code;
                 v.page=0;
                 rebuild=1;
             } else if(id==WARN_NEXT) {
                 if(++v.page*v.lines_per_page>=count)v.page=0;
-                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending,warning->can_keep);
+                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending && !remaining,warning->can_keep);
             } else if(id==WARN_SETTINGS && warning->settings) {
                 settings=warning->settings;
                 done=1;
             } else if((id==WARN_ACTION || (id==WARN_KEEP && warning->can_keep)) &&
-                      v.selected==pending) {
+                      v.selected==pending && !remaining) {
                 int action_result=id==WARN_ACTION && warning->action?warning->action(warning):1;
                 if(action_result<0){done=1;continue;}
                 if(action_result>0) {
@@ -557,8 +591,26 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
                 rebuild=1;
             }
         }
+        if(!done && ticking && CheckIO(&timer->tr_node)) {
+            WaitIO(&timer->tr_node);
+            ticking=0;
+            if(timer->tr_node.io_Error)break;
+            --v.remaining;
+            if(v.selected==timed_item)rebuild=1;
+            if(v.remaining) {
+                start_second(timer);
+                ticking=1;
+            }
+        }
     }
 out:
+    if(ticking) {
+        if(!CheckIO(&timer->tr_node))AbortIO(&timer->tr_node);
+        WaitIO(&timer->tr_node);
+    }
+    if(timer_open)CloseDevice(&timer->tr_node);
+    if(timer)DeleteIORequest(&timer->tr_node);
+    if(timer_port)DeleteMsgPort(timer_port);
     if(v.window)CloseWindow(v.window);
     if(v.gadgets)FreeGadgets(v.gadgets);
     if(v.visual)FreeVisualInfo(v.visual);

@@ -361,7 +361,7 @@ int dolly_amiga_inhibit_mount(const DollyMountedVolume *mount,int suspend) {
 
 int dolly_amiga_unmount(const DollyMountedVolume *mount) {
     const ULONG read_flags=LDF_DEVICES|LDF_READ;
-    const ULONG write_flags=LDF_ALL|LDF_WRITE;
+    const ULONG write_flags=LDF_DEVICES|LDF_VOLUMES|LDF_WRITE;
     struct DosList *list,*entry;
     char name[DOLLY_MOUNT_NAME];
     size_t length=strlen(mount->device);
@@ -376,32 +376,25 @@ int dolly_amiga_unmount(const DollyMountedVolume *mount) {
     UnLockDosList(read_flags);
     if(!same)return 0;
 
-    /* Respect the filesystem's refusal, for instance when files are open.
-     * A handler that accepts shutdown must unregister or clear dol_Task. */
+    /* Send shutdown once. After a successful reply the saved port may
+     * already be stale, even if the DOS entry still holds its address. */
     if(mount->handler && !DoPkt(mount->handler,ACTION_DIE,0,0,0,0,0))return 0;
 
-    Forbid();
-    list=AttemptLockDosList(write_flags);
-    if(list) {
-        struct DosList *volume=list;
-        int volume_active=0;
-        while(mount->handler && (volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL)
-            if(volume->dol_Task==mount->handler) {
-                volume_active=1;
-                break;
-            }
-        entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
-        if(!volume_active && !entry)removed=1;
-        else if(!volume_active && entry==mount->entry && !entry->dol_Task) {
-            /* RemDosEntry locks the list itself. The write lock is available
-             * and no other task can run between unlock and removal. */
-            UnLockDosList(write_flags);
-            removed=RemDosEntry(entry)!=0;
-            list=NULL;
+    list=LockDosList(write_flags);
+    if(!list)return 0;
+    struct DosList *volume=list;
+    int volume_active=0;
+    while(mount->handler && (volume=NextDosEntry(volume,LDF_VOLUMES))!=NULL)
+        if(volume->dol_Task==mount->handler) {
+            volume_active=1;
+            break;
         }
-        if(list)UnLockDosList(write_flags);
-    }
-    Permit();
+    entry=FindDosEntry(list,(STRPTR)name,LDF_DEVICES);
+    if(!volume_active && !entry)removed=1;
+    else if(!volume_active && entry==mount->entry &&
+            (!entry->dol_Task || entry->dol_Task==mount->handler))
+        removed=RemDosEntry(entry)!=0;
+    UnLockDosList(write_flags);
     /* The DOS node and startup resources belong to its original owner. */
     return removed;
 }

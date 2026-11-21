@@ -15,9 +15,9 @@ This guide covers the native Dolly Alpha 3.6 prerelease for the MC68000 and Amig
 **Sector-to-sector**, **Smart Copy**, **Clone and resize** and **Restore Image** share this sequence.
 
 1. Dolly checks the relationship between the source and destination ranges. For image restores, it checks the volumes that contain every image file. A confirmed overlap blocks the operation. It shows a separate warning when it cannot identify the image volume. You can suppress the performance warning for transfers within one unit in **Settings**.
-2. Dolly automatically isolates mounted source volumes with `INHIBIT` and asks before unmounting destination volumes. If a DOS device entry has no active volume, Dolly quietly inhibits any running handler. On the destination, it also attempts to remove the entry. If removal fails, it can proceed while the entry remains inactive or the same handler remains inhibited with no active volume. The RDB `AUTOMOUNT` flag defines the automount policy. The live DOS list supplies the current mount state.
-3. **Warning Review** shows overwrite, size, mount and driver access warnings. Approve each item or cancel the operation. The review has no countdown. Dolly warns if it cannot verify the source inhibit. Smart Copy and Clone and resize require isolation before reading the bitmap.
-4. After approval, Dolly rechecks the media and geometry, compares the first and last sector fingerprints, and checks open driver handles. Unexplained handles raise a **Driver access** warning because Exec reports one count for the whole driver. A previously approved handle can close if the DOS state still passes the checks. An increase above the last accepted count stops further writes.
+2. Dolly automatically isolates mounted source volumes with `INHIBIT`. It inspects the destination range for existing filesystems.
+3. **Warning Review** shows overwrite, size and other compatibility warnings. When Dolly recognizes an existing destination volume, the warning names it, recommends a backup and enables **Proceed** after ten seconds. The final write confirmation also identifies the destination whose data will be overwritten.
+4. After the final approval, Dolly automatically unmounts the destination unit. A changed or busy DOS entry blocks the write. Dolly rechecks the device and partition geometry and compares the first and last sector fingerprints. It records the driver-wide open count and stops further writes if access increases or the mount state changes.
 5. Dolly writes bounded batches and flushes the driver. **Verify writes** adds a readback and byte comparison for each batch. After a successful transfer, Dolly may offer name changes. It releases source inhibits and retries removal of inactive destination entries. Eligible destination partitions can be mounted after final verification. The default is configurable in Settings.
 
 See [Device writes](DEVICE_WRITE.md) and [AmigaOS I/O](AMIGA_IO.md) for driver requirements.
@@ -72,7 +72,7 @@ See [Create Image](CREATE_IMAGE.md), [large image files](LARGE_IMAGE_FILES.md) a
 
 ### Clone and resize
 
-1. Choose two separate **Partition** endpoints with matching DOS/1 or DOS/3, 512-byte blocks and the same reserved block count. The destination partition size determines the resized filesystem size.
+1. Choose **Partition** or **Logical device** independently for each endpoint. Each logical device must resolve to a single in-range RDB partition. The two partitions must be separate and have matching DOS/1 or DOS/3, 512-byte blocks and the same reserved block count. The destination partition size determines the resized filesystem size.
 2. Dolly isolates the source and checks the bitmap and root entries. The write prototype requires an empty startup payload and a layout that keeps files and required bitmap blocks in their supported positions. Other supported layouts can be analyzed in read-only mode.
 3. **Warning Review** shows the proposed size, new root and destination overwrite. After approval, Dolly rechecks both RDBs and stages the resized metadata in memory.
 4. Dolly copies the resized filesystem to the destination partition, preserves the RDB and reopens the written metadata for verification. **Verify writes** also compares each written batch. A successful verification allows the name and mount review.

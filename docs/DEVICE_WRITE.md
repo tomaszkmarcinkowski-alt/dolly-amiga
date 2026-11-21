@@ -21,16 +21,18 @@ failure or cancellation. The file volume serving a Restore image stays
 available for reading. Restore therefore requires the image to reside
 on a different unit when the destination must be unmounted.
 
-On a raw destination, Dolly attempts to inhibit active handlers and unmount all DOS partitions
-on the selected physical unit. It asks each handler to shut down and
-removes the device entry only when the handler has released it. A
-successful unmount persists for the session, including after a
-cancelled transfer. Reboot to load the current destination partition
-table. A failure adds a decision to the same review before proceeding at the user's risk.
-The Exec open count is shared across units on the driver. Extra opens at
-preflight add a separate **Driver access** item after overwrite approval, even
-if the destination has no registered mounts. Dolly checks the selected units' mounts separately and stops if the
-driver count increases beyond the approved count or the relevant mount state changes.
+On a raw destination, Warning Review identifies recognized volumes and
+allows their overwrite confirmation after ten seconds. The final Proceed
+automatically takes the DOS filesystems on the destination unit offline.
+A handler that refuses shutdown or an entry that remains active blocks
+the write. A completed unmount persists for the session. The existing
+post-copy mount option can mount eligible partitions again.
+
+Dolly holds the appropriate DOS list write locks when removing a stopped
+device entry. It never sends a second shutdown request to the saved
+handler after successful shutdown. Once the destination is offline,
+the driver-wide open count is used as a baseline. An increase or a new
+mount stops the write. See the [RemDosEntry autodoc](https://d0.se/autodocs/dos.library/RemDosEntry).
 
 ## Confirmation and transfer
 
@@ -53,7 +55,7 @@ Copy and Restore collect their warnings after Start. Smart Copy requires verifie
 validated bitmap plan.
 The write review uses one window. The left list shows the warnings in order. The right panel shows
 details and the action for the current warning. Cancel aborts the whole
-operation. The review has no countdown. After approval of every item, Dolly checks geometry and partition selection again, compares
+operation. The existing-volume warning has a ten-second countdown. After approval, Dolly checks geometry and partition selection again, compares
 first- and last-sector CRCs, and checks for a busy target. A qualified
 ROM or UAE-IDE `scsi.device`, or an NSD driver advertising both
 `CMD_WRITE` and `CMD_UPDATE`, is required. Dolly also checks that
@@ -260,8 +262,10 @@ The output is a partition image without an RDB. Layouts that require
 relocating file blocks or retained bitmap metadata remain unsupported.
 ### Native Clone and resize prototype
 
-Select two disjoint RDB partitions with matching DOS/1 or DOS/3, 512-byte
-blocks and matching reserved block counts. The destination partition sets
+Select two disjoint RDB partitions through Partition or Logical device.
+Each logical device must match exactly one in-range RDB partition. Both
+partitions must have matching DOS/1 or DOS/3, 512-byte blocks and
+matching reserved block counts. The destination partition sets
 the new size. Dolly confirms the overwrite in Warning Review and uses
 the existing Copy mount checks, write and flush logic, and optional
 sector read-back verification. It stages the altered metadata in memory

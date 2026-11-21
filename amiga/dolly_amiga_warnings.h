@@ -15,7 +15,7 @@ struct DollyWarning {
     const char *button;
     DollyWarningAction action;
     void *context;
-    unsigned index;
+    unsigned index,delay_seconds;
     const DollyEndpoint *settings;
     int confirmed,can_keep,kept;
 };

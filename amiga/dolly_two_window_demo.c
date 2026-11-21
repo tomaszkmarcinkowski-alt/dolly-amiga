@@ -179,7 +179,7 @@ static DollyImageFormat selected_image_format(void) {
 static UWORD selected_operation=0;
 static unsigned berserk_mode=0; /* Future explicit opt-in; NORMAL only for now. */
 static unsigned source_mode_mask(void) {
-    if(selected_operation==DOLLY_DEMO_COPY && copy_mode==1u)
+    if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0u)
         return dolly_smart_copy_modes();
     return dolly_allowed_modes((DollyDemoOperation)selected_operation,
                                0u,DOLLY_ENDPOINT_NONE,berserk_mode);
@@ -189,7 +189,7 @@ static unsigned destination_mode_mask(void) {
        !dolly_mode_allowed(source_mode_mask(),
                           dolly_endpoint_mode(&selected_source)))
         return 0u;
-    if(selected_operation==DOLLY_DEMO_COPY && copy_mode==1u)
+    if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0u)
         return dolly_smart_copy_modes();
     return dolly_allowed_modes((DollyDemoOperation)selected_operation,
                                1u,selected_source.kind,berserk_mode);
@@ -322,11 +322,7 @@ static void clip_main(char *value,LONG width) {
         value[--len]='\0';
 }
 static int can_start_operation(void) {
-    if(selected_operation==DOLLY_DEMO_COPY && copy_mode==2u)
-        return selected_source.kind==DOLLY_ENDPOINT_PARTITION &&
-               selected_target.kind==DOLLY_ENDPOINT_PARTITION &&
-               dolly_demo_can_start(DOLLY_DEMO_COPY,&selected_source,&selected_target);
-    if(selected_operation==DOLLY_DEMO_COPY && copy_mode==1u)
+    if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0u)
         return dolly_smart_copy_can_start(&selected_source,&selected_target);
     return dolly_demo_can_start((DollyDemoOperation)selected_operation,
                                 &selected_source,&selected_target);
@@ -369,7 +365,7 @@ static void update_main_status(void) {
                                 &selected_source,&selected_target);
     text_copy(main_view.desc_label,sizeof(main_view.desc_label),
               selected_operation==DOLLY_DEMO_COPY && copy_mode?
-              (copy_mode==1?"Copy allocated OFS/FFS blocks.":"Clone an FFS partition to a different size."):
+              (copy_mode==1?"Copy allocated OFS/FFS blocks.":"Clone Source to a different size Destination"):
               demo_descriptions[selected_operation]);
     if(quit_blocked && operation_active())
         text_copy(main_view.status_label,sizeof(main_view.status_label),
@@ -474,7 +470,7 @@ static void update_main_status(void) {
     else if(selected_operation==DOLLY_DEMO_COPY && copy_mode!=0)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   can_start_operation()?(copy_mode==1u?"Ready for Smart Copy.":"Ready for FFS clone and resize."):
-                  (copy_mode==1u?"Check source and destination selection.":"Choose two RDB partitions."));
+                  "Choose distinct partitions or logical devices.");
     else if(!can)
         text_copy(main_view.status_label,sizeof(main_view.status_label),
                   "Check source/destination identity or overlap.");
