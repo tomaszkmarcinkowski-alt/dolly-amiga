@@ -58,5 +58,5 @@ typedef int (*DollyRdbRecoverySink)(void *context,const void *data,ULONG bytes);
 /* Returns NULL on success, or a literal diagnostic on failure. */
 const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,ULONG backup_blocks,BPTR backup,
-          DollyRdbRecoverySink save_recovery,void *context);
+          BPTR image_lock,BPTR recovery_lock,DollyRdbRecoverySink save_recovery,void *context);
 #endif

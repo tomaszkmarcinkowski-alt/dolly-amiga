@@ -838,8 +838,11 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         if(!last)return 0;
         v->settings=last;
         last=make_button(last,v,MAIN_START_ID,d->selector_x[1],d->controls_y,
-                         d->selector_w[1],"");
+                         d->selector_w[1],action_label(1));
         if(!last)return 0;
+        /* Keep the label on the gadget so Intuition can repaint it
+         * while tracking a pressed mouse button. */
+        if(last->GadgetText)last->GadgetText->FrontPen=system_pen(SHINEPEN);
         v->start=last;
         last=make_button(last,v,MAIN_STOP_ID,d->selector_x[2],d->controls_y,
                          d->selector_w[2],"Stop");
@@ -1048,22 +1051,6 @@ static void draw_endpoint_frames(void) {
                         busy || (!destination_mode_mask() && !destination_button_available()));
 }
 
-static void draw_main_start_label(void) {
-    DemoLayout *d=&main_view.l;
-    struct RastPort *rp=main_view.window->RPort;
-    const char *caption=main_view.action_label;
-    LONG x,y,width;
-    if(!main_view.start || !caption)return;
-    width=TextLength(rp,(STRPTR)caption,strlen(caption));
-    SetDrMd(rp,JAM1);
-    SetAPen(rp,system_pen(SHINEPEN));
-    x=d->selector_x[1]+(d->selector_w[1]-width)/2;
-    y=d->controls_y+(d->selector_h-rp->TxHeight)/2;
-    Move(rp,x,y+rp->TxBaseline);
-    Text(rp,(STRPTR)caption,strlen(caption));
-    if(main_view.start->Flags&GFLG_DISABLED)
-        ghost_area(rp,x,y,x+width-1,y+rp->TxHeight-1);
-}
 /* Both windows reserve space for the percentage inside the same recessed
  * well. Sheep Counter repaints only the changed fill and caption. */
 static void draw_progress_well(DollyDemoView *v,LONG left,LONG y,LONG right,int full) {
@@ -1234,10 +1221,7 @@ static void draw_full(DollyDemoView *v,int main_window) {
     else draw_sheep_static();
     RefreshGList(v->gadgets,v->window,NULL,-1);
     GT_RefreshWindow(v->window,NULL);
-    if(main_window) {
-        draw_main_progress();
-        draw_main_start_label();
-    }
+    if(main_window)draw_main_progress();
 }
 static int show_sheep(void) {
     ULONG top=(ULONG)public_screen->BarHeight+1ul;
@@ -1329,7 +1313,6 @@ static void update_main_actions(void) {
     if(!main_view.gadgets_detached) {
         draw_endpoint_frames();
         draw_main_progress();
-        draw_main_start_label();
     }
 }
 /* Rebuild only after draining the window queues, whose IAddress fields

@@ -1488,3 +1488,29 @@ transfer. Its DOS/3 results at 400 MiB and 95 MiB were byte-identical
 to the independently checked images from the host patch prototype.
 Native transfer, Warning Review and remount testing in WinUAE remain
 pending.
+
+### WinUAE cancellation retest before the destination mount build
+
+The tester cancelled Clone and resize on the first preflight warning,
+started again, and cancelled on the second warning. Dolly stayed
+responsive and could start the operation again after both cancellations.
+On the third attempt, the tester approved both warnings and the transfer
+completed. The destination mounting option was left unchecked.
+Automatic mounting remains to be verified with the destination mount
+test build.
+
+The Alpha 3.6 destination mount test build successfully dismounted EX0:
+in the reported WinUAE configuration. Transfer completion and automatic
+mounting in that run were pending when the result was reported.
+
+The tester confirmed that the Alpha 3.6 destination mount test build
+dismounted EX0: and automatically mounted the destination partition
+after Clone and resize in WinUAE.
+
+The raw-write review is shared by Sector-to-sector, Smart Copy, Clone
+and resize, and Restore Image. The whole-device review lists detected
+OFS/FFS volumes and also lists other mounted volumes in the overwritten
+range. Restore RDB now uses the same automatic dismount after its final
+timed approval. Its metadata-only scope, required recovery copy and
+mandatory readback verification remain in force. The revised Restore RDB
+flow still needs a WinUAE run.

@@ -28,7 +28,6 @@ typedef struct DollyWarnings {
 } DollyWarnings;
 DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,
                                const char *details,const char *button);
-int dolly_warning_risk(DollyWarning *warning,const char *details);
 int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings);
 void dolly_warnings_clear(DollyWarnings *warnings);
 #endif

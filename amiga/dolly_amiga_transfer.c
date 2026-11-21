@@ -165,61 +165,15 @@ static int mounts_unchanged(DollyAmigaTransfer *t,int source) {
     }
     return 1;
 }
-static int apply_unmount_warning(DollyWarning *warning) {
-    DollyAmigaTransfer *t=warning->context;
-    DollyMountedVolume *mount=&t->target_mounts.entries[warning->index];
-    const DollyMountedVolume *current;
-    char message[300];
-    if(!dolly_amiga_mounted_extents(&t->device,0,t->target.capacity,1,&t->observed_mounts))
-        return -1;
-    current=find_mount(&t->observed_mounts,mount);
-    if(!current || current->handler!=mount->handler || strcmp(current->volume,mount->volume)) {
-        t->failure="A mount changed. Start the operation again.";
-        return -1;
-    }
-    if(mount->handler)mount->suspended=dolly_amiga_inhibit_mount(mount,1);
-    if((!mount->handler || mount->suspended) && dolly_amiga_unmount(mount)) {
-        mount->suspended=0;
-        return 1;
-    }
-    if(!dolly_amiga_mounted_extents(&t->device,0,t->target.capacity,1,&t->observed_mounts))
-        return -1;
-    current=find_mount(&t->observed_mounts,mount);
-    if(current) {
-        int suspended=mount->suspended && mount->handler==current->handler;
-        *mount=*current;
-        mount->suspended=suspended;
-    }
-    snprintf(message,sizeof(message),"Destination: \"%s\"\nVolume: \"%s\"\n"
-             "Dolly could not confirm that the filesystem was taken offline. "
-             "Continuing while it is active can corrupt data. Proceed at your own risk.",
-             mount->device,mount->volume[0]?mount->volume:"name unavailable");
-    mount->allow_present=1;
-    return dolly_warning_risk(warning,message);
-}
-/* A registered device with no DOS volume can still have a live handler.
- * Hold its inhibit across raw I/O and allow only the same empty entry,
- * or a stopped handler, to remain if shutdown fails. */
-static int prepare_empty_mount(DollyAmigaTransfer *t,DollyMountedVolume *mount,int source,
+/* A registered source without a volume can still have a live handler. */
+static int prepare_empty_source(DollyAmigaTransfer *t,DollyMountedVolume *mount,
                                 const DollyPhysicalEntry *device,uint64_t start,uint64_t length) {
-    DollyMountedVolume *shared;
     const DollyMountedVolume *live;
-    if(mount->volume[0])return 0;
-
-    shared=source?NULL:find_mount(&t->source_mounts,mount);
-    if(shared && shared->quiet_offline && shared->handler==mount->handler) {
-        mount->suspended=shared->suspended;
-        shared->suspended=0; /* Destination owns the inhibit from here on. */
-    }
-    if(mount->handler && !mount->suspended) {
+    if(mount->handler) {
         mount->suspended=dolly_amiga_inhibit_mount(mount,1);
-        if(!mount->suspended)return 0; /* Use the explicit warning path. */
+        if(!mount->suspended)return 0;
     }
     mount->quiet_offline=1;
-    if(!source && dolly_amiga_unmount(mount)) {
-        mount->suspended=0;
-        return 1;
-    }
     if(!dolly_amiga_mounted_extents(device,start,length,1,&t->observed_mounts))return -1;
     live=find_mount(&t->observed_mounts,mount);
     if(!live || !live->handler)mount->suspended=0;
@@ -238,7 +192,6 @@ static int collect_mount_warnings(DollyAmigaTransfer *t,DollyWarnings *warnings,
     if(!dolly_amiga_mounted_extents(device,start,length,!source,list))return 0;
     for(i=0;i<list->count;++i) {
         DollyMountedVolume *mount=&list->entries[i];
-        DollyWarning *warning;
         char message[250],title[46];
         if(source && find_mount(&t->target_mounts,mount))continue;
         if(!source) {
@@ -249,43 +202,29 @@ static int collect_mount_warnings(DollyAmigaTransfer *t,DollyWarnings *warnings,
                     t->failure="An image part uses a filesystem that must be unmounted.";
                     return 0;
                 }
+            continue;
         }
-        if(t->target.length && source && !mount->volume[0]) {
-            int result=prepare_empty_mount(t,mount,source,device,start,length);
+        if(!mount->volume[0]) {
+            int result=prepare_empty_source(t,mount,device,start,length);
             if(result<0) {
                 t->failure="An empty DOS device changed during isolation.";
                 return 0;
             }
             if(result>0)continue;
         }
-        if(source) {
-            const DollyMountedVolume *live;
-            mount->suspended=dolly_amiga_inhibit_mount(mount,1);
-            if(!dolly_amiga_mounted_extents(device,start,length,0,&t->observed_mounts))
-                return 0;
-            live=find_mount(&t->observed_mounts,mount);
-            if(live && live->handler!=mount->handler)return 0;
-            if(!live || (mount->suspended && !live->volume[0]))continue;
-            mount->allow_present=1;
-            snprintf(title,sizeof(title),"Source %.29s",mount->device);
-            snprintf(message,sizeof(message),
-                     "Source: \"%s\"\nDolly could not verify Inhibit. "
-                     "The source can change during copying. Proceed at your own risk.",mount->device);
-            if(!dolly_warning_add(warnings,title,message,"Proceed"))return 0;
-            continue;
-        }
-        /* Raw writes take destinations offline after the final approval.
-         * Standalone RDB restore retains its own confirmation workflow. */
-        if(t->target.length)continue;
-        snprintf(title,sizeof(title),"Destination %.29s",mount->device);
-        snprintf(message,sizeof(message),"Destination: \"%s\"\nMounted volume: \"%s\"\n"
-                 "Unmount this partition? A reboot may be needed even if you cancel.",
-                 mount->device,mount->volume[0]?mount->volume:"name unavailable");
-        warning=dolly_warning_add(warnings,title,message,"Unmount");
-        if(!warning)return 0;
-        warning->action=apply_unmount_warning;
-        warning->context=t;
-        warning->index=i;
+        const DollyMountedVolume *live;
+        mount->suspended=dolly_amiga_inhibit_mount(mount,1);
+        if(!dolly_amiga_mounted_extents(device,start,length,0,&t->observed_mounts))
+            return 0;
+        live=find_mount(&t->observed_mounts,mount);
+        if(live && live->handler!=mount->handler)return 0;
+        if(!live || (mount->suspended && !live->volume[0]))continue;
+        mount->allow_present=1;
+        snprintf(title,sizeof(title),"Source %.29s",mount->device);
+        snprintf(message,sizeof(message),
+                 "Source: \"%s\"\nDolly could not verify Inhibit. "
+                 "The source can change during copying. Proceed at your own risk.",mount->device);
+        if(!dolly_warning_add(warnings,title,message,"Proceed"))return 0;
     }
     return 1;
 }
@@ -381,23 +320,10 @@ static int approve_write_warning(DollyWarning *warning) {
     t->expected_opens=open_count;
     return 1;
 }
-static void release_inhibited_mounts(DollyAmigaTransfer *t,DollyMountList *list,int keep_inhibited) {
+static void release_inhibited_mounts(DollyAmigaTransfer *t,DollyMountList *list) {
     unsigned i;
     for(i=0;i<list->count;++i) {
         DollyMountedVolume *mount=&list->entries[i];
-        if(keep_inhibited && (mount->suspended || mount->quiet_offline)) {
-            if(mount->quiet_offline &&
-               dolly_amiga_mounted_extents(&t->device,0,t->target.capacity,1,&t->observed_mounts)) {
-                const DollyMountedVolume *live=find_mount(&t->observed_mounts,mount);
-                /* A live handler already had a chance to shut down before
-                 * the write. Do not send another synchronous ACTION_DIE
-                 * after replacing the filesystem it knows about. */
-                if(!live || (!live->handler && quiet_mount_matches(mount,live) &&
-                             dolly_amiga_unmount(live)))continue;
-            }
-            t->destination_reload_needed=1;
-            continue;
-        }
         if(mount->suspended && !dolly_amiga_inhibit_mount(mount,0)) {
             char message[120];
             snprintf(message,sizeof(message),"Could not re-enable \"%s\".",mount->device);
@@ -426,7 +352,11 @@ int dolly_amiga_prepare_rdb_unmount(struct Window *parent,const char *driver,ULO
     snprintf(t->device.driver,sizeof(t->device.driver),"%s",driver);
     t->device.unit=unit;
     t->target.capacity=capacity;
-    if(!collect_mount_warnings(t,&warnings,0))goto out;
+    if(!collect_mount_warnings(t,&warnings,0)) {
+        dolly_amiga_role_request(parent,"Dolly - Restore RDB",
+             t->failure?t->failure:"Cannot inspect destination mounts.","OK",NULL,NULL);
+        goto out;
+    }
     for(i=0;i<t->target_mounts.count;++i) {
         if(dolly_amiga_lock_uses_mount(recovery_drawer,&t->target_mounts.entries[i])) {
             dolly_amiga_role_request(parent,"Dolly - Restore RDB",
@@ -434,11 +364,11 @@ int dolly_amiga_prepare_rdb_unmount(struct Window *parent,const char *driver,ULO
             goto out;
         }
     }
-    ok=dolly_warnings_review(parent,&warnings) &&
-       dolly_amiga_unit_registered(driver,unit)==0;
+    ok=unmount_transfer_destination(t);
+    if(!ok)dolly_amiga_role_request(parent,"Dolly - Restore RDB",
+             t->failure?t->failure:"Cannot verify that the destination is offline.","OK",NULL,NULL);
 out:
     dolly_warnings_clear(&warnings);
-    release_inhibited_mounts(t,&t->target_mounts,0);
     free(t);
     return ok;
 }
@@ -485,8 +415,7 @@ void dolly_amiga_transfer_close(DollyAmigaTransfer *t) {
     t->buffer=NULL;
     t->copy_extent=NULL;
     t->opened=0;
-    release_inhibited_mounts(t,&t->source_mounts,0);
-    release_inhibited_mounts(t,&t->target_mounts,t->may_have_written);
+    release_inhibited_mounts(t,&t->source_mounts);
 }
 
 static DollyRestoreAssessment assess_image(const DollyAmigaTransfer *t,
@@ -865,10 +794,15 @@ static int add_volume_overwrite_warning(DollyWarnings *warnings,const char *name
 static int collect_volume_overwrite_warnings(DollyAmigaTransfer *t,const DollySurfaceScan *disk,
                                              uint64_t write_bytes,DollyWarnings *warnings) {
     DollyNativePartitionMap *map=malloc(sizeof(*map));
-    int ok=1,found=0;
+    unsigned recognized_count=0;
+    unsigned char recognized[DOLLY_PART_MAX]={0};
+    int ok=0;
     if(!map)return 0;
+    if(!dolly_amiga_mounted_extents(&t->device,t->target.start,write_bytes,0,&t->observed_mounts))
+        goto done;
     if(dolly_amiga_partition_scan(disk->device.driver,disk->device.unit,&disk->geometry,map) &&
        map->format==DOLLY_NATIVE_PARTITION_RDB) {
+        recognized_count=map->count;
         for(unsigned i=0;i<map->count;++i) {
             const DollyNativePartition *part=&map->parts[i];
             char label[32],size[40],details[210];
@@ -879,29 +813,36 @@ static int collect_volume_overwrite_warnings(DollyAmigaTransfer *t,const DollySu
                      "Destination partition: %.31s. Volume: %.31s.\n"
                      "Filesystem: OFS/FFS (DOS/%lu). Partition capacity: %s.",
                      part->label,label,(unsigned long)(part->dos_type&255u),size);
-            if(!add_volume_overwrite_warning(warnings,label,details)) {
-                ok=0;
-                break;
-            }
-            found=1;
+            if(!add_volume_overwrite_warning(warnings,label,details))goto done;
+            recognized[i]=1;
         }
     }
-    free(map);
-    if(!ok || found)return ok;
-
-    /* A mounted volume also establishes a filesystem when the raw format
-     * cannot be recognized. Only inspect entries in the overwritten range. */
-    if(!dolly_amiga_mounted_extents(&t->device,t->target.start,write_bytes,0,&t->observed_mounts))
-        return 0;
+    /* A mounted filesystem may also exist alongside a recognized OFS/FFS
+     * volume. Skip its DOS warning only when that same extent was listed. */
     for(unsigned i=0;i<t->observed_mounts.count;++i) {
         const DollyMountedVolume *mount=&t->observed_mounts.entries[i];
+        DollyPhysicalEntry device;
+        uint64_t start,length;
+        ULONG sector;
+        unsigned j;
         char details[135];
         if(!mount->volume[0])continue;
+        if(recognized_count &&
+           dolly_logical_extent(mount->device,&device,&start,&length,&sector,NULL)) {
+            for(j=0;j<recognized_count;++j)
+                if(recognized[j] && device.unit==t->device.unit &&
+                   !strcasecmp(device.driver,t->device.driver) &&
+                   map->parts[j].start_bytes==start && map->parts[j].length_bytes==length)break;
+            if(j<recognized_count)continue;
+        }
         snprintf(details,sizeof(details),"Destination device: %.41s. Mounted volume: %.41s.",
                  mount->device,mount->volume);
-        if(!add_volume_overwrite_warning(warnings,mount->volume,details))return 0;
+        if(!add_volume_overwrite_warning(warnings,mount->volume,details))goto done;
     }
-    return 1;
+    ok=1;
+done:
+    free(map);
+    return ok;
 }
 
 int dolly_amiga_transfer_open(DollyAmigaTransfer *t,struct Window *parent,

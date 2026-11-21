@@ -27,7 +27,7 @@ See [Device writes](DEVICE_WRITE.md) and [AmigaOS I/O](AMIGA_IO.md) for driver r
 1. Choose **Inventory** with **Physical device** or **Partition**. Dolly inspects the selected unit's partition table and displays its driver, unit, name, geometry, capacity and ATA IDENTIFY data when available.
 2. Select a row on the left to view partition details. Clicking a row in the header or details list copies its text to the clipboard. The left list selects the partition.
 3. **Backup RDB** opens ASL and copies the validated range from LBA 0 through the reserved RDB area. The button is disabled when Dolly cannot establish a safe range. **Backup MBR** exports the full LBA 0 sector for supported layouts.
-4. **Restore RDB** opens a ten-second confirmation. Dolly checks that the backup matches the destination RDB, that the driver qualifies and that the destination is offline. It saves a mandatory recovery copy, rereads the current metadata, writes the changed sectors and verifies the full reserved area. This operation recovers compatible RDB metadata. **Restore MBR** is planned.
+4. **Restore RDB** opens a ten-second confirmation. Dolly checks the backup against the destination RDB and qualifies the driver. After final approval, it takes the destination offline automatically, saves a mandatory recovery copy, rechecks the current metadata, writes the changed sectors and verifies the full reserved area. This operation recovers compatible RDB metadata. **Restore MBR** is planned.
 
 See [Sheep Inventory](SHEEP_INVENTORY.md).
 

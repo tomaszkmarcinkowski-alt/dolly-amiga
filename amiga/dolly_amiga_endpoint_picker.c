@@ -134,7 +134,8 @@ static PickerGeometry picker_geometry(const DollyEndpointPicker *p) {
     LONG row=picker_row_height(w->RPort->Font);
     LONG step=row+3;
     LONG header=w->BorderTop+(compact?8:13);
-    LONG list_top=header+row+w->RPort->TxHeight+13;
+    LONG list_top=header+w->RPort->TxHeight+
+                  (p->mode==DOLLY_MODE_LOGICAL?4:row+13);
     LONG action=w->Height-w->BorderBottom-row-(compact?7:15);
     LONG preview=action-step;
     LONG first=action-4*step;
@@ -810,15 +811,17 @@ static void captions(DollyEndpointPicker *p) {
     info=GetScreenDrawInfo(p->screen);
     SetDrMd(rp,JAM1);
     SetAPen(rp,info?info->dri_Pens[TEXTPEN]:1u);
-    Move(rp,20,g.heading_y);
-    if(p->role)
-        Text(rp,(STRPTR)"Select Destination Medium",25);
-    else
-        Text(rp,(STRPTR)"Select Source Medium",20);
-    if(p->mode_count==1u) {
-        STRPTR name=p->allowed_mode_labels[0];
-        Move(rp,g.mode_x,g.heading_y);
-        Text(rp,name,strlen((const char *)name));
+    if(p->mode!=DOLLY_MODE_LOGICAL) {
+        Move(rp,20,g.heading_y);
+        if(p->role)
+            Text(rp,(STRPTR)"Select Destination Medium",25);
+        else
+            Text(rp,(STRPTR)"Select Source Medium",20);
+        if(p->mode_count==1u) {
+            STRPTR name=p->allowed_mode_labels[0];
+            Move(rp,g.mode_x,g.heading_y);
+            Text(rp,name,strlen((const char *)name));
+        }
     }
     if(p->mode==DOLLY_MODE_PHYSICAL || p->mode==DOLLY_MODE_PARTITION) {
         WORD x,w;
@@ -962,7 +965,7 @@ static int rebuild(DollyEndpointPicker *p) {
     p->geometry_info_text=NULL;p->ata_info_text=NULL;
     last=CreateContext(&p->gadgets);
     if(!last)return 0;
-    if(p->mode_count>1u) {
+    if(p->mode_count>1u && p->mode!=DOLLY_MODE_LOGICAL) {
         last=cycle(last,p);
         if(!last)return 0;
         p->mode_cycle=last;

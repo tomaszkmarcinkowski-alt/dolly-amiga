@@ -296,18 +296,9 @@ DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,
     return warning;
 }
 
-int dolly_warning_risk(DollyWarning *warning,const char *details) {
-    char *text=malloc(strlen(details)+1);
-    if(!text)return -1;
-    strcpy(text,details);
-    free(warning->text);
-    warning->text=text;
-    warning->button="Proceed";
-    warning->action=NULL;
-    return 0;
-}
-
 enum { WARN_LIST=1,WARN_ACTION,WARN_SETTINGS,WARN_NEXT,WARN_CANCEL,WARN_KEEP,WARN_MOUNT };
+enum { WARN_MOUNT_WIDTH=26 };
+static const char mount_label[]="Mount destination volumes";
 typedef struct WarningView {
     struct Window *window;
     struct DrawInfo *info;
@@ -388,12 +379,12 @@ static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWa
                          v->y+v->height+5,cancel_width,"Cancel");
     if(!last)return 0;
     if(warnings->mount_destination && warning==warnings->mount_summary) {
-        ng.ng_LeftEdge=(WORD)left;
-        ng.ng_TopEdge=(WORD)(v->y+v->height+5);
-        ng.ng_Width=26;
+        ng.ng_LeftEdge=(WORD)(v->x+6);
+        ng.ng_TopEdge=(WORD)(v->button_y-v->row-4);
+        ng.ng_Width=WARN_MOUNT_WIDTH;
         ng.ng_Height=(WORD)v->row;
         ng.ng_GadgetID=WARN_MOUNT;
-        ng.ng_GadgetText=(STRPTR)"Mount destination volumes";
+        ng.ng_GadgetText=(STRPTR)mount_label;
         ng.ng_Flags=PLACETEXT_RIGHT;
         last=CreateGadget(CHECKBOX_KIND,last,&ng,GTCB_Checked,(ULONG)v->mount_checked,TAG_DONE);
         if(!last)return 0;
@@ -447,6 +438,10 @@ static void measure_warning_view(WarningView *v,struct RastPort *rp,
         if(width>v->detail_min)v->detail_min=width;
     }
     v->detail_min+=warning_label_width(rp,"More")+34;
+    if(warnings->mount_destination) {
+        LONG width=warning_label_width(rp,mount_label)+WARN_MOUNT_WIDTH+18;
+        if(width>v->detail_min)v->detail_min=width;
+    }
     if(v->detail_min<230)v->detail_min=230;
 }
 
@@ -463,7 +458,6 @@ static int layout_warning_view(WarningView *v) {
     v->height=w->Height-w->BorderBottom-v->y-v->row-10;
     v->button_y=v->y+v->height-v->row-4;
     if(v->button_y-v->y<3*v->row+9)return 0;
-    v->lines_per_page=(v->button_y-v->y-9)/v->row;
     return 1;
 }
 
@@ -494,11 +488,6 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     SetFont(&measure,dolly_amiga_font(0));
     measure_warning_view(&v,&measure,warnings);
     min_width=v.list_min+v.detail_min+18;
-    if(warnings->mount_destination) {
-        LONG footer=warning_label_width(&measure,"Mount destination volumes")+
-                    warning_label_width(&measure,"Cancel")+60;
-        if(footer>min_width)min_width=footer;
-    }
     min_height=5*v.row+28;
     max_width=screen->Width;
     max_height=screen->Height-screen->BarHeight-1;
@@ -541,6 +530,10 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
         unsigned remaining=timed?v.remaining:0;
         if(rebuild) {
             unsigned needed=0;
+            LONG text_bottom=v.button_y;
+            if(warnings->mount_destination && warning==warnings->mount_summary)
+                text_bottom-=v.row;
+            v.lines_per_page=(text_bottom-v.y-9)/v.row;
             if(!wrap_lines(v.window->RPort,warning->text,v.width-12,NULL,&needed,768))break;
             if(needed>line_capacity) {
                 char (*larger)[97]=realloc(lines,needed*sizeof(*lines));

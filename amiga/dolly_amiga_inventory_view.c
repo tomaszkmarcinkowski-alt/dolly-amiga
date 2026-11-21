@@ -672,19 +672,18 @@ static void restore_partition_table(DollyNativeInventoryView *v) {
     memcpy(drawer,recovery,prefix);
     drawer[prefix]=0;
     recovery_lock=Lock((STRPTR)drawer,ACCESS_READ);
-    if(!image_lock || !recovery_lock ||
-       !dolly_amiga_prepare_rdb_unmount(v->window,v->driver,v->unit,
-            v->geometry.block_count*v->geometry.block_bytes,image_lock,recovery_lock)) {
+    if(!image_lock || !recovery_lock) {
         if(image_lock)UnLock(image_lock);
         if(recovery_lock)UnLock(recovery_lock);
         Close(file);
-        set_status(v,"Restore RDB cancelled. Destination must be offline.");
+        show_restore_failure(v,"Cannot verify the backup and recovery locations.");
         return;
     }
+    reason=dolly_amiga_restore_rdb(v->window,v->driver,v->unit,&v->geometry,
+                 v->map.rdb_backup_blocks,file,image_lock,recovery_lock,
+                 save_rdb_recovery,recovery);
     UnLock(image_lock);
     UnLock(recovery_lock);
-    reason=dolly_amiga_restore_rdb(v->window,v->driver,v->unit,&v->geometry,
-                 v->map.rdb_backup_blocks,file,save_rdb_recovery,recovery);
     Close(file);
     if(reason)show_restore_failure(v,reason);
     else set_status(v,"RDB checked. Reopen Inventory to refresh the device snapshot.");

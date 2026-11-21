@@ -3,6 +3,7 @@
 #include "dolly_amiga_destructive.h"
 #include "dolly_amiga_source.h"
 #include "dolly_amiga_write.h"
+#include "dolly_amiga_transfer.h"
 #include "dolly_surface_log.h"
 #include <exec/devices.h>
 #include <stdlib.h>
@@ -465,9 +466,13 @@ static int restore_maps_match(const DollyNativePartitionMap *old,
     return 1;
 }
 
-static int restore_unit_idle(const char *driver,ULONG unit,const struct IOStdReq *io) {
-    return dolly_amiga_unit_registered(driver,unit)==0 && io->io_Device &&
-           io->io_Device->dd_Library.lib_OpenCnt==1;
+static int restore_unit_idle(const char *driver,ULONG unit,const struct IOStdReq *io,
+                             unsigned *open_count) {
+    if(dolly_amiga_unit_registered(driver,unit)!=0 || !io->io_Device)return 0;
+    unsigned current=io->io_Device->dd_Library.lib_OpenCnt;
+    if(!current || current>*open_count)return 0;
+    *open_count=current;
+    return 1;
 }
 
 static int restore_sector_matches(Reader *reader,ULONG block,const UBYTE *expected) {
@@ -479,7 +484,7 @@ static int restore_sector_matches(Reader *reader,ULONG block,const UBYTE *expect
 
 const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULONG unit,
           const DollyMediaGeometry *geometry,ULONG blocks,BPTR backup,
-          DollyRdbRecoverySink save_recovery,void *context) {
+          BPTR image_lock,BPTR recovery_lock,DollyRdbRecoverySink save_recovery,void *context) {
     struct MsgPort *port=NULL;
     struct IOExtTD *request=NULL;
     DollyNativePartitionMap *old=NULL,*replacement=NULL;
@@ -488,15 +493,14 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     Reader reader={0};
     UBYTE *bytes=NULL,*previous=NULL;
     ULONG size,i,header=RDB_END;
-    unsigned pass;
+    unsigned pass,open_count;
     int opened=0,changed=0;
     char unit_name[112],size_text[48],warning[160];
     const char *failure="Restore RDB requires an offline ROM scsi.device unit with 512 B sectors.";
-    if(!parent || !driver || !geometry || !backup || !save_recovery ||
+    if(!parent || !driver || !geometry || !backup || !image_lock || !recovery_lock || !save_recovery ||
        !geometry->capacity_valid ||
        geometry->block_bytes!=BLK || blocks<16 || blocks>DOLLY_RDB_RESTORE_MAX_BLOCKS ||
        blocks>geometry->block_count || strcmp(driver,"scsi.device")!=0 ||
-       dolly_amiga_unit_registered(driver,unit)!=0 ||
        !dolly_amiga_probe_rom_scsi(unit))return failure;
     size=blocks*BLK;
     failure="Cannot verify current target capacity.";
@@ -516,8 +520,6 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
     opened=1;
     reader.io=request;
     reader.total_bytes=live.block_count*BLK;
-    failure="Target is registered in AmigaDOS or the device is already in use.";
-    if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
     failure="Backup size or read error. Expected the complete reserved RDB area.";
     if(Read(backup,bytes,size)!=(LONG)size || Read(backup,reader.buffer,1)!=0)goto out;
     failure="Cannot read current RDB sectors.";
@@ -562,14 +564,17 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
         driver,(unsigned long)unit,(unsigned long)(blocks-1));
     failure="Restore RDB cancelled.";
     if(!dolly_amiga_confirm_destructive(parent,warning))goto out;
+    if(!dolly_amiga_prepare_rdb_unmount(parent,driver,unit,reader.total_bytes,
+                                       image_lock,recovery_lock))goto out;
+    open_count=request->iotd_Req.io_Device->dd_Library.lib_OpenCnt;
     failure="Could not save the current RDB as the recovery copy.";
     if(!save_recovery(context,previous,size))goto out;
     reader.snapshot=NULL;
     failure="Target changed or became busy. Restore stopped before writing.";
-    if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+    if(!restore_unit_idle(driver,unit,&request->iotd_Req,&open_count))goto out;
     for(i=0;i<blocks;++i)
         if(!restore_sector_matches(&reader,i,previous+i*BLK))goto out;
-    if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+    if(!restore_unit_idle(driver,unit,&request->iotd_Req,&open_count))goto out;
     /* Qualify UPDATE before the first modification. Readback is mandatory. */
     request->iotd_Req.io_Command=CMD_UPDATE;
     request->iotd_Req.io_Flags=0;
@@ -588,7 +593,7 @@ const char *dolly_amiga_restore_rdb(struct Window *parent,const char *driver,ULO
                 continue;
             failure="Target became busy during Restore RDB. Restore stopped.\n"
                     "The RDB may be partially updated. Keep the recovery copy.";
-            if(!restore_unit_idle(driver,unit,&request->iotd_Req))goto out;
+            if(!restore_unit_idle(driver,unit,&request->iotd_Req,&open_count))goto out;
             failure="RDB write or verification failed. The RDB may be partially updated.\n"
                     "Use the recovery copy from an independent recovery environment.";
             if(dolly_amiga_write_batch(&target,(uint64_t)i*BLK,bytes+i*BLK,BLK,1)
