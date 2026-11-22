@@ -754,9 +754,14 @@ void dolly_amiga_describe_file(const DollyEndpoint *file,char *out,size_t capaci
     if(!handle)return;
     if(dolly_amiga_image_file_size(handle,&size)==DOLLY_BLOCK_OK) {
         LONG length=(LONG)(size<sizeof(header)?size:sizeof(header));
-        if(Read(handle,header,length)!=length ||
-           !describe_dly_header(header,(size_t)length,size,out,capacity))
+        int read_ok=Read(handle,header,length)==length;
+        if(!read_ok || !describe_dly_header(header,(size_t)length,size,out,capacity)) {
+            if(read_ok) {
+                DollyAppleMedia media=dolly_amiga_probe_apple_file(handle,size);
+                if(media!=DOLLY_APPLE_UNKNOWN)hint=dolly_apple_media_name(media);
+            }
             snprintf(out,capacity,"Type: %s | Size: %lu bytes",hint,(unsigned long)size);
+        }
     }
     Close(handle);
 }
@@ -1103,6 +1108,9 @@ static int pick_file(struct Window *parent,DollyEndpoint *result,unsigned destin
 }
 int dolly_amiga_pick_file(struct Window *parent,DollyEndpoint *result,unsigned destination) {
     return pick_file(parent,result,destination,NULL,NULL);
+}
+int dolly_amiga_pick_titled_file(struct Window *parent,DollyEndpoint *result,const char *title) {
+    return pick_file(parent,result,0,title,NULL);
 }
 int dolly_amiga_pick_named_file(struct Window *parent,DollyEndpoint *result,const char *name) {
     char title[312];

@@ -10,6 +10,7 @@ def run(tool, *args, success=True):
     assert (result.returncode == 0) == success, (
         result.args, result.stdout, result.stderr
     )
+    return result
 
 
 def test_ffs_resize(tool, folder):
@@ -61,10 +62,112 @@ def test_ffs_resize(tool, folder):
     assert not rejected.exists()
 
 
+def test_apple_export(tool, folder):
+    sector = 512
+
+    def entry(index, name, kind, start, length, data_start=0, data_length=None):
+        at = index * sector
+        content[at:at + sector] = bytes(sector)
+        struct.pack_into(">HHIII32s32sII", content, at, 0x504d, 0, 4, start,
+                         length, name, kind, data_start,
+                         length if data_length is None else data_length)
+
+    content = bytearray(32 * sector)
+    struct.pack_into(">HHI8xHIHH", content, 0, 0x4552, sector, 30, 1, 5, 1, 1)
+    entry(1, b"Apple", b"Apple_partition_map", 1, 4)
+    entry(2, b"Driver", b"Apple_Driver43", 5, 1)
+    entry(3, b"System", b"Apple_HFS", 6, 10, 1, 8)
+    entry(4, b"Data", b"Apple_HFS", 16, 14)
+    content[5 * sector:7 * sector] = b"D" * (2 * sector)
+    content[30 * sector:] = b"T" * (2 * sector)
+    struct.pack_into(">HH", content, 9 * sector, 0x482b, 4)
+    struct.pack_into(">II", content, 9 * sector + 40, sector, 8)
+    struct.pack_into(">HH", content, 18 * sector, 0x4858, 5)
+    struct.pack_into(">II", content, 18 * sector + 40, sector, 14)
+    source, selected, whole = (folder / name for name in ("apple.hda", "volume.hfv", "whole.hda"))
+    source.write_bytes(content)
+
+    result = run(tool, "export-apple", source, selected, success=False)
+    assert b"3  System  HFS Plus" in result.stderr and b"4  Data  HFSX" in result.stderr
+    assert not selected.exists()
+    run(tool, "export-apple", source, selected, 2, success=False)
+    assert not selected.exists()
+    run(tool, "export-apple", source, selected, 3)
+    assert selected.read_bytes() == content[7 * sector:15 * sector]
+    run(tool, "export-apple", source, selected, 4, success=False)
+    assert selected.read_bytes() == content[7 * sector:15 * sector]
+    run(tool, "export-apple", source, whole, "--whole")
+    assert whole.read_bytes() == source.read_bytes() == content
+
+    single_disk, auto = (folder / name for name in ("single.hda", "auto.hfv"))
+    entry(4, b"Free", b"Apple_Free", 16, 14)
+    single_disk.write_bytes(content)
+    run(tool, "export-apple", single_disk, auto)
+    assert auto.read_bytes() == content[7 * sector:15 * sector]
+
+    broken = folder / "broken.hda"
+    struct.pack_into(">I", content, 4 * sector + 8, 15)
+    broken.write_bytes(content)
+    rejected = folder / "unsafe.hfv"
+    run(tool, "export-apple", broken, rejected, 3, success=False)
+    assert not rejected.exists()
+
+
+def test_apple_import(tool, folder):
+    sector = 512
+    volume = bytearray(9 * sector)
+    volume[0:4] = b"boot"
+    struct.pack_into(">HH", volume, 2 * sector, 0x482b, 4)
+    struct.pack_into(">II", volume, 2 * sector + 40, sector, 9)
+    volume[-8:] = b"sentinel"
+    template = bytearray(16 * sector)
+    struct.pack_into(">HHI8xHIHH", template, 0, 0x4552, sector, 16, 1, 8, 2, 1)
+    for index, (kind, start, length) in enumerate((
+        (b"Apple_partition_map", 1, 5), (b"Apple_Driver43", 8, 2), (b"Apple_HFS", 12, 4)
+    ), 1):
+        struct.pack_into(">HHIII32s32sII", template, index * sector, 0x504d, 0,
+                         3, start, length, b"Template", kind, 0, length)
+    template[4 * sector:8 * sector] = b"G" * (4 * sector)
+    template[8 * sector:10 * sector] = b"D" * (2 * sector)
+    template[10 * sector:12 * sector] = b"G" * (2 * sector)
+    template[12 * sector:] = b"V" * (4 * sector)
+    source, donor, output, exported = (folder / name for name in (
+        "import.hfv", "driver.hda", "generated.hda", "generated.hfv"))
+    source.write_bytes(volume)
+    donor.write_bytes(template)
+
+    run(tool, "import-apple", source, donor, output)
+    disk = output.read_bytes()
+    assert len(disk) == 21 * sector
+    assert struct.unpack_from(">I", disk, 4)[0] == 21
+    assert struct.unpack_from(">I", disk, 3 * sector + 12)[0] == 9
+    assert struct.unpack_from(">I", disk, 3 * sector + 84)[0] == 9
+    assert disk[8 * sector:10 * sector] == template[8 * sector:10 * sector]
+    assert disk[4 * sector:8 * sector] == bytes(4 * sector)
+    assert disk[10 * sector:12 * sector] == bytes(2 * sector)
+    assert disk[12 * sector:] == volume
+    assert source.read_bytes() == volume and donor.read_bytes() == template
+    run(tool, "export-apple", output, exported)
+    assert exported.read_bytes() == volume
+    run(tool, "import-apple", source, donor, output, success=False)
+    assert output.read_bytes() == disk
+
+    invalid = folder / "invalid-driver.hda"
+    rejected = folder / "rejected.hda"
+    struct.pack_into(">I", template, 18, 12)
+    invalid.write_bytes(template)
+    run(tool, "import-apple", source, invalid, rejected, success=False)
+    assert not rejected.exists()
+    run(tool, "import-apple", output, donor, rejected, success=False)
+    assert not rejected.exists()
+
+
 def main(tool):
     with tempfile.TemporaryDirectory() as temp:
         root = pathlib.Path(temp)
         test_ffs_resize(tool, root)
+        test_apple_export(tool, root)
+        test_apple_import(tool, root)
         source = root / "disk.raw"
         payload = b"".join(bytes([i]) * 512 for i in range(9))
         source.write_bytes(payload)

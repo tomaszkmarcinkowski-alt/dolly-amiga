@@ -67,6 +67,15 @@ signature. The decoded sector size must match the destination. After the
 warning review, Dolly validates the whole image before it writes any image
 sectors. The validation pass can be paused or cancelled.
 
+Restore compatibility review can identify HFS Standard, HFS Plus, wrapped
+HFS Plus, HFSX and Apple Partition Map media with 512-byte sectors. It
+reports structural findings for both endpoints when either is Apple media
+and retains the compatibility warning before a raw transfer. The probe
+checks metadata and bounds. When restoring a flat FileDisk to an RDB
+partition, **Build disk** assembles the Apple layout from a driver template
+and requires timed overwrite confirmation. It checks that the complete
+image fits before any write. See the [ShapeShifter workflows](SHAPESHIFTER_HFS_RESEARCH.md#import-a-filedisk-on-amigaos).
+
 Copy and Restore collect their warnings after Start. Smart Copy requires verified source isolation before showing the
 validated bitmap plan.
 The write review uses one window. The left list shows the warnings in order. The right panel shows

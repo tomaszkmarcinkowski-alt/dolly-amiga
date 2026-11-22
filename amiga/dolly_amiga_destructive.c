@@ -269,10 +269,11 @@ int dolly_amiga_confirm_outside_range(struct Window *parent,const char *reason) 
 }
 
 void dolly_warnings_clear(DollyWarnings *warnings) {
+    DollyWarning **items=warnings->choices?warnings->choices:warnings->items;
     unsigned i;
     for(i=0;i<warnings->count;++i) {
-        free(warnings->items[i]->text);
-        free(warnings->items[i]);
+        free(items[i]->text);
+        free(items[i]);
     }
     warnings->count=0;
 }
@@ -280,7 +281,9 @@ void dolly_warnings_clear(DollyWarnings *warnings) {
 DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,
                                const char *details,const char *button) {
     DollyWarning *warning;
-    if(warnings->count==DOLLY_WARNING_MAX)return NULL;
+    DollyWarning **items=warnings->choices?warnings->choices:warnings->items;
+    unsigned capacity=warnings->choices?warnings->choice_capacity:DOLLY_WARNING_MAX;
+    if(warnings->count>=capacity)return NULL;
     warning=calloc(1,sizeof(*warning));
     if(!warning)return NULL;
     warning->text=malloc(strlen(details)+1);
@@ -292,7 +295,7 @@ DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,
     snprintf(warning->row,sizeof(warning->row),"  %s",title);
     warning->node.ln_Name=warning->row;
     warning->button=button;
-    warnings->items[warnings->count++]=warning;
+    items[warnings->count++]=warning;
     return warning;
 }
 
@@ -322,6 +325,7 @@ static struct Gadget *warning_button(WarningView *v,struct Gadget *last,UWORD id
 static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWarning *warning,
                             unsigned remaining) {
     unsigned i;
+    DollyWarning **items=warnings->choices?warnings->choices:warnings->items;
     struct Gadget *last;
     struct NewGadget ng={0};
     LONG left=v->window->BorderLeft+6;
@@ -346,11 +350,11 @@ static int warning_controls(WarningView *v,DollyWarnings *warnings,const DollyWa
     }
     /* GadTools must release the old list before nodes are appended. */
     while(v->linked_warnings<warnings->count) {
-        AddTail(&v->labels,&warnings->items[v->linked_warnings]->node);
+        AddTail(&v->labels,&items[v->linked_warnings]->node);
         ++v->linked_warnings;
     }
     for(i=0;i<warnings->count;++i)
-        warnings->items[i]->row[0]=warnings->items[i]->kept?'-':warnings->items[i]->confirmed?'+':' ';
+        items[i]->row[0]=items[i]->kept?'-':items[i]->confirmed?'+':' ';
     last=CreateContext(&v->gadgets);
     if(!last || action_width+more_width+alternate_width+20>v->width)return 0;
     ng.ng_LeftEdge=(WORD)left;
@@ -426,11 +430,12 @@ static LONG warning_label_width(struct RastPort *rp,const char *text) {
 static void measure_warning_view(WarningView *v,struct RastPort *rp,
                                  const DollyWarnings *warnings) {
     unsigned i;
+    DollyWarning *const *items=warnings->choices?warnings->choices:warnings->items;
     v->row=rp->TxHeight+5;
     v->list_min=warning_label_width(rp,"+ Destination")+24;
     v->detail_min=warning_label_width(rp,"Proceed")+14;
     for(i=0;i<warnings->count;++i) {
-        const DollyWarning *warning=warnings->items[i];
+        const DollyWarning *warning=items[i];
         LONG width=warning_label_width(rp,warning->button)+14;
         if(warning->delay_seconds)width+=warning_label_width(rp," (10)");
         if(warning->can_keep)width+=warning_label_width(rp,"Keep")+14;
@@ -473,9 +478,11 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     int timer_open=0,ticking=0;
     int result=0,done=0,rebuild=1;
     char (*lines)[97]=NULL;
-    if(!warnings->count)return 1;
+    const int choose_one=warnings->choices!=NULL;
+    DollyWarning **items=choose_one?warnings->choices:warnings->items;
+    if(!warnings->count)return !choose_one;
     for(unsigned i=0;i<warnings->count;++i)
-        if(warnings->items[i]->delay_seconds) {
+        if(items[i]->delay_seconds) {
             timer_port=CreateMsgPort();
             if(!timer_port)goto out;
             timer=(struct timerequest *)CreateIORequest(timer_port,sizeof(*timer));
@@ -519,7 +526,8 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
     v.labels.lh_TailPred=(struct Node *)&v.labels.lh_Head;
     while(!done) {
         struct IntuiMessage *msg;
-        DollyWarning *warning=warnings->items[v.selected];
+        DollyWarning *warning=items[v.selected];
+        const int can_select=choose_one || v.selected==pending;
         const int timed=v.selected==pending && warning->delay_seconds!=0;
         if(timed && timed_item!=pending) {
             timed_item=pending;
@@ -545,7 +553,7 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
             count=0;
             if(!wrap_lines(v.window->RPort,warning->text,v.width-12,lines,&count,line_capacity))break;
             if(!warning_controls(&v,warnings,warning,remaining))break;
-            paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending && !remaining,warning->can_keep);
+            paint_warning(&v,(const char (*)[97])lines,count,can_select && !remaining,warning->can_keep);
             rebuild=0;
         }
         Wait((1UL<<v.window->UserPort->mp_SigBit) |
@@ -572,19 +580,24 @@ int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings) {
             if(id==WARN_MOUNT)v.mount_checked=code!=0;
             if(done || rebuild)continue;
             if(cls==IDCMP_REFRESHWINDOW)
-                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending && !remaining,warning->can_keep);
+                paint_warning(&v,(const char (*)[97])lines,count,can_select && !remaining,warning->can_keep);
             else if(id==WARN_LIST && code<warnings->count) {
                 v.selected=code;
                 v.page=0;
                 rebuild=1;
             } else if(id==WARN_NEXT) {
                 if(++v.page*v.lines_per_page>=count)v.page=0;
-                paint_warning(&v,(const char (*)[97])lines,count,v.selected==pending && !remaining,warning->can_keep);
+                paint_warning(&v,(const char (*)[97])lines,count,can_select && !remaining,warning->can_keep);
             } else if(id==WARN_SETTINGS && warning->settings) {
                 settings=warning->settings;
                 done=1;
             } else if((id==WARN_ACTION || (id==WARN_KEEP && warning->can_keep)) &&
-                      v.selected==pending && !remaining) {
+                      can_select && !remaining) {
+                if(choose_one) {
+                    done=1;
+                    result=(int)v.selected+1;
+                    continue;
+                }
                 int action_result=id==WARN_ACTION && warning->action?warning->action(warning):1;
                 if(action_result<0){done=1;continue;}
                 if(action_result>0) {

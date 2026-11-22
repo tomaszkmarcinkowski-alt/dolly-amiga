@@ -3,6 +3,30 @@
 Each entry covers the changes since the preceding public release. Test builds
 are included in the public revision that first ships their changes.
 
+## Alpha 3.8 — 2026-11-22
+
+Changes since [Alpha 3.7](#alpha-37--2026-11-21).
+
+- Recognize Macintosh HFS, HFS Plus, wrapped HFS Plus, HFSX and Apple
+  Partition Maps in raw media.
+- Export an eligible Macintosh volume as a single RAW FileDisk, or
+  export the whole virtual disk with its partition map and driver.
+- Import a FileDisk into a dedicated RDB partition with a partition
+  map and a compatible Macintosh SCSI driver from a user-supplied
+  template. Warning Review shows the destination filesystem and
+  write extent before timed approval.
+- Check the 2 GiB FileDisk and inner Macintosh partition limits and
+  the 4 GiB destination extent limit. ShapeShifter uses single RAW
+  image files for this workflow.
+- Add desktop `import-apple` and `export-apple` commands to
+  `dolly-image`.
+
+See the [ShapeShifter guide](SHAPESHIFTER_HFS_RESEARCH.md) and
+[test matrix](TEST_MATRIX.md#native-shapeshifter-4-gib-boundary).
+Mac OS runtime verification inside ShapeShifter remains pending.
+
+[GitHub release](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.8)
+
 ## Alpha 3.7 — 2026-11-21
 
 Changes since [Alpha 3.6 Write Review and Mounting](#alpha-36-write-review-and-mounting--2026-11-21).

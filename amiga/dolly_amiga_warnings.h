@@ -26,9 +26,12 @@ typedef struct DollyWarnings {
     const char *window_title;
     const DollyWarning *mount_summary;
     int *mount_destination; /* Optional. Updated only on approval. */
+    DollyWarning **choices; /* Optional caller-owned array for a single-choice review. */
+    unsigned choice_capacity;
 } DollyWarnings;
 DollyWarning *dolly_warning_add(DollyWarnings *warnings,const char *title,
                                const char *details,const char *button);
+/* A single-choice review returns a one-based selection, or zero on cancellation. */
 int dolly_warnings_review(struct Window *parent,DollyWarnings *warnings);
 void dolly_warnings_clear(DollyWarnings *warnings);
 #endif

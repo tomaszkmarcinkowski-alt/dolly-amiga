@@ -1,4 +1,5 @@
 #include "dolly_amiga_image.h"
+#include "dolly_apple_media.h"
 #include "dolly_amiga_destructive.h"
 #include "dolly_amiga_endpoint_picker.h"
 #include "dolly_amiga_transfer_guard.h"
@@ -404,6 +405,71 @@ static void release(DollyAmigaImage *image,int commit) {
 void dolly_image_cancel(DollyAmigaImage *image) {
     release(image,0);
 }
+
+static DollyAppleMedia apple_image_format(const DollySurfaceScan *reader) {
+    if(!reader->is_rdb_partition || reader->outside_range!=DOLLY_RANGE_STRICT || reader->sector_bytes!=512u)
+        return DOLLY_APPLE_UNKNOWN;
+    return dolly_apple_media_probe(reader->source,reader->first_lba*512u,reader->total*512u);
+}
+
+int dolly_image_source_requires_raw(const DollyEndpoint *source,struct Window *parent) {
+    DollySurfaceScan reader={0};
+    DollyWarnings warnings={0};
+    DollyAppleMedia format=DOLLY_APPLE_UNKNOWN;
+    if(source->kind!=DOLLY_ENDPOINT_PARTITION && source->kind!=DOLLY_ENDPOINT_LOGICAL)return 0;
+    if(dolly_surface_open(&reader,source,parent,DOLLY_IO_SOURCE,0,&warnings) && !warnings.count)
+        format=apple_image_format(&reader);
+    dolly_surface_close(&reader);
+    dolly_warnings_clear(&warnings);
+    return format==DOLLY_APPLE_APM || dolly_apple_media_is_volume(format);
+}
+
+/* Fill and review choices without creating output or replacing the source extent. */
+static int choose_apple_export(DollyAmigaImage *image,const DollyAppleMap *map,
+                               uint64_t bytes,DollyAppleVolume *selected) {
+    DollyWarnings review={.window_title="Dolly - Export Macintosh disk",
+                          .choice_capacity=map->count+1u};
+    char amount[21],details[240];
+    unsigned choices[DOLLY_APPLE_MAP_LIMIT+1u];
+    int choice=0;
+    image->failure="Could not prepare Macintosh export choices.";
+    review.choices=calloc(review.choice_capacity,sizeof(*review.choices));
+    if(!review.choices)return 0;
+    if(dolly_shapeshifter_file_fits(bytes)) {
+        dolly_surface_log_decimal(amount,bytes);
+        snprintf(details,sizeof(details),
+                 "Export %s bytes as an entire RAW disk. Includes the Apple Partition Map, "
+                 "Macintosh driver and all volumes.",amount);
+        choices[review.count]=0;
+        if(!dolly_warning_add(&review,"Entire disk (RAW)",details,"Select"))goto done;
+    }
+    for(unsigned i=0;i<map->count;++i) {
+        const DollyAppleVolume *volume=&map->volumes[i];
+        char title[46];
+        if(!dolly_shapeshifter_file_fits(volume->partition_bytes))continue;
+        dolly_surface_log_decimal(amount,volume->bytes);
+        snprintf(title,sizeof(title),"%lu: %s",(unsigned long)volume->entry,
+                 volume->name[0]?volume->name:"Macintosh volume");
+        snprintf(details,sizeof(details),"Export Apple partition %lu as a FileDisk RAW volume.\n"
+                 "\"%s\" | %s | %s bytes.\nCopies the selected volume data area.",
+                 (unsigned long)volume->entry,volume->name,dolly_apple_media_name(volume->media),amount);
+        choices[review.count]=i+1u;
+        if(!dolly_warning_add(&review,title,details,"Select"))goto done;
+    }
+    if(!review.count) {
+        image->failure="No Macintosh export fits a single RAW file smaller than 2 GiB.";
+        dolly_amiga_role_request(image->parent,"Dolly - Create Image blocked",image->failure,"OK",NULL,NULL);
+        goto done;
+    }
+    choice=dolly_warnings_review(image->parent,&review);
+    if(!choice)image->failure="Operation cancelled.";
+    else if(choices[(unsigned)choice-1u]) *selected=map->volumes[choices[(unsigned)choice-1u]-1u];
+done:
+    dolly_warnings_clear(&review);
+    free(review.choices);
+    return choice;
+}
+
 int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
                      const DollyEndpoint *target,struct Window *parent) {
     BPTR previous,staging;
@@ -411,6 +477,9 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     size_t prefix;
     char drawer[256];
     uint64_t bytes,encoded,single_bytes,split_parts=0,chunks,overhead;
+    uint64_t partition_start,partition_bytes;
+    DollyAppleMap *apple=NULL;
+    DollyAppleVolume selected={0};
     int needs_split;
     DollyWarnings warnings={0};
     dolly_image_cancel(image);
@@ -435,7 +504,40 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     drawer[prefix]='\0';
     image->drawer=Lock((STRPTR)drawer,ACCESS_READ);
     if(!image->drawer)goto fail;
-    bytes=image->reader.total*image->reader.sector_bytes;
+    partition_start=image->reader.first_lba*image->reader.sector_bytes;
+    partition_bytes=image->reader.total*image->reader.sector_bytes;
+    bytes=partition_bytes;
+    DollyAppleMedia apple_format=apple_image_format(&image->reader);
+    image->shapeshifter=apple_format==DOLLY_APPLE_APM || dolly_apple_media_is_volume(apple_format);
+    if(image->shapeshifter && target->image_format!=DOLLY_IMAGE_RAW) {
+        image->failure="Select RAW image. ShapeShifter export uses one RAW file smaller than 2 GiB.";
+        dolly_amiga_role_request(parent,"Dolly - Create Image blocked",image->failure,"OK",NULL,NULL);
+        goto fail;
+    }
+    if(apple_format==DOLLY_APPLE_APM) {
+        apple=malloc(sizeof(*apple));
+        if(!apple) {
+            image->failure="Not enough memory to inspect the Apple Partition Map.";
+            goto fail;
+        }
+        if(dolly_apple_media_inspect(image->reader.source,partition_start,partition_bytes,apple)!=DOLLY_APPLE_APM) {
+            image->failure="Apple Partition Map changed during inspection.";
+            goto fail;
+        }
+        if(!choose_apple_export(image,apple,partition_bytes,&selected))goto fail;
+        if(selected.entry) {
+            image->apple_entry=selected.entry;
+            image->reader.first_lba+=selected.offset/512u;
+            image->reader.total=selected.bytes/512u;
+            bytes=selected.bytes;
+        }
+    }
+    if(dolly_apple_media_is_volume(apple_format) &&
+       !dolly_shapeshifter_file_fits(bytes)) {
+        image->failure="ShapeShifter export exceeds the single RAW file limit of 2 GiB minus one sector.";
+        dolly_amiga_role_request(parent,"Dolly - Create Image blocked",image->failure,"OK",NULL,NULL);
+        goto fail;
+    }
     image->format_dly=target->image_format!=DOLLY_IMAGE_RAW &&
                       target->image_format!=DOLLY_IMAGE_HDF;
     image->codec=target->image_format==DOLLY_IMAGE_IFF_FAST?DOLLY_DLY_PACKBITS:
@@ -466,17 +568,14 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
         goto fail;
     }
     image->failure=dolly_amiga_guard_file_transfer(&warnings,image->drawer,
-                   &image->reader.device,
-                   image->reader.first_lba*image->reader.sector_bytes,
-                   image->reader.total*image->reader.sector_bytes);
+                   &image->reader.device,partition_start,partition_bytes);
     if(image->failure) {
         dolly_amiga_role_request(parent,"Dolly - Create Image blocked",
                                  image->failure,"OK",NULL,NULL);
         goto fail;
     }
     if(!dolly_amiga_guard_read(&image->reader.mount_guard,parent,&warnings,
-                   &image->reader.device,image->reader.first_lba*image->reader.sector_bytes,
-                   image->reader.total*image->reader.sector_bytes,image->drawer)) {
+                   &image->reader.device,partition_start,partition_bytes,image->drawer)) {
         image->failure="Cannot prepare source filesystem inhibition.";
         goto fail;
     }
@@ -488,6 +587,22 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     if(!dolly_amiga_read_guard_check(image->reader.mount_guard)) {
         image->failure="Source filesystem changed before imaging.";
         goto fail;
+    }
+    if(apple) {
+        image->failure="Apple Partition Map or the selected volume changed before imaging.";
+        if(dolly_apple_media_inspect(image->reader.source,partition_start,partition_bytes,apple)!=DOLLY_APPLE_APM)
+            goto fail;
+        if(selected.entry) {
+            unsigned i=0;
+            while(i<apple->count && apple->volumes[i].entry!=selected.entry)++i;
+            if(i==apple->count || apple->volumes[i].offset!=selected.offset ||
+               apple->volumes[i].bytes!=selected.bytes ||
+               apple->volumes[i].partition_bytes!=selected.partition_bytes ||
+               apple->volumes[i].media!=selected.media ||
+               strcmp(apple->volumes[i].name,selected.name))goto fail;
+        }
+        free(apple);
+        apple=NULL;
     }
 
     if(image->split) {
@@ -525,6 +640,7 @@ int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
     image->failure=NULL;
     return 1;
 fail:
+    free(apple);
     dolly_warnings_clear(&warnings);
     release(image,0);
     return 0;
@@ -645,6 +761,13 @@ int dolly_image_resume_open(DollyAmigaImage *image,const DollyDlrpImageResume *r
     }
     if(!dolly_surface_open(reader,&resume->source,parent,DOLLY_IO_SOURCE,0,&warnings)) {
         image->failure=reader->failure;
+        goto fail;
+    }
+    DollyAppleMedia format=apple_image_format(reader);
+    image->shapeshifter=format==DOLLY_APPLE_APM || dolly_apple_media_is_volume(format);
+    if(image->shapeshifter && (resume->target.image_format!=DOLLY_IMAGE_RAW ||
+       !dolly_shapeshifter_file_fits(reader->total*reader->sector_bytes))) {
+        image->failure="ShapeShifter export requires a single RAW file smaller than 2 GiB. Start a new export.";
         goto fail;
     }
     image->failure="Source identity, geometry or extent changed since the checkpoint.";

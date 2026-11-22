@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "dolly_dly_reader.h"
 #include "dolly_dly_writer.h"
+#include "dolly_apple_media.h"
 #include "dolly_ffs_analyze.h"
 #include <errno.h>
 #include <inttypes.h>
@@ -367,17 +368,134 @@ done:
     return ok;
 }
 
-static int parse_sectors(const char *text,uint64_t *value) {
+static int parse_decimal(const char *text,uint64_t limit,uint64_t *value) {
     char *end;
     if(*text<'0' || *text>'9')return 0;
     errno=0;
-    uintmax_t sectors=strtoumax(text,&end,10);
-    if(errno || *end || sectors>UINT64_MAX/SECTOR)return 0;
-    *value=(uint64_t)sectors*SECTOR;
+    uintmax_t number=strtoumax(text,&end,10);
+    if(errno || *end || number>limit)return 0;
+    *value=(uint64_t)number;
     return 1;
 }
 
+static int parse_sectors(const char *text,uint64_t *value) {
+    if(!parse_decimal(text,UINT64_MAX/SECTOR,value))return 0;
+    *value*=SECTOR;
+    return 1;
+}
+
+static int write_raw_range(DollyBlockSource *source,uint64_t start,uint64_t bytes,const char *destination) {
+    FILE *output=new_file(destination);
+    unsigned char buffer[BATCH];
+    uint64_t copied=0;
+    if(!output) {
+        fprintf(stderr,"Cannot create a new destination. Existing files are protected.\n");
+        return 0;
+    }
+    while(copied<bytes) {
+        size_t chunk=bytes-copied>BATCH?BATCH:(size_t)(bytes-copied);
+        if(dolly_block_read(source,start+copied,buffer,chunk).status!=DOLLY_BLOCK_OK ||
+           !write_bytes(output,buffer,chunk))break;
+        copied+=chunk;
+    }
+    if(fclose(output)==0 && copied==bytes)return 1;
+    fprintf(stderr,"Writing the raw image failed.\n");
+    if(remove(destination)!=0)fprintf(stderr,"Could not remove %s\n",destination);
+    return 0;
+}
+
+static int export_apple(const char *input,const char *destination,int whole,uint32_t entry) {
+    DollyBlockSource *source=NULL;
+    DollyAppleMap map;
+    uint64_t start=0,bytes;
+    int ok=0;
+    if(dolly_block_open_file(input,&source)!=DOLLY_BLOCK_OK) {
+        fprintf(stderr,"Cannot open the Apple disk image.\n");
+        return 0;
+    }
+    bytes=dolly_block_size(source);
+    DollyAppleMedia media=dolly_apple_media_inspect(source,0,bytes,whole?NULL:&map);
+    if(media!=DOLLY_APPLE_APM) {
+        fprintf(stderr,"Expected an Apple Partition Map disk. Detected %s.\n",
+                dolly_apple_media_name(media));
+        goto done;
+    }
+    if(!whole) {
+        const DollyAppleVolume *selection=NULL;
+        for(unsigned i=0;i<map.count;++i) {
+            if(map.volumes[i].entry==entry || (!entry && map.count==1u))
+                selection=&map.volumes[i];
+        }
+        if(!selection) {
+            if(!map.count)fprintf(stderr,"No recognized HFS-family volumes.\n");
+            else {
+                fprintf(stderr,"Select an APM entry number:\n");
+                for(unsigned i=0;i<map.count;++i) {
+                    const DollyAppleVolume *v=&map.volumes[i];
+                    fprintf(stderr,"  %" PRIu32 "  %s  %s  (%" PRIu64 " bytes)\n",
+                            v->entry,v->name,dolly_apple_media_name(v->media),v->bytes);
+                }
+            }
+            goto done;
+        }
+        if(!dolly_shapeshifter_file_fits(selection->partition_bytes)) {
+            fprintf(stderr,"The selected Macintosh partition is 2 GiB or larger.\n");
+            goto done;
+        }
+        start=selection->offset;
+        bytes=selection->bytes;
+    }
+    if(!dolly_shapeshifter_file_fits(bytes)) {
+        fprintf(stderr,"ShapeShifter export requires one RAW file smaller than 2 GiB.\n");
+        goto done;
+    }
+    ok=write_raw_range(source,start,bytes,destination);
+done:
+    dolly_block_close(source);
+    if(ok)printf("Exported %" PRIu64 " bytes from sector %" PRIu64 ".\n",bytes,start/SECTOR);
+    return ok;
+}
+
+static int import_apple(const char *input,const char *driver_path,const char *destination) {
+    DollyBlockSource *volume=NULL,*driver=NULL,*disk=NULL;
+    const char *error="Cannot open the FileDisk or driver template.";
+    int ok=0;
+    if(dolly_block_open_file(input,&volume)!=DOLLY_BLOCK_OK ||
+       dolly_block_open_file(driver_path,&driver)!=DOLLY_BLOCK_OK)goto done;
+    error=dolly_apple_disk_from_filedisk(volume,driver,&disk);
+    if(error)goto done;
+    uint64_t bytes=dolly_block_size(disk);
+    if(!dolly_shapeshifter_file_fits(bytes)) {
+        error="The assembled disk exceeds the single RAW file limit of 2 GiB minus one sector.";
+        goto done;
+    }
+    if(dolly_apple_media_probe(disk,0,bytes)!=DOLLY_APPLE_APM) {
+        error="The generated Apple disk layout failed verification.";
+        goto done;
+    }
+    ok=write_raw_range(disk,0,bytes,destination);
+    if(ok)printf("Created Apple disk of %" PRIu64 " bytes.\n",bytes);
+done:
+    if(error)fprintf(stderr,"%s\n",error);
+    dolly_block_close(disk);
+    dolly_block_close(driver);
+    dolly_block_close(volume);
+    return ok;
+}
+
 int main(int argc,char **argv) {
+    if(argc==5 && !strcmp(argv[1],"import-apple"))
+        return import_apple(argv[2],argv[3],argv[4])?0:1;
+    if((argc==4 || argc==5) && !strcmp(argv[1],"export-apple")) {
+        int whole=argc==5 && !strcmp(argv[4],"--whole");
+        uint64_t entry=0;
+        if(argc==5 && !whole &&
+           (!parse_decimal(argv[4],DOLLY_APPLE_MAP_LIMIT,&entry) || !entry)) {
+            fprintf(stderr,"Provide --whole or an Apple Partition Map entry number.\n");
+            return 2;
+        }
+        return export_apple(argv[2],argv[3],whole,(uint32_t)entry)?0:1;
+    }
     if((argc==7 || argc==8) && !strcmp(argv[1],"resize-ffs")) {
         uint64_t start,length,target,reserved=2u*SECTOR;
         if(!parse_sectors(argv[4],&start) || !parse_sectors(argv[5],&length) ||
@@ -418,6 +536,8 @@ int main(int argc,char **argv) {
                    "  dolly-image split INPUT.raw NEW_DIRECTORY [PART_SECTORS] [--fast]\n"
                    "  dolly-image verify FIRST.dly\n"
                    "  dolly-image join FIRST.dly OUTPUT.raw [--sparse]\n"
+                   "  dolly-image export-apple INPUT.raw OUTPUT.raw [--whole | APM_ENTRY]\n"
+                   "  dolly-image import-apple FILEDISK.hfv DRIVER_TEMPLATE.hda NEW_DISK.hda\n"
                    "  dolly-image resize-ffs INPUT.raw NEW_PARTITION.raw START SOURCE_SECTORS TARGET_SECTORS [RESERVED]\n");
     return 2;
 }

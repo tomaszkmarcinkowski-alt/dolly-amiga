@@ -1,6 +1,7 @@
 #include "dolly_restore_check.h"
 #include "dolly_rdb.h"
 #include "dolly_restore_source.h"
+#include "dolly_apple_media.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@ typedef struct RestoreInfo {
     DollyRestoreKind kind;
     DollyRdb *rdb;
     uint32_t fs;
+    DollyAppleMedia apple;
     int unavailable,encoded,extent_overrun;
 } RestoreInfo;
 
@@ -76,6 +78,13 @@ static const char *inspect(const DollyRestoreExtent *span,RestoreInfo *info,int 
                  (uint32_t)boot[2]<<8 | boot[3];
         return NULL;
     }
+    if(span->sector_bytes==512u) {
+        info->apple=dolly_apple_media_probe(span->blocks,span->start,span->bytes);
+        if(info->apple!=DOLLY_APPLE_UNKNOWN) {
+            info->unavailable=info->apple==DOLLY_APPLE_UNREADABLE;
+            return dolly_apple_media_name(info->apple);
+        }
+    }
     return "No supported RDB or filesystem signature recognized.";
 }
 
@@ -121,6 +130,12 @@ DollyRestoreAssessment dolly_restore_assess(const DollyRestoreExtent *image,
                     DOLLY_RESTORE_BLOCKED:DOLLY_RESTORE_MISMATCH;
     if(dest.unavailable && !source.unavailable && !source.encoded)
         snprintf(result.reason,sizeof(result.reason),"Target: %s",dest_error);
+    else if(!source.unavailable && !source.encoded &&
+            (source.apple!=DOLLY_APPLE_UNKNOWN || dest.apple!=DOLLY_APPLE_UNKNOWN))
+        snprintf(result.reason,sizeof(result.reason),
+                 "Image: %s.\nDestination: %s.\nRestore copies raw sectors without converting the Apple layout.",
+                 source_error?source_error:kind_name(source.kind),
+                 dest_error?dest_error:kind_name(dest.kind));
     else if(source_error)
         snprintf(result.reason,sizeof(result.reason),"Image: %s",source_error);
     else if(dest_error)

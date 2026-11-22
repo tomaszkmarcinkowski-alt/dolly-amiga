@@ -80,6 +80,18 @@ static void keep_set_part(void *context) {
     (void)context;
 }
 
+DollyAppleMedia dolly_amiga_probe_apple_file(BPTR file,uint64_t size) {
+    DollyBlockSource *blocks;
+    ImageFile image={.file=file};
+    DollyAppleMedia media;
+    if(size%512u || size<1024u)return DOLLY_APPLE_UNKNOWN;
+    if(dolly_block_open_backend(size,read_image,keep_set_part,&image,&blocks)!=DOLLY_BLOCK_OK)
+        return DOLLY_APPLE_UNREADABLE;
+    media=dolly_apple_media_probe(blocks,0,size);
+    dolly_block_close(blocks);
+    return media;
+}
+
 static void close_set(void *context) {
     ImageSet *set=context;
     dolly_block_close(set->active);
@@ -426,6 +438,31 @@ DollyBlockStatus dolly_amiga_restore_source_open(DollyAmigaRestoreSource *source
     return dolly_amiga_restore_source_open_first(source,image,sector_bytes,parent,0);
 }
 
+const char *dolly_amiga_restore_build_apple(DollyAmigaRestoreSource *source,const char *template_path) {
+    DollyBlockSource *template=NULL,*disk=NULL;
+    uint64_t bytes;
+    const char *error="Cannot open a flat Apple driver template.";
+    if(!source->blocks || source->is_dly || source->apple_template)return error;
+    ImageFile *file=calloc(1,sizeof(*file));
+    if(!file)return "Not enough memory for the Apple driver template.";
+    file->file=Open((STRPTR)template_path,MODE_OLDFILE);
+    if(!file->file || dolly_amiga_image_file_size(file->file,&bytes)!=DOLLY_BLOCK_OK)goto failed;
+    file->lock=DupLockFromFH(file->file);
+    if(dolly_block_open_backend(bytes,read_image,close_image,file,&template)!=DOLLY_BLOCK_OK)goto failed;
+    error=dolly_apple_disk_from_filedisk(source->blocks,template,&disk);
+    if(error)goto failed;
+    source->apple_volume=source->blocks;
+    source->apple_template=template;
+    source->blocks=disk;
+    source->template_lock=file->lock;
+    source->template_file=file->file;
+    return NULL;
+failed:
+    if(template)dolly_block_close(template);
+    else close_image(file);
+    return error;
+}
+
 BPTR dolly_amiga_restore_volume(const DollyAmigaRestoreSource *source,uint32_t index) {
     uint32_t i;
     if(!index)return source->lock;
@@ -440,7 +477,9 @@ int dolly_amiga_restore_uses_mount(const DollyAmigaRestoreSource *source,
     const ImageSet *set=source->set;
     if(!mount->handler)return 0;
     if(dolly_amiga_file_uses_mount(source->file,mount) ||
-       dolly_amiga_lock_uses_mount(source->lock,mount))return 1;
+       dolly_amiga_lock_uses_mount(source->lock,mount) ||
+       dolly_amiga_file_uses_mount(source->template_file,mount) ||
+       dolly_amiga_lock_uses_mount(source->template_lock,mount))return 1;
     if(!set)return 0;
     if(dolly_amiga_file_uses_mount(set->manifest->file,mount))return 1;
     for(uint32_t i=0;i<set->info.parts;++i) {
@@ -458,9 +497,7 @@ uint32_t dolly_amiga_restore_failed_part(const DollyAmigaRestoreSource *source,u
 
 void dolly_amiga_restore_source_close(DollyAmigaRestoreSource *source) {
     dolly_block_close(source->blocks);
-    source->blocks=NULL;
-    source->lock=0;
-    source->file=0;
-    source->set=NULL;
-    source->is_dly=0;
+    dolly_block_close(source->apple_volume);
+    dolly_block_close(source->apple_template);
+    memset(source,0,sizeof(*source));
 }

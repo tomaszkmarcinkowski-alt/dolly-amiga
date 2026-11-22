@@ -3,6 +3,7 @@
 #include "dolly_checksum.h"
 #include "dolly_clone_names.h"
 #include "dolly_amiga_destructive.h"
+#include "dolly_amiga_endpoint_picker.h"
 #include "dolly_amiga_transfer_guard.h"
 #include "dolly_amiga_source.h"
 #include "dolly_amiga_io_settings.h"
@@ -875,6 +876,64 @@ static int add_volume_overwrite_warning(DollyWarnings *warnings,const char *name
     return 1;
 }
 
+static void describe_import_target(DollyBlockSource *blocks,uint64_t start,uint64_t bytes,
+                                   char text[170]) {
+    unsigned char boot[512];
+    if(dolly_block_read(blocks,start,boot,sizeof(boot)).status!=DOLLY_BLOCK_OK) {
+        strcpy(text,"Filesystem could not be verified (read error)");
+        return;
+    }
+    if(!memcmp(boot,"DOS",3) && boot[3]<=7u) {
+        snprintf(text,170,"%s (DOS/%u signature)",boot[3]&1u?"FastFileSystem":"OldFileSystem",
+                 (unsigned)boot[3]);
+        return;
+    }
+    if(!memcmp(boot,"PFS",3) && boot[3]>=1u && boot[3]<=3u) {
+        snprintf(text,170,"ProfessionalFileSystem (PFS/%u signature)",(unsigned)boot[3]);
+        return;
+    }
+    if(!memcmp(boot,"SFS",3) && (boot[3]==0u || boot[3]==2u)) {
+        snprintf(text,170,"SmartFileSystem (SFS/%u signature)",(unsigned)boot[3]);
+        return;
+    }
+    DollyAppleMedia format=dolly_apple_media_probe(blocks,start,bytes);
+    if(format==DOLLY_APPLE_APM) {
+        DollyAppleMap *map=malloc(sizeof(*map));
+        strcpy(text,"Apple Partition Map (filesystems could not be verified)");
+        if(map && dolly_apple_media_inspect(blocks,start,bytes,map)==DOLLY_APPLE_APM) {
+            unsigned types=0;
+            for(unsigned i=0;i<map->count;++i)types|=1u<<map->volumes[i].media;
+            strcpy(text,"Apple Partition Map");
+            const char *separator=" with ";
+            for(unsigned i=DOLLY_APPLE_HFS;i<=DOLLY_APPLE_HFSX;++i)if(types&(1u<<i)) {
+                size_t used=strlen(text);
+                snprintf(text+used,170u-used,"%s%s",separator,dolly_apple_media_name((DollyAppleMedia)i));
+                separator=", ";
+            }
+            if(!types)strcat(text," (no recognized filesystem)");
+        }
+        free(map);
+    } else if(format==DOLLY_APPLE_UNKNOWN)strcpy(text,"Filesystem not recognized");
+    else if(format==DOLLY_APPLE_UNREADABLE)strcpy(text,"Filesystem could not be verified (read error)");
+    else snprintf(text,170,"%s",dolly_apple_media_name(format));
+}
+
+static const char *check_shapeshifter_write(const DollyAmigaTransfer *t,DollyBlockSource *input,
+                                           DollyAppleMedia *format) {
+    int oversized;
+    uint64_t bytes=dolly_block_size(input);
+    *format=dolly_shapeshifter_media_limits(input,0,bytes,&oversized);
+    if(*format!=DOLLY_APPLE_APM && !dolly_apple_media_is_volume(*format))return NULL;
+    if(!dolly_shapeshifter_partition_fits(t->target.start,t->target.length))
+        return "The ShapeShifter destination partition must end within the first 4 GiB (last LBA 8388607).";
+    if(oversized)return "Each Macintosh volume or allocated Apple partition must be smaller than 2 GiB.";
+    if(t->image.is_dly)return "ShapeShifter restore requires one RAW image. IFF DOLY and split images are unsupported.";
+    if(t->image.blocks && !t->image.apple_template && !dolly_shapeshifter_file_fits(bytes))
+        return "A ShapeShifter RAW image file must be smaller than 2 GiB.";
+    if(bytes>t->target.length)return "The complete Macintosh layout must fit the destination partition. No sectors were written.";
+    return NULL;
+}
+
 static int collect_volume_overwrite_warnings(DollyAmigaTransfer *t,const DollySurfaceScan *disk,
                                              uint64_t write_bytes,DollyWarnings *warnings) {
     DollyNativePartitionMap *map=malloc(sizeof(*map));
@@ -942,9 +1001,12 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
     DollyMediaGeometry live={0};
     char live_name[112],size[40],reason[700],a[21],b[21];
     char table[110],live_table[110];
+    char apple_target[170];
     const char *problem=NULL;
     ULONG batch,verify=resume?resume->verify:dolly_amiga_verify_writes();
     uint32_t first,last;
+    uint32_t apple_first=0,apple_last=0;
+    DollyAppleMedia apple_format=DOLLY_APPLE_UNKNOWN;
     uint64_t transfer_bytes,smart_block=0;
     DollyFfsReport smart_report;
     int known_driver=0,preview_only=0;
@@ -1042,8 +1104,41 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
             problem=reason;
             goto fail;
         }
-        approval=assess_image(t,disk->source,destination);
-        if(approval.decision==DOLLY_RESTORE_BLOCKED) {
+        if(disk->is_rdb_partition && disk->sector_bytes==512u) {
+            problem=check_shapeshifter_write(t,t->image.blocks,&apple_format);
+            if(problem)goto fail;
+            if(!resume && dolly_apple_media_is_volume(apple_format)) {
+                snprintf(reason,sizeof(reason),"Detected a flat %s FileDisk.\n"
+                         "Build disk adds a partition map and Macintosh driver for ShapeShifter.\n"
+                         "Restore raw copies the FileDisk sectors as they are.",dolly_apple_media_name(apple_format));
+                int choice=dolly_amiga_role_request(parent,"Dolly - Macintosh FileDisk",reason,
+                                                   "Build disk","Restore raw","Cancel");
+                if(!choice)goto cancel;
+                if(choice==1) {
+                    DollyEndpoint template={0};
+                    if(!dolly_amiga_pick_titled_file(parent,&template,"Select Macintosh driver template"))goto cancel;
+                    problem=dolly_amiga_restore_build_apple(&t->image,template.path);
+                    if(problem)goto fail;
+                    if(dolly_block_size(t->image.blocks)>t->target.length) {
+                        dolly_surface_log_decimal(a,dolly_block_size(t->image.blocks));
+                        dolly_surface_log_decimal(b,t->target.length);
+                        snprintf(reason,sizeof(reason),"Apple disk needs %s bytes including map and driver. "
+                                 "The destination partition has %s bytes. No sectors were written.",a,b);
+                        problem=reason;
+                        goto fail;
+                    }
+                    apple_format=DOLLY_APPLE_APM;
+                    describe_import_target(disk->source,t->target.start,t->target.length,apple_target);
+                    if(!extent_anchors(disk->source,t->target.start,t->target.length,disk->sector_bytes,
+                                      disk->buffer,&apple_first,&apple_last)) {
+                        problem="Cannot read the destination anchors before Macintosh import.";
+                        goto fail;
+                    }
+                }
+            }
+        }
+        if(!t->image.apple_template)approval=assess_image(t,disk->source,destination);
+        if(!t->image.apple_template && approval.decision==DOLLY_RESTORE_BLOCKED) {
             problem=approval.reason;
             goto fail;
         }
@@ -1083,6 +1178,13 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
                 if(problem)goto fail;
                 lock=dolly_amiga_restore_volume(&t->image,++n);
             } while(lock);
+            if(t->image.apple_template &&
+               (!t->image.template_lock || !t->image.lock ||
+                SameLock(t->image.template_lock,t->image.lock)!=LOCK_SAME)) {
+                problem=dolly_amiga_guard_file_transfer(&warnings,t->image.template_lock,&disk->device,
+                                                         t->target.start,t->target.length);
+                if(problem)goto fail;
+            }
         }
         input=t->image.blocks;
     } else {
@@ -1127,6 +1229,10 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
             goto fail;
         }
         input=t->copy_extent;
+        if(!smart && !resize && disk->is_rdb_partition && disk->sector_bytes==512u) {
+            problem=check_shapeshifter_write(t,input,&apple_format);
+            if(problem)goto fail;
+        }
     }
     if(resume) {
         uint32_t source_first,source_last,target_first,target_last;
@@ -1213,13 +1319,21 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
     if(transfer_bytes>t->target.length)transfer_bytes=t->target.length;
     if(resize)transfer_bytes=t->target.length;
     unsigned warnings_before_volumes=warnings.count;
-    if(!collect_volume_overwrite_warnings(t,disk,transfer_bytes,&warnings)) {
+    if(!t->image.apple_template && !collect_volume_overwrite_warnings(t,disk,transfer_bytes,&warnings)) {
         problem="Cannot inspect volumes in the destination range.";
         goto fail;
     }
     int existing_volume=warnings.count!=warnings_before_volumes;
     dolly_surface_log_decimal(b,transfer_bytes/disk->sector_bytes);
-    if(resume) {
+    if(t->image.apple_template) {
+        const DollyEndpoint *d=destination;
+        snprintf(reason,sizeof(reason),"Destination: \"%.135s\" (RDB partition %lu).\n"
+                 "Current contents: %s. RDB DosType: 0x%08lX.\n"
+                 "Write the Apple map, Macintosh driver and FileDisk over %s sectors from LBA %s.\n"
+                 "%sBack up the destination before proceeding.",
+                 d->path,(unsigned long)d->partition+1u,apple_target,(unsigned long)disk->rdb_dos_type,
+                 b,a,transfer_bytes<t->target.length?"Sectors after the Apple disk will remain untouched. ":"");
+    } else if(resume) {
         char cursor[21],uncertain[21],remaining[21];
         dolly_surface_log_decimal(cursor,(t->target.start+resume->committed)/disk->sector_bytes);
         dolly_surface_log_decimal(uncertain,resume->uncertain/disk->sector_bytes);
@@ -1269,7 +1383,7 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
         snprintf(reason+used,sizeof(reason)-used,
                  "\nClicking on Proceed will irreversibly wipe data from %.120s."
                  "\nDestination filesystems will be taken offline automatically.%s",
-                 destination->path,existing_volume?"":" Back up the destination first.");
+                 destination->path,existing_volume || t->image.apple_template?"":" Back up the destination first.");
     }
     write_warning=dolly_warning_add(&warnings,resize?"Clone and resize plan":
                                     smart?"Smart Copy plan":"Overwrite destination",
@@ -1279,6 +1393,7 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
         goto fail;
     }
     write_warning->action=approve_write_warning;
+    if(t->image.apple_template)write_warning->delay_seconds=10u;
     write_approval=(WriteApproval){t,disk,input,known_driver};
     write_warning->context=&write_approval;
 
@@ -1360,7 +1475,28 @@ static int open_transfer(DollyAmigaTransfer *t,struct Window *parent,
         }
         t->target_first_crc=resume->target.first_crc;
     }
-    if(restore) {
+    if(apple_format==DOLLY_APPLE_APM || dolly_apple_media_is_volume(apple_format)) {
+        DollyAppleMedia checked;
+        problem=check_shapeshifter_write(t,input,&checked);
+        if(problem)goto fail;
+        if(checked!=apple_format) {
+            problem="The Macintosh layout changed during confirmation.";
+            goto fail;
+        }
+        if(!smart_rdb_unchanged(disk)) {
+            problem="The ShapeShifter destination RDB partition changed during confirmation.";
+            goto fail;
+        }
+    }
+    if(t->image.apple_template) {
+        char checked[170];
+        describe_import_target(locked_reader,t->target.start,t->target.length,checked);
+        if(t->target_first_crc!=apple_first || t->target_last_crc!=apple_last ||
+           strcmp(checked,apple_target)) {
+            problem="Destination partition or filesystem changed during confirmation.";
+            goto fail;
+        }
+    } else if(restore) {
         DollyRestoreAssessment checked=assess_image(t,locked_reader,destination);
         if(checked.decision!=approval.decision || checked.size!=approval.size ||
            strcmp(checked.reason,approval.reason)) {

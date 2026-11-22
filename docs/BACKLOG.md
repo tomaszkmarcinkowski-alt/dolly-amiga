@@ -936,3 +936,10 @@ Before import, probe the destination filesystem with read-only I/O and
 require approval in Warning Review before overwriting the RDB partition.
 Show the detected filesystem or probe result and reuse the existing
 ten-second destructive confirmation.
+
+### PFS and SFS copy and resize support
+
+Prioritize PFS and SFS after the ShapeShifter work. Start with read-only
+allocation analysis on RDB partitions. Qualify native handlers and build
+Smart Copy plans before testing staged growth and shrink. Disk Vet remains
+deferred. See [the AmiPart review](AMIPART_REVIEW.md).

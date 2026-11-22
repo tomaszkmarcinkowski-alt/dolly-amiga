@@ -1,6 +1,7 @@
 #include "dolly_restore_source.h"
 #include "dolly_restore_check.h"
 #include "dolly_restore_transfer.h"
+#include "dolly_apple_media.h"
 #include <assert.h>
 #include <string.h>
 
@@ -9,6 +10,131 @@ static DollyBlockReadResult read_memory(void *context,uint64_t at,void *data,siz
     return (DollyBlockReadResult){DOLLY_BLOCK_OK,bytes};
 }
 static void close_memory(void *context) { (void)context; }
+
+static void put16(unsigned char *at,unsigned value) {
+    at[0]=(unsigned char)(value>>8);
+    at[1]=(unsigned char)value;
+}
+
+static void put32(unsigned char *at,uint32_t value) {
+    put16(at,(unsigned)(value>>16));
+    put16(at+2,(unsigned)value);
+}
+
+static void plus_header(unsigned char *header,unsigned signature,unsigned version,unsigned blocks) {
+    put16(header,signature);
+    put16(header+2,version);
+    put32(header+40,512);
+    put32(header+44,blocks);
+}
+
+static void map_entry(unsigned char *entry,const char *type,unsigned first,unsigned count) {
+    memcpy(entry,"PM",2);
+    put32(entry+4,2);
+    put32(entry+8,first);
+    put32(entry+12,count);
+    strcpy((char *)entry+48,type);
+    put32(entry+84,count);
+}
+
+static DollyBlockReadResult read_sparse_apple(void *context,uint64_t at,void *data,size_t bytes) {
+    const size_t prefix=8u*512u;
+    memset(data,0,bytes);
+    if(at<prefix) {
+        size_t available=prefix-(size_t)at;
+        memcpy(data,(unsigned char *)context+(size_t)at,bytes<available?bytes:available);
+    }
+    return (DollyBlockReadResult){DOLLY_BLOCK_OK,bytes};
+}
+
+static void check_shapeshifter_limits(void) {
+    const uint64_t two_gib=UINT64_C(1)<<31,four_gib=UINT64_C(1)<<32;
+    const uint32_t sectors_2gib=UINT32_C(1)<<22;
+    unsigned char data[8u*512u]={0};
+    unsigned char *entry=data+2u*512u;
+    DollyBlockSource *source=NULL;
+    int oversized;
+    assert(dolly_shapeshifter_file_fits(two_gib-512u));
+    assert(!dolly_shapeshifter_file_fits(two_gib));
+    assert(!dolly_shapeshifter_file_fits(two_gib-1u));
+    assert(dolly_shapeshifter_partition_fits(four_gib-2u*512u,2u*512u));
+    assert(!dolly_shapeshifter_partition_fits(four_gib-2u*512u,3u*512u));
+    assert(!dolly_shapeshifter_partition_fits(four_gib,512u));
+    assert(!dolly_shapeshifter_partition_fits(UINT64_MAX-511u,512u));
+    assert(dolly_block_open_backend(four_gib,read_sparse_apple,close_memory,data,&source)==DOLLY_BLOCK_OK);
+
+    plus_header(entry,0x482b,4,sectors_2gib-1u);
+    assert(dolly_shapeshifter_media_limits(source,0,two_gib-512u,&oversized)==DOLLY_APPLE_HFS_PLUS && !oversized);
+    assert(dolly_shapeshifter_media_limits(source,0,two_gib,&oversized)==DOLLY_APPLE_HFS_PLUS && oversized);
+    memset(data,0,sizeof(data));
+    map_entry(data+512,"Apple_partition_map",1,3);
+    map_entry(entry,"Apple_HFS",4,sectors_2gib-1u);
+    /* A small logical HFS data area does not hide an oversized APM partition. */
+    put32(entry+84,12);
+    plus_header(data+6u*512u,0x482b,4,12);
+    assert(dolly_shapeshifter_media_limits(source,0,four_gib,&oversized)==DOLLY_APPLE_APM && !oversized);
+    put32(entry+12,sectors_2gib);
+    assert(dolly_shapeshifter_media_limits(source,0,four_gib,&oversized)==DOLLY_APPLE_APM && oversized);
+    memset(entry+48,0,32);
+    strcpy((char *)entry+48,"Apple_Free");
+    assert(dolly_shapeshifter_media_limits(source,0,four_gib,&oversized)==DOLLY_APPLE_APM && !oversized);
+    dolly_block_close(source);
+}
+
+static void check_apple_media(void) {
+    unsigned char image[16u*512u]={0},target[17u*512u]={0};
+    unsigned char *header=image+1024;
+    unsigned char *disk=target+512;
+    DollyRestoreExtent source={NULL,0,sizeof(image),512,DOLLY_RESTORE_UNKNOWN};
+    DollyRestoreExtent destination={NULL,512,sizeof(image),512,DOLLY_RESTORE_PARTITION};
+    assert(dolly_block_open_backend(sizeof(image),read_memory,close_memory,image,&source.blocks)==DOLLY_BLOCK_OK);
+    assert(dolly_block_open_backend(sizeof(target),read_memory,close_memory,target,&destination.blocks)==DOLLY_BLOCK_OK);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image))==DOLLY_APPLE_UNKNOWN);
+    plus_header(header,0x482b,4,16);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image))==DOLLY_APPLE_HFS_PLUS);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image)-512)==DOLLY_APPLE_INVALID);
+    plus_header(header,0x4858,5,16);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image))==DOLLY_APPLE_HFSX);
+    memset(header,0,512);
+    memcpy(header,"BD",2);
+    put16(header+14,3);
+    put16(header+18,10);
+    put32(header+20,512);
+    put16(header+28,4);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image))==DOLLY_APPLE_HFS);
+    memcpy(header+124,"H+",2);
+    put16(header+126,1);
+    put16(header+128,8);
+    plus_header(image+7u*512u,0x482b,4,8);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image))==DOLLY_APPLE_WRAPPED_HFS_PLUS);
+    put16(header+128,10);
+    assert(dolly_apple_media_probe(source.blocks,0,sizeof(image))==DOLLY_APPLE_INVALID);
+    put16(header+128,8);
+
+    memcpy(disk,"ER",2);
+    put16(disk+2,512);
+    put32(disk+4,16);
+    map_entry(disk+512,"Apple_partition_map",1,3);
+    map_entry(disk+1024,"Apple_HFS",4,12);
+    plus_header(disk+6u*512u,0x482b,4,12);
+    DollyAppleMap map;
+    assert(dolly_apple_media_inspect(destination.blocks,512,sizeof(image),&map)==DOLLY_APPLE_APM);
+    assert(map.count==1 && map.volumes[0].entry==2 && map.volumes[0].offset==4u*512u &&
+           map.volumes[0].bytes==12u*512u && map.volumes[0].media==DOLLY_APPLE_HFS_PLUS);
+    DollyRestoreAssessment result=dolly_restore_assess(&source,&destination);
+    assert(result.decision==DOLLY_RESTORE_MISMATCH && strstr(result.reason,"HFS wrapper") &&
+           strstr(result.reason,"Apple Partition Map disk"));
+    put32(disk+1024+8,3);
+    assert(dolly_apple_media_inspect(destination.blocks,512,sizeof(image),&map)==DOLLY_APPLE_INVALID);
+    assert(map.count==0);
+    put32(disk+1024+8,4);
+    put32(disk+1024+80,1);
+    assert(dolly_apple_media_probe(destination.blocks,512,sizeof(image))==DOLLY_APPLE_INVALID);
+    put16(disk+2,2048);
+    assert(dolly_apple_media_probe(destination.blocks,512,sizeof(image))==DOLLY_APPLE_UNSUPPORTED);
+    dolly_block_close(destination.blocks);
+    dolly_block_close(source.blocks);
+}
 
 static void make_rdb(unsigned char *data,unsigned cylinders) {
     unsigned values[19]={0x5244534b,19,0,0,512,0,0,0xffffffffu,
@@ -251,6 +377,8 @@ int main(void) {
     assert(dolly_restore_check_raw(6144,6144,3072)==DOLLY_BLOCK_EINVAL);
     assert(dolly_restore_check_raw(4096,4096,0)==DOLLY_BLOCK_EINVAL);
     check_assessment();
+    check_apple_media();
+    check_shapeshifter_limits();
     check_transfer();
     return 0;
 }

@@ -13,6 +13,8 @@ typedef struct DollyAmigaImage {
     struct Window *parent;
     struct DollyImageDrawer *drawers;
     int staging,keep_staging,split,format_dly,part_opened;
+    uint32_t apple_entry; /* Zero for a complete source extent. */
+    int shapeshifter;
     int resuming,resume_dirty,resume_header_dirty;
     void *resume_buffer;
     DollyBlockSource *resume_decoded;
@@ -32,6 +34,7 @@ typedef struct DollyAmigaImage {
 /* Initialize to zero. Each step copies one sector-aligned chunk. */
 int dolly_image_open(DollyAmigaImage *image,const DollyEndpoint *source,
                      const DollyEndpoint *target,struct Window *parent);
+int dolly_image_source_requires_raw(const DollyEndpoint *source,struct Window *parent);
 int dolly_image_resume_open(DollyAmigaImage *image,const DollyDlrpImageResume *resume,
                             struct Window *parent);
 int dolly_image_resume_confirm(DollyAmigaImage *image,const DollyEndpoint *target);

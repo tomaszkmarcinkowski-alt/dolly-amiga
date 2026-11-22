@@ -6,6 +6,11 @@ requester. Choose **RAW image** or **IFF DOLY**, then select the DOLY
 compression mode if applicable and press **Start**. Sheep Counter displays
 the number of copied sectors and the main window shows progress.
 
+For a dedicated RDB partition containing an Apple Partition Map, choosing
+Create Image offers a single RAW file for recognized ShapeShifter sources.
+Export the whole virtual disk or one Macintosh volume when the output fits
+below 2 GiB. See [ShapeShifter export](SHAPESHIFTER_HFS_RESEARCH.md#export-from-dolly-on-amigaos).
+
 RAW and HDF both contain the source sectors in order. A whole-disk HDF
 includes the partition table and any other sectors in the reported
 capacity. A partition or logical volume image contains only its extent.

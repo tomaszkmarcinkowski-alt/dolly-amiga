@@ -1741,6 +1741,124 @@ reports `m68k:68000` and the AmigaDOS `Version FILE` command reported
 an A600 with Kickstart 37.350. See the separate operation fixtures for
 transfer coverage.
 
+### ShapeShifter media recognition
+
+Host Restore tests cover HFS Standard, HFS Plus, HFSX, wrapped HFS
+Plus, and an Apple Partition Map inside a nonzero destination extent.
+They reject a truncated volume, an out-of-bounds embedded extent,
+overlapping Apple partitions, and a data range that exceeds its map
+entry. The tests also verify that Restore reports the detected endpoint
+formats while requiring compatibility approval.
+
+An independently formatted 4 MiB HFS Standard FileDisk was recognized
+as HFS Standard. Its Disk Jockey Jr conversion was recognized as a full
+Apple Partition Map disk. All 38 host tests passed and the Amiga build
+linked for MC68000. GUI behavior in the emulator remains unverified.
+
+### ShapeShifter export prototype
+
+`dolly-image export-apple` extracted a 4 MiB HFS Standard FileDisk
+from the Disk Jockey Jr disk fixture at LBA 96. A byte comparison
+matched the original FileDisk. The `--whole` output matched the full
+4,259,840-byte APM image, including its driver and descriptor.
+
+The synthetic desktop test exercises selection from two Apple
+volumes, a nonzero logical data offset, automatic single-volume
+selection, preservation of the full extent, and rejection of an
+overlapping map, a driver entry and an existing output. The portable
+parser test checks that offsets are relative to the containing span
+and that a failed inspection publishes zero entries.
+
+### Native ShapeShifter export
+
+An FS-UAE A600 with Kickstart 37.350 used a synthetic Apple disk inside
+a dedicated 64-sector RDB partition at LBA 32 on `uaehf.device`. A test
+harness supplied the endpoints and used Dolly's native selection window,
+preflight, staging and imaging code. The window showed both Apple
+volumes. Selecting the second volume wrote a 7,168-byte FileDisk that
+matched the data range exactly. Selecting the whole disk wrote the
+complete 32,768-byte RDB partition, including its padding past the Apple
+capacity. Cancel left neither an output file nor a staging drawer.
+The source HDF SHA-256 was unchanged. All 38 host tests and the MC68000
+cross-build passed.
+
+### ShapeShifter import image builder
+
+The desktop round-trip test uses an HFS Plus FileDisk and a smaller
+three-entry Apple disk template. It checks the new disk and volume
+lengths, unchanged driver bytes, cleared gaps, a byte-identical export,
+and rejection of an out-of-range driver descriptor, a whole disk in
+place of a volume, and an existing output path.
+
+An independent check used a 6 MiB HFS Standard FileDisk with the earlier
+4 MiB Disk Jockey Jr output as its driver template. Disk Jockey Jr
+recognized Dolly's 12,384-sector result, its Apple HD SC 7.3.5 driver,
+and the HFS volume at LBA 96. Extraction with Disk Jockey Jr matched
+the FileDisk byte for byte. The retained driver partition also matched
+the template byte for byte, and both input hashes were unchanged. All
+38 host tests, the standalone desktop test and the MC68000 build passed.
+
+### Native ShapeShifter FileDisk import
+
+An FS-UAE A600 with Kickstart 37.350 used a 28-sector synthetic HFS Plus
+FileDisk, a separate three-entry driver template and a disposable RDB
+hardfile. A test harness supplied the endpoints and ASL template selection.
+The native type choice, timed Warning Review, preflight and write engine
+ran unchanged. Warning Review identified the old DOS/3 signature and
+showed the destination range. Proceed was disabled at ten seconds and
+enabled after the countdown.
+
+Cancel left the entire hardfile byte-identical. The successful run wrote
+the 40-sector assembled Apple image at LBA 32. Byte comparison confirmed
+the enclosing RDB, the destination tail, and the neighboring partition
+were unchanged. A second destination had room for the FileDisk alone
+but not the complete Apple layout. Dolly reported the required 20,480
+bytes and available 16,384 bytes and blocked the write. Both source file
+hashes were unchanged. All 38 host tests and the MC68000 build passed.
+
+### Native ShapeShifter 4 GiB boundary
+
+FS-UAE 3.1.66 on an A600 with Kickstart 37.350 used two disposable sparse
+hardfiles on `uaehf.device`. A harness supplied endpoint selections and
+acknowledged warning items, running their normal approval actions. The
+native Restore preflight and write engine ran unchanged.
+
+- Restore wrote a 64-sector RAW Apple disk to RDB LBAs 8,388,544 through
+  8,388,607. Host comparison verified the image bytes through the last
+  allowed sector, the RDB and both neighboring sectors.
+- Restore to an equally sized RDB partition ending at LBA 8,388,639
+  reported the 4 GiB limit and blocked the write. The entire sparse
+  hardfile matched its initial contents.
+- An IFF DOLY set containing the same RAW image was rejected in Restore
+  with the single-RAW-file requirement.
+
+The host suite also covers crossing 4 GiB by exactly one 512-byte sector,
+and the 2 GiB single-file and allocated Apple partition boundaries.
+
+### Formatted HFS Plus and mounted FFS follow-up
+
+On Linux `mkfs.hfsplus` formatted an 8 MiB non-journaled HFS Plus
+volume. Dolly added a driver and map, then extracted the volume at
+LBA 96. The resulting FileDisk matched the input bytes and an
+independent `fsck.hfsplus -fn` accepted its allocation bitmap, catalog
+and extent metadata. This checks the disk format on the host. A
+ShapeShifter guest test still requires a compatible Macintosh ROM and
+bootable system media.
+
+An A600 test in FS-UAE mounted two formatted DOS/1 partitions on
+one `uaehf.device` unit and created and read back files through native
+AmigaDOS. Dolly identified FastFileSystem and showed its timed write
+warning on the selected partition. The 2.05 handler refused shutdown
+with DOS error 209. Dolly blocked the write, both filesystems remained
+readable, and the settled hardfile matched its pre-approval snapshot.
+
+A second boot used a copy of the same disk with automount disabled
+for the selected FFS partition. The neighboring FFS stayed mounted.
+After the timed approval, Dolly wrote the expected 40-sector Apple
+image. A full disk comparison showed no change outside those sectors,
+and the neighboring file was still readable through AmigaDOS.
+All 38 host regression tests passed.
+
 ### Sheep Inventory metadata results
 
 FS-UAE on an A600 with Kickstart 37.350 used two disposable IDE

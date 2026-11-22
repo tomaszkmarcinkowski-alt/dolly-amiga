@@ -173,6 +173,7 @@ static const char *demo_descriptions[]={
     "Disk Vet: filesystem first aid (planned)."
 };
 static STRPTR image_types[]={(STRPTR)"RAW image",(STRPTR)"IFF DOLY",NULL};
+static STRPTR raw_image_types[]={(STRPTR)"RAW image",NULL};
 static STRPTR compression_types[]={
     (STRPTR)"Not compressed",(STRPTR)"Fast",(STRPTR)"Compact",NULL
 };
@@ -186,12 +187,13 @@ static STRPTR vet_repairs[]={
     (STRPTR)"Repair in place",(STRPTR)"File recovery",NULL
 };
 static unsigned image_type,compression_type,copy_mode,vet_mode,vet_repair;
+static int shape_raw_only;
 static char recovery_drawer[256];
 static DollyImageFormat selected_image_format(void) {
     static const DollyImageFormat formats[]={
         DOLLY_IMAGE_IFF_DOLY,DOLLY_IMAGE_IFF_FAST,DOLLY_IMAGE_IFF_COMPACT
     };
-    return image_type?formats[compression_type]:DOLLY_IMAGE_RAW;
+    return image_type && !shape_raw_only?formats[compression_type]:DOLLY_IMAGE_RAW;
 }
 static UWORD selected_operation=0;
 static unsigned berserk_mode=0; /* Future explicit opt-in; NORMAL only for now. */
@@ -917,11 +919,11 @@ static int rebuild_gadgets(DollyDemoView *v,int main_window) {
         }
         if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
             last=make_selector(last,v,MAIN_IMAGE_FORMAT_ID,0,d->endpoint_button_y,
-                               image_types,image_type,0);
+                               shape_raw_only?raw_image_types:image_types,shape_raw_only?0u:image_type,0);
             if(!last)return 0;
             v->operation_options[0]=last;
             last=make_selector(last,v,MAIN_COMPRESSION_ID,0,d->endpoint_frame_y,
-                               compression_types,compression_type,!image_type);
+                               compression_types,compression_type,shape_raw_only || !image_type);
             if(!last)return 0;
             v->operation_options[1]=last;
         } else if(selected_operation==DOLLY_DEMO_COPY) {
@@ -1453,9 +1455,10 @@ static void update_main_actions(void) {
             set_cycle_state(main_view.selectors[role+1u],main_view.mode_labels[role],
                             main_view.mode_active[role],!main_view.mode_count[role]);
         if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
-            set_cycle_state(main_view.operation_options[0],image_types,image_type,0);
+            set_cycle_state(main_view.operation_options[0],shape_raw_only?raw_image_types:image_types,
+                            shape_raw_only?0u:image_type,0);
             set_cycle_state(main_view.operation_options[1],compression_types,compression_type,
-                            !image_type);
+                            shape_raw_only || !image_type);
         } else if(selected_operation==DOLLY_DEMO_DISK_VET) {
             set_cycle_state(main_view.operation_options[0],vet_modes,vet_mode,0);
             set_cycle_state(main_view.operation_options[1],vet_repairs,vet_repair,!vet_mode);
@@ -1545,7 +1548,8 @@ static void format_operation_summary(char text[OPERATION_SUMMARY_SIZE],const cha
     char completed[21],total[21],byte_count[21];
     size_t used;
     char mode[48];
-    if(selected_operation==DOLLY_DEMO_COPY) {
+    if(transfer_result && transfer.image.apple_template)name="Import Macintosh FileDisk";
+    else if(selected_operation==DOLLY_DEMO_COPY) {
         snprintf(mode,sizeof(mode),"Copy (%s)",(const char *)copy_modes[copy_mode]);
         name=mode;
     }
@@ -1686,6 +1690,7 @@ static void begin_checkpoint_resume(void) {
         selected_source=imaging.source;
         selected_target=imaging.target;
         selected_operation=DOLLY_DEMO_CREATE_IMAGE;
+        shape_raw_only=image.shapeshifter;
         image_type=image.format_dly;
         compression_type=image.codec;
         total=image.reader.total;
@@ -1778,6 +1783,8 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                 if(!main_controls_busy() && !relayout && id==MAIN_OPERATION_ID && code<6u) {
                     selected_operation=code;
                     transfer_result=0;
+                    shape_raw_only=selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+                                   dolly_image_source_requires_raw(&selected_source,v->window);
                     if(selected_operation==DOLLY_DEMO_CREATE_IMAGE)
                         selected_target.image_format=selected_image_format();
                     if(selected_source.kind!=DOLLY_ENDPOINT_NONE &&
@@ -1794,13 +1801,14 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                         if(!role) {
                             dolly_endpoint_clear(&selected_source);
                             dolly_endpoint_clear(&selected_target);
+                            shape_raw_only=0;
                         } else dolly_endpoint_clear(&selected_target);
                         relayout=1;
                     }
                 }
             } else if(!operation_active() && !relayout &&
                       !source_picker.window && !target_picker.window &&
-                      selected_operation==DOLLY_DEMO_CREATE_IMAGE &&
+                      selected_operation==DOLLY_DEMO_CREATE_IMAGE && !shape_raw_only &&
                       ((id==MAIN_IMAGE_FORMAT_ID && code<2u) ||
                        (id==MAIN_COMPRESSION_ID && image_type && code<3u))) {
                 if(id==MAIN_IMAGE_FORMAT_ID)image_type=code;
@@ -1867,6 +1875,11 @@ static void process_view(DollyDemoView *v,int main_window,int *quit) {
                     } else if(image_result) {
                         total=dolly_image_open(&image,&selected_source,&selected_target,main_view.window)?
                               image.reader.total:0;
+                        if(image.shapeshifter && !shape_raw_only) {
+                            shape_raw_only=1;
+                            selected_target.image_format=DOLLY_IMAGE_RAW;
+                            relayout=1;
+                        }
                     } else if(transfer_result) {
                         dolly_inventory_view_close(&inventory_view);
                         transfer_operation=selected_operation;
@@ -2038,6 +2051,10 @@ static __attribute__((noinline)) int run_dolly(int argc,char **argv) {
         if(source_picker.changed) {
             transfer_result=0;
             selected_source=source_picker.result;
+            if(selected_operation==DOLLY_DEMO_CREATE_IMAGE) {
+                shape_raw_only=dolly_image_source_requires_raw(&selected_source,main_view.window);
+                selected_target.image_format=selected_image_format();
+            }
             source_file_status[0]=0;
             if(selected_source.kind==DOLLY_ENDPOINT_FILE)
                 dolly_amiga_describe_file(&selected_source,source_file_status,sizeof(source_file_status));
@@ -2090,11 +2107,14 @@ static __attribute__((noinline)) int run_dolly(int argc,char **argv) {
                                                                 &selected_target,&transfer);
                 }
                 if(!transfer.failure) {
-                    char summary[OPERATION_SUMMARY_SIZE];
-                    format_operation_summary(summary,"Completed");
                     progress_view_update(old,0);
-                    show_analysis_status("Copy complete. Checking destination names...");
-                    dolly_amiga_transfer_review_names(&transfer,&selected_target,summary,show_analysis_status);
+                    if(transfer.image.apple_template)show_operation_summary("Completed",NULL);
+                    else {
+                        char summary[OPERATION_SUMMARY_SIZE];
+                        format_operation_summary(summary,"Completed");
+                        show_analysis_status("Copy complete. Checking destination names...");
+                        dolly_amiga_transfer_review_names(&transfer,&selected_target,summary,show_analysis_status);
+                    }
                     if(transfer.opened)
                         show_analysis_status("Finalizing transfer. Restoring source access...");
                 }

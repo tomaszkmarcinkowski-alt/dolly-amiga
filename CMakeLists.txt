@@ -48,7 +48,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
-add_library(dollyrestoresource STATIC src/dolly_restore_source.c src/dolly_restore_transfer.c)
+add_library(dollyrestoresource STATIC src/dolly_restore_source.c src/dolly_restore_transfer.c src/dolly_apple_media.c)
 target_include_directories(dollyrestoresource PUBLIC ${PROJECT_SOURCE_DIR}/include)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dollyrestoresource PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -155,7 +155,7 @@ if(DOLLY_NATIVE_ONLY)
       src/dolly_restore_transfer.c src/dolly_restore_check.c src/dolly_restore_source.c src/dolly_rdb.c
       src/dolly_block_source.c src/dolly_io_plan.c src/dolly_dma_policy.c
       src/dolly_dly_writer.c src/dolly_dly_reader.c src/dolly_dly_codec.c src/dolly_checksum.c
-      src/dolly_version.c)
+      src/dolly_version.c src/dolly_apple_media.c)
     target_compile_options(dolly-two-window-demo PRIVATE
       -m68000 -Wall -Wextra -Wpedantic -Werror)
     target_link_options(dolly-two-window-demo PRIVATE -m68000)

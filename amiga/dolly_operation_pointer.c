@@ -227,7 +227,7 @@ void dolly_operation_pointer_offer(struct Window *parent,const DollyEndpoint *so
     PointerStage stage;
     LONG output=0;
     int ok;
-    if(!image || image->split || image->resuming || !image->failure || !image->file || !scan->source ||
+    if(!image || image->split || image->apple_entry || image->resuming || !image->failure || !image->file || !scan->source ||
        !scan->total || scan->processed>scan->total || scan->outside_range!=DOLLY_RANGE_STRICT ||
        !request_pointer_path(parent,path))return;
     if(image) {
@@ -370,7 +370,7 @@ void dolly_operation_pointer_offer_transfer(struct Window *parent,const DollyEnd
     char path[256];
     PointerStage stage;
     int ok;
-    if(!transfer->failure ||
+    if(!transfer->failure || transfer->image.apple_template ||
        (transfer->job.resume_read && transfer->job.processed==transfer->job.resume_committed) ||
        !request_pointer_path(parent,path))return;
     if(!checkpoint_drawer_safe(path,transfer)) {

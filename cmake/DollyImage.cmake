@@ -2,6 +2,7 @@
 # only the shared image format and file backend into the same executable.
 add_executable(dolly-image
   "${PROJECT_SOURCE_DIR}/src/dolly_image_tool.c"
+  "${PROJECT_SOURCE_DIR}/src/dolly_apple_media.c"
   "${PROJECT_SOURCE_DIR}/src/dolly_ffs_analyze.c"
   "${PROJECT_SOURCE_DIR}/src/dolly_dly_writer.c")
 target_include_directories(dolly-image PRIVATE "${PROJECT_SOURCE_DIR}/include")

@@ -2,7 +2,7 @@
 
 Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga computers. The native interface uses Intuition and GadTools and targets MC68000 and AmigaOS 2.04 or later.
 
-[Download Dolly Alpha 3.7 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.7) · [Revision history](docs/REVISION_HISTORY.md) · [All releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
+[Download Dolly Alpha 3.8 for MC68000](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases/tag/v0.1.0-alpha.3.8) · [Revision history](docs/REVISION_HISTORY.md) · [All releases](https://github.com/tomaszkmarcinkowski-alt/dolly-amiga/releases)
 
 ![Dolly Alpha 3 displaying a sector copy with Sheep Counter open](docs/screenshots/sector-copy.png)
 
@@ -16,7 +16,7 @@ Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga compu
 
 *Restore Image in progress on AmigaOS 3.2. The main window shows the overall progress, and Sheep Counter shows the sector grid, block counts and errors.*
 
-## What works in Alpha 3.7
+## What works in Alpha 3.8
 
 | Feature | Current scope |
 | --- | --- |
@@ -27,6 +27,7 @@ Dolly is a disk imaging, cloning and diagnostics utility for classic Amiga compu
 | Sector-to-sector Copy | Copy equally sized whole devices or in-range RDB partitions, with optional read-back verification. |
 | Smart Copy | Copy allocated OFS/FFS blocks between compatible RDB partitions, including mixed Partition and Logical device selections. |
 | Clone and resize | Prototype for cloning DOS/1 and DOS/3 between differently sized RDB partitions with 512-byte blocks. Unsupported layouts can be analyzed where possible. |
+| ShapeShifter | Import a Macintosh FileDisk into a dedicated RDB partition with an APM and a user-supplied driver template. Export a whole virtual disk or one eligible HFS-family volume as a single RAW file. [ShapeShifter guide](docs/SHAPESHIFTER_HFS_RESEARCH.md). |
 | Sheep Counter | Open the resizable Details window during an operation for the sector grid, block and error counts, and the log when available. Its progress bar shows the elapsed time and live transfer rate when space permits. |
 
 Dolly reviews warnings before raw transfers and checks related AmigaDOS

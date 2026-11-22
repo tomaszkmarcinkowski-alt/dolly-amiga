@@ -138,6 +138,18 @@ operations to stand in for the AmigaOS validator. The results cover
 image-file structure and content checks rather than native handler or
 controller qualification.
 
+### PFS and SFS follow-up fixtures
+
+AmiPart's internal formatter created separate 4 MiB RDB partitions for
+PFS/3 (512-byte blocks), SFS/0 (1024-byte blocks), and SFS/2 (512-byte
+blocks). Its read-only `SHRINKINFO` reported a 256 KiB minimum for this
+PFS/3 fixture and 64 KiB for this SFS/0 fixture. It rejected SFS/2 because
+the resize reader expected an SFS/0 root identifier. The SFS/2 formatter
+had emitted `0x53465302`. All three images retained their initial hashes.
+The PFS/3 partition's first sector carried `PFS/1`; validate the on-disk
+layout independently of the configured RDB DosType. These are formatter
+fixtures. Tests with the corresponding native handlers remain open.
+
 ## Dolly read-only FFS planning
 
 Choose **Copy → Clone and resize**, select two in-range RDB partitions
